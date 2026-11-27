@@ -14,6 +14,14 @@ bp = Blueprint("main", __name__)
 
 @bp.route("/")
 def index():
+    """Page d'accueil de Rivezli : seulement le nom de l'application (frontend/templates/home.html)."""
+    return render_template("home.html")
+
+
+@bp.route("/encadrement")
+def encadrement():
+    """Entrée « Encadrement » de la page de départ : ouvre l'espace du planificateur, directement
+    sur l'onglet « Aujourd'hui ». Un visiteur (sans compte) voit d'abord sa présentation."""
     if g.user:
         return redirect(url_for("main.dashboard"))
     return render_template("landing.html")
@@ -42,5 +50,6 @@ def preferences():
 
 
 feature = Feature("tableau-de-bord", blueprints=[bp],
-                  nav=[NavItem("main.dashboard", "Aujourd'hui", order=10),
+                  nav=[NavItem("main.encadrement", "Encadrement", order=1, section="site", opens="encadrement"),
+                       NavItem("main.dashboard", "Aujourd'hui", order=10),
                        NavItem("main.preferences", "Mes réglages", order=40)])

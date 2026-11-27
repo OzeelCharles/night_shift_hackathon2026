@@ -1,8 +1,8 @@
-# Révisio — planificateur de révisions
+# Rivezli — planificateur de révisions
 
 Hackathon Sevel Lab ENSAI, novembre 2026.
 
-Révisio construit un planning de révision personnalisé à partir de :
+Rivezli construit un planning de révision personnalisé à partir de :
 - **l'agenda** de l'étudiant (facultatif) : import `.ics` (Google Agenda, Outlook, ENT, cours récurrents compris) ou saisie manuelle ;
 - **ses supports de cours** (PDF, PPTX, DOCX, ODT, ODP, TXT/MD) dont les chapitres sont extraits automatiquement, **ou du seul nom de la matière** (plan proposé à partir de Wikipédia) ;
 - **ses préférences** : méthode de travail (Pomodoro, sessions longues, rappel actif / flashcards, fiches, mixte), durée des séances, pauses, temps max par jour, horaires, jours de repos, marge autour des événements ;
