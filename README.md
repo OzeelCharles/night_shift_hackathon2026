@@ -1,6 +1,6 @@
 # Révisio — planificateur de révisions
 
-Hackathon Seven Lab ENSAI, novembre 2026.
+Hackathon Sevel Lab ENSAI, novembre 2026.
 
 Révisio construit un planning de révision personnalisé à partir de :
 - **l'agenda** de l'étudiant (facultatif) : import `.ics` (Google Agenda, Outlook, ENT, cours récurrents compris) ou saisie manuelle ;
