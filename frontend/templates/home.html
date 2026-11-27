@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{# Page de départ : hors de tout espace, donc seulement la barre du haut (sans seconde barre). #}
+{% set space = none %}
+{% block title %}Accueil{% endblock %}
+
+{% block content %}
+{# Page d'accueil volontairement presque vide : seulement le nom de l'application. #}
+<section class="home">
+  <h1 class="home-name">Rivezli</h1>
+</section>
+{% endblock %}

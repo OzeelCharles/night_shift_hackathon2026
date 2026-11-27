@@ -1,0 +1,32 @@
+{# Éléments communs aux barres du haut (page de départ et espace Encadrement). #}
+
+{% macro brand() %}
+<a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark" aria-hidden="true"></span>Rivezli</a>
+{% endmacro %}
+
+{% macro account() %}
+{% set ep = request.endpoint or '' %}
+{% if g.user %}
+<form method="post" action="{{ url_for('auth.logout') }}" class="logout account">
+  {{ csrf_field() }}
+  <a href="{{ url_for('auth.profile') }}" class="profile-link" {% if ep == 'auth.profile' %}aria-current="page"{% endif %} title="Mon profil : niveau et établissement">{{ g.user.username }}{% if g.user.school %}<span class="muted">, {{ g.user.school }}</span>{% endif %}</a>
+  <button class="btn-link">Se déconnecter</button>
+</form>
+{% else %}
+<nav class="account" aria-label="Compte">
+  <a href="{{ url_for('auth.login') }}">Se connecter</a>
+  <a class="btn" href="{{ url_for('auth.register') }}">Créer un compte</a>
+</nav>
+{% endif %}
+{% endmacro %}
+
+{% macro nav_links(section, space=none) %}
+{# Entrées de menu fournies par les fonctionnalités (core/features.py), pour une barre donnée.
+   space : l'espace où l'on se trouve (son entrée de la barre du haut est surlignée). #}
+{% set ep = request.endpoint or '' %}
+{% for item in nav_items if item.section == section and (not item.admin or (g.user and g.user.role == 'admin')) %}
+{% set prefix = item.endpoint.split('.')[0] ~ '.' %}
+<a href="{{ url_for(item.endpoint) }}" {% if item.admin %}class="admin-link"{% endif %}
+   {% if ep == item.endpoint or (item.opens and item.opens == space) or (item.admin and ep.startswith(prefix)) %}aria-current="page"{% endif %}>{{ item.label }}</a>
+{% endfor %}
+{% endmacro %}

@@ -1,4 +1,4 @@
-/* Révisio : identité « cahier d'écolier ».
+/* Rivezli : identité « cahier d'écolier ».
    Papier, encre bleue, réglure Seyès, marge rouge et surligneurs.
    L'élément fort est la grille du planning (réglure Seyès + surligneurs) ; le reste reste sobre. */
 
@@ -352,3 +352,26 @@ form[data-kind="autre"] .kind-school { display: none; }
 .add-exam { margin: 4px 0 18px; }
 .add-exam form { margin-top: 10px; }
 .exam-prep { border-top: 6px solid var(--margin); }
+
+/* ---------- Accueil ---------- */
+.topbar nav .nav-push { margin-left: auto; }
+.home { min-height: 60vh; display: grid; place-items: center; }
+.home-name { margin: 0; font-size: clamp(3rem, 12vw, 8rem); letter-spacing: -.04em; color: var(--ink); }
+.topbar nav a.btn, .topbar nav a.btn:hover { color: #fff; background: var(--ink); }
+@media (prefers-color-scheme: dark) { .topbar nav a.btn, .topbar nav a.btn:hover { color: #13201c; } }
+
+/* ---------- Barres du haut : page de départ et espace Encadrement ---------- */
+.topbar .account { margin-left: auto; display: flex; gap: 12px; align-items: center; }
+.topbar nav.account { flex: 0 0 auto; }
+.section-name { font-weight: 700; color: var(--ink); text-decoration: none; padding: 4px 0 4px 14px; border-left: 2px solid var(--line); }
+.section-name:hover { text-decoration: underline; }
+
+/* ---------- Seconde barre : onglets de l'espace courant ---------- */
+.subbar { background: var(--surface); border-bottom: 1px solid var(--line); }
+.subbar-inner { display: flex; gap: 4px; flex-wrap: wrap; padding: 0 32px; }
+.subbar a { color: var(--graphite); text-decoration: none; padding: 10px 12px; font-size: .95rem; }
+.subbar a:hover { background: var(--ink-soft); }
+.subbar a[aria-current="page"] { color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--ink); }
+.subbar .admin-link { margin-left: auto; }
+.topbar nav a[aria-current="page"] { background: var(--ink-soft); box-shadow: none; border-radius: 6px; }
+@media (max-width: 720px) { .subbar-inner { padding: 0 12px; } }
