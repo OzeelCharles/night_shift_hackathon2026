@@ -1,6 +1,7 @@
 """Inscription, connexion, déconnexion, profil."""
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 
+from backend.core import events
 from backend.core.features import Feature
 from backend.core.security import login_required, safe_next
 from backend.services import auth_service
@@ -43,6 +44,8 @@ def login():
 
 @bp.route("/deconnexion", methods=("POST",))
 def logout():
+    if session.get("user_id") is not None:
+        events.emit(events.USER_LOGGED_OUT, user_id=session["user_id"])  # ex. l'assistant efface l'historique
     session.clear()
     flash("Tu es déconnecté.", "info")
     return redirect(url_for("main.index"))

@@ -142,5 +142,7 @@
     byId.forEach((_, id) => { const el = document.getElementById(id); if (el) io.observe(el); });
   }
 </script>
+{# Éléments présents sur toutes les pages d'un utilisateur connecté (fonctionnalités : champ « widgets ») #}
+{% if g.user %}{% for w in widgets %}{% include w %}{% endfor %}{% endif %}
 </body>
 </html>

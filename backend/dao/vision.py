@@ -1,8 +1,9 @@
 """Lecture de photos par un modèle de vision de Groq (API compatible OpenAI, appelée avec requests).
 
 Sert à lire une photo d'emploi du temps (agenda) ou de notes de cours (supports). La clé n'est jamais
-dans le code ni dans git : GROQ_API_KEY (variable ou instance/groq_api_key), ou une clé « gsk_… »
-rangée dans instance/anthropic_api_key. Toute erreur remonte en VisionError.
+dans le code ni dans git : GROQ_API_KEY dans le fichier .env (voir .env.example) ; restent acceptés,
+pour les installations existantes, les fichiers instance/groq_api_key et instance/anthropic_api_key (clé « gsk_… »).
+Toute erreur remonte en VisionError.
 """
 from __future__ import annotations
 
@@ -71,6 +72,11 @@ def _shrink(data: bytes) -> tuple[bytes, str]:
     return out.getvalue(), "image/jpeg"
 
 
+def shrink(data: bytes) -> tuple[bytes, str]:
+    """Photo prête à envoyer à un modèle : (JPEG d'au plus ~3 Mo et 2 000 px, type MIME)."""
+    return _shrink(data)
+
+
 def _session() -> requests.Session:
     """Certificats vérifiés avec le magasin du système (antivirus qui inspectent le TLS)."""
     class _Adapter(HTTPAdapter):
@@ -86,7 +92,7 @@ def _session() -> requests.Session:
 def ask(image: bytes, prompt: str, as_json: bool = True, max_tokens: int = 4000):
     """Envoie la photo et la consigne ; renvoie l'objet JSON (as_json) ou le texte de la réponse."""
     if not api_key():
-        raise VisionError("Aucune clé Groq : range-la dans instance/anthropic_api_key ou instance/groq_api_key.")
+        raise VisionError("Aucune clé Groq : colle-la après GROQ_API_KEY= dans le fichier .env.")
     data, mime = _shrink(image)
     body = {
         "model": current_app.config.get("VISION_MODEL", MODEL),

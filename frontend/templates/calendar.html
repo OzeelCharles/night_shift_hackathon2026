@@ -51,7 +51,7 @@
   <label class="inline-check"><input type="checkbox" name="create_missing"> Créer une matière pour chaque cours qui ne ressemble à aucune de mes matières</label>
   <button class="btn">Lire la photo</button>
   {% else %}
-  <p class="muted small">Indisponible : il faut une clé Groq (gsk_…) dans <code>instance/anthropic_api_key</code> ou <code>instance/groq_api_key</code>.</p>
+  <p class="muted small">Indisponible : il faut une clé Groq (gsk_…) après <code>GROQ_API_KEY=</code> dans le fichier <code>.env</code>.</p>
   {% endif %}
 </form>
 

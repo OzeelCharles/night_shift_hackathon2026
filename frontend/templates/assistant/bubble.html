@@ -1,0 +1,489 @@
+{# Assistant : bulle flottante (en bas à droite) et fenêtre de discussion. Inclus par base.html
+   sur toutes les pages d'un utilisateur connecté. La conversation est chargée à la première ouverture. #}
+{% set subject_id = (request.view_args or {}).get('subject_id', '') %}
+<div class="assistant" id="assistant"
+     data-conversation-url="{{ url_for('assistant.conversation') }}"
+     data-send-url="{{ url_for('assistant.send') }}"
+     data-new-url="{{ url_for('assistant.new') }}"
+     data-stream-url="{{ url_for('assistant.send_stream') }}"
+     data-csrf="{{ csrf_token() }}"
+     data-subject="{{ subject_id }}">
+  <button class="assistant-fab" type="button" aria-expanded="false" aria-controls="assistant-panel">
+    <svg class="icon i-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>
+    <svg class="icon i-close" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    <span class="visually-hidden">Assistant Rivezli</span>
+  </button>
+
+  <section class="assistant-panel" id="assistant-panel" role="dialog" aria-labelledby="assistant-title" hidden>
+    <header class="assistant-head">
+      <div>
+        <h2 id="assistant-title">Assistant</h2>
+        <p>Ton planning, tes notes, tes méthodes de travail</p>
+      </div>
+      <button class="icon-btn assistant-expand" type="button" aria-pressed="false" title="Agrandir la fenêtre" aria-label="Agrandir la fenêtre">
+        <svg class="icon i-grow" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
+        <svg class="icon i-shrink" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/></svg>
+      </button>
+      <button class="icon-btn assistant-new" type="button" title="Nouvelle conversation" aria-label="Nouvelle conversation">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <button class="icon-btn assistant-close" type="button" aria-label="Fermer l'assistant">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+
+    <div class="assistant-log" role="log" aria-live="polite" aria-label="Conversation"></div>
+
+    <div class="assistant-welcome" hidden>
+      <p><strong>Salut {{ g.user.username }} !</strong> Pose-moi une question sur tes révisions.</p>
+      <div class="assistant-chips">
+        <button type="button" class="chip">Qu'est-ce que je fais aujourd'hui ?</button>
+        {% if subject_id %}<button type="button" class="chip">Comment réviser cette matière ?</button>
+        {% else %}<button type="button" class="chip">Comment réviser une matière ?</button>{% endif %}
+        <button type="button" class="chip">Comment évoluent mes notes ?</button>
+      </div>
+    </div>
+
+    <div class="assistant-file" hidden>
+      <img alt="" hidden>
+      <svg class="icon i-doc" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg>
+      <span class="assistant-file-name"></span>
+      <button type="button" class="assistant-file-remove" aria-label="Retirer la pièce jointe">
+        <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <form class="assistant-form">
+      <input type="file" class="visually-hidden" id="assistant-attach" accept="image/*,.heic,.heif,.pdf,application/pdf" tabindex="-1">
+      <button class="icon-btn assistant-attach" type="button" title="Joindre une photo ou un PDF" aria-label="Joindre une photo ou un PDF">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5l-8.6 8.6a5.5 5.5 0 0 1-7.8-7.8l8.6-8.6a3.7 3.7 0 0 1 5.2 5.2l-8.6 8.6a1.8 1.8 0 0 1-2.6-2.6l7.9-7.9"/></svg>
+      </button>
+      <label class="visually-hidden" for="assistant-input">Ta question</label>
+      <textarea id="assistant-input" rows="1" maxlength="2000" placeholder="Pose ta question…" autocomplete="off"></textarea>
+      <button class="btn assistant-send" type="submit" aria-label="Envoyer">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </button>
+    </form>
+    <p class="assistant-privacy">Pour te répondre, ta question, tes pièces jointes et les données utiles (planning, notes) sont envoyées à <span class="assistant-provider">ton fournisseur d'IA</span>. Photos et PDF ne sont pas conservés. L'historique n'est visible que par toi et s'efface quand tu te déconnectes ou fermes le navigateur.</p>
+  </section>
+</div>
+<script>
+(() => {
+  const root = document.getElementById('assistant');
+  const fab = root.querySelector('.assistant-fab');
+  const panel = root.querySelector('.assistant-panel');
+  const log = root.querySelector('.assistant-log');
+  const welcome = root.querySelector('.assistant-welcome');
+  const form = root.querySelector('.assistant-form');
+  const input = form.querySelector('textarea');
+  const sendBtn = form.querySelector('.assistant-send');
+  const SVG = 'http://www.w3.org/2000/svg';
+  const fileInput = form.querySelector('input[type=file]');
+  const fileBox = root.querySelector('.assistant-file');
+  let loaded = false, busy = false, file = null, preview = null;
+  document.body.classList.add('has-assistant');
+
+  // ------------------------------------------------ rendu : Markdown (marked, GFM) + formules LaTeX (KaTeX), nettoyé par DOMPurify
+  // 1. les formules ($…$, $$…$$, \(…\), \[…\]) sont mises de côté : le Markdown ne doit pas toucher à leurs _ * \ ;
+  // 2. le Markdown devient du HTML, nettoyé par DOMPurify (aucun script ne passe) ;
+  // 3. chaque formule est rendue par KaTeX à sa place.
+  const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/';
+  const LIBS = { katex: CDN + 'KaTeX/0.16.9/katex.min.js', marked: CDN + 'marked/12.0.2/marked.min.js',
+                 DOMPurify: CDN + 'dompurify/3.1.6/purify.min.js' };
+  // $…$ en ligne : pas d'espace juste après le $ ouvrant ni avant le $ fermant (« 5 $ et 10 $ » reste du texte)
+  const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<![\\$\w])\$(?![\s$])[^$\n]+?(?<![\s\\])\$(?![\w$])/g;
+  const CODE = /(```[\s\S]*?```|`[^`\n]+`)/;
+  let libsReady = null, purifyHooked = false;
+  function loadScript(src) {
+    return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.append(s); });
+  }
+  function libsLoaded() { return !!(window.katex && window.marked && window.DOMPurify); }
+  function ensureLibs() {
+    if (libsLoaded()) return Promise.resolve(true);
+    if (!libsReady) {
+      if (!document.querySelector('link[href*="katex.min.css"]')) {
+        const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = CDN + 'KaTeX/0.16.9/katex.min.css';
+        document.head.append(css);
+      }
+      libsReady = Promise.all(Object.entries(LIBS).filter(([g]) => !window[g]).map(([, src]) => loadScript(src)))
+        .then(() => libsLoaded())
+        .catch(() => { libsReady = null; return false; });  // hors ligne : mise en forme simple
+    }
+    return libsReady;
+  }
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+  function extractMath(text) {
+    const maths = [];
+    const md = text.split(CODE).map((part, i) => i % 2 ? part : part.replace(MATH, m => {
+      const display = m.startsWith('$$') || m.startsWith('\\[');
+      const body = m.startsWith('$$') || m.startsWith('\\[') || m.startsWith('\\(') ? m.slice(2, -2) : m.slice(1, -1);
+      // une formule tient sur une ligne ; « … » (inconnu de KaTeX) devient \ldots
+      maths.push({ body: body.replace(/\s*\n\s*/g, ' ').replace(/…/g, '\\ldots ').trim(), display });
+      return `MATHPH${maths.length - 1}X`;
+    })).join('');
+    return { md, maths };
+  }
+  function putMath(html, maths) {
+    return html.replace(/MATHPH(\d+)X/g, (_, i) => {
+      const m = maths[+i];
+      if (!m) return '';
+      try { return katex.renderToString(m.body, { displayMode: m.display, throwOnError: false, strict: false, output: 'htmlAndMathml' }); }
+      catch (e) { return `<code>${escapeHtml(m.body)}</code>`; }
+    });
+  }
+  function nestLists(md) {
+    // Les modèles indentent souvent les sous-listes de 2 espaces, trop peu sous « 1. » pour le Markdown :
+    // une puce indentée de 1 à 3 espaces juste sous un élément de liste est ramenée à 4 espaces.
+    let inList = false;
+    return md.split('\n').map(line => {
+      const item = /^\s*([-*+]|\d+[.)])\s/.test(line);
+      if (inList && /^ {1,3}([-*+]|\d+[.)])\s/.test(line)) line = '    ' + line.trimStart();
+      if (item) inList = true; else if (line.trim() && !/^\s/.test(line)) inList = false;  // un paragraphe termine la liste
+      return line;
+    }).join('\n');
+  }
+  function sourceLabel(s) {
+    return s.document + (s.page ? (/\.pptx$/i.test(s.document) ? `, diapo ${s.page}` : `, p. ${s.page}`) : '');
+  }
+  function citeLinks(html, sources) {
+    // [S1] -> petit numéro cliquable vers le support (à la bonne page pour un PDF)
+    const bySource = new Map((sources || []).map(s => [s.source, s]));
+    return html.replace(/\[S(\d+)\]/g, (m, n) => {
+      const s = bySource.get('S' + n);
+      if (!s) return '';
+      return `<a class="cite" href="${escapeHtml(s.url)}" target="_blank" rel="noopener" title="${escapeHtml(sourceLabel(s))}">${n}</a>`;
+    });
+  }
+  function markdownHtml(text, sources) {
+    if (!purifyHooked) {  // liens : nouvel onglet, sans accès à cette page
+      DOMPurify.addHook('afterSanitizeAttributes', n => { if (n.tagName === 'A') { n.target = '_blank'; n.rel = 'noopener noreferrer'; } });
+      purifyHooked = true;
+    }
+    const { md, maths } = extractMath(text);
+    const html = DOMPurify.sanitize(marked.parse(nestLists(md), { gfm: true, breaks: true }));
+    return citeLinks(putMath(html, maths), sources);
+  }
+  function plainHtml(text) {
+    // message de l'étudiant : texte tel quel, seules ses formules sont rendues
+    const { md, maths } = extractMath(text);
+    return putMath(escapeHtml(md), maths);
+  }
+  function fill(node, text, markdown, sources) {
+    const full = () => { node.innerHTML = markdown ? markdownHtml(text, sources) : plainHtml(text); };
+    if (libsLoaded()) return full();
+    if (markdown) node.replaceChildren(rich(text.replace(/\[S(\d+)\]/g, '[$1]'))); else node.textContent = text;
+    ensureLibs().then(ok => {
+      if (!ok) return;
+      const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
+      full();
+      if (atEnd) log.scrollTop = log.scrollHeight;
+    });
+  }
+
+  // ------------------------------------------------ mise en forme de secours (si les bibliothèques ne chargent pas)
+  function inline(parent, text) {
+    // **gras** et `code`
+    text.split(/(\*\*[^*]+\*\*|`[^`]+`)/).forEach(part => {
+      if (!part) return;
+      if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
+        const b = document.createElement('strong'); b.textContent = part.slice(2, -2); parent.append(b);
+      } else if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
+        const c = document.createElement('code'); c.textContent = part.slice(1, -1); parent.append(c);
+      } else parent.append(document.createTextNode(part));
+    });
+  }
+  function rich(text) {
+    const box = document.createDocumentFragment();
+    let list = null, para = null;
+    text.split('\n').forEach(raw => {
+      const line = raw.trim();
+      const bullet = line.match(/^[-*•]\s+(.*)$/), numbered = line.match(/^(\d+)[.)]\s+(.*)$/);
+      if (!line) { list = null; para = null; return; }
+      if (bullet || numbered) {
+        const tag = bullet ? 'UL' : 'OL';
+        if (!list || list.tagName !== tag) { list = document.createElement(tag); box.append(list); }
+        const li = document.createElement('li'); inline(li, bullet ? bullet[1] : numbered[2]); list.append(li);
+        para = null; return;
+      }
+      list = null;
+      const heading = line.match(/^#{1,6}\s+(.*)$/);
+      if (heading) { const p = document.createElement('p'); const b = document.createElement('strong');
+        b.textContent = heading[1].replace(/\*\*/g, ''); p.append(b); box.append(p); para = null; return; }
+      if (para) para.append(document.createElement('br'), document.createTextNode(''));
+      else { para = document.createElement('p'); box.append(para); }
+      inline(para, line);
+    });
+    return box;
+  }
+
+  // ------------------------------------------------ graphique (une série : pas de légende, le titre la nomme)
+  function el(name, attrs, text) {
+    const n = document.createElementNS(SVG, name);
+    Object.entries(attrs || {}).forEach(([k, v]) => n.setAttribute(k, v));
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+  function chart(c) {
+    const fig = document.createElement('figure'); fig.className = 'assistant-chart';
+    const cap = document.createElement('figcaption'); cap.textContent = c.title; fig.append(cap);
+    const svg = el('svg', { viewBox: `0 0 ${c.width} ${c.height}`, role: 'img', 'aria-label': c.title });
+    c.ticks.forEach(t => {
+      svg.append(el('line', { x1: c.left, x2: c.right, y1: t.y, y2: t.y, class: 'grid' }));
+      svg.append(el('text', { x: c.left - 6, y: t.y + 4, class: 'tick', 'text-anchor': 'end' }, t.text));
+    });
+    const pts = c.points.map(p => `${p.x},${p.y}`).join(' ');
+    if (c.points.length > 1) {
+      svg.append(el('polygon', { points: `${c.points[0].x},${c.bottom} ${pts} ${c.points.at(-1).x},${c.bottom}`, class: 'area' }));
+      svg.append(el('polyline', { points: pts, class: 'line' }));
+    }
+    c.points.forEach((p, i) => {
+      const dot = el('circle', { cx: p.x, cy: p.y, r: 4, class: 'dot', tabindex: 0 });
+      dot.append(el('title', {}, `${p.label} : ${p.text}`));
+      svg.append(dot);
+      if (i === c.points.length - 1)
+        svg.append(el('text', { x: p.x, y: Math.max(p.y - 9, 10), class: 'value', 'text-anchor': c.points.length > 1 ? 'end' : 'middle' }, p.text));
+    });
+    const first = c.points[0], last = c.points.at(-1);
+    svg.append(el('text', { x: first.x, y: c.height - 4, class: 'tick', 'text-anchor': 'start' }, first.label));
+    if (c.points.length > 1) svg.append(el('text', { x: last.x, y: c.height - 4, class: 'tick', 'text-anchor': 'end' }, last.label));
+    fig.append(svg);
+    // Vue tableau : les valeurs exactes, accessibles au clavier et aux lecteurs d'écran
+    const det = document.createElement('details');
+    const sum = document.createElement('summary'); sum.textContent = 'Voir les valeurs'; det.append(sum);
+    const table = document.createElement('table');
+    c.points.forEach(p => { const tr = table.insertRow(); tr.insertCell().textContent = p.label;
+      const td = tr.insertCell(); td.textContent = p.text; td.className = 'num'; });
+    det.append(table); fig.append(det);
+    return fig;
+  }
+
+  // ------------------------------------------------ messages
+  function attachmentTag(a, imageUrl) {
+    const tag = document.createElement('div'); tag.className = 'msg-file';
+    if (imageUrl) { const img = document.createElement('img'); img.src = imageUrl; img.alt = ''; tag.append(img); }
+    const name = document.createElement('span');
+    name.textContent = (a.kind === 'image' ? 'Photo : ' : 'PDF : ') + a.name;
+    tag.append(name);
+    return tag;
+  }
+  function sourcesList(sources) {
+    const box = document.createElement('div'); box.className = 'msg-sources';
+    const title = document.createElement('span'); title.textContent = 'Sources (tes supports)'; box.append(title);
+    const ol = document.createElement('ol');
+    sources.forEach(s => {
+      const li = document.createElement('li');
+      li.value = +s.source.slice(1);
+      const a = document.createElement('a');
+      a.href = s.url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = sourceLabel(s);
+      li.append(a);
+      if (s.matiere) { const m = document.createElement('span'); m.className = 'muted'; m.textContent = ` · ${s.matiere}`; li.append(m); }
+      ol.append(li);
+    });
+    box.append(ol);
+    return box;
+  }
+  function add(role, text, charts, extraClass, attachment, imageUrl, sources) {
+    const div = document.createElement('div');
+    div.className = `msg msg-${role}` + (extraClass ? ' ' + extraClass : '');
+    if (attachment) div.append(attachmentTag(attachment, imageUrl));
+    const body = document.createElement('div');
+    body.className = role === 'assistant' ? 'msg-body md' : 'msg-body';
+    if (extraClass) body.textContent = text;  // « Je regarde… », erreurs : texte simple
+    else fill(body, text, role === 'assistant', sources);
+    div.append(body);
+    (charts || []).forEach(c => div.append(chart(c)));
+    if (sources && sources.length) div.append(sourcesList(sources));
+    log.append(div);
+    welcome.hidden = true;
+    log.scrollTop = log.scrollHeight;
+    return div;
+  }
+  function render(data) {
+    if (data.provider) root.querySelector('.assistant-provider').textContent = data.provider;
+    log.replaceChildren();
+    data.messages.forEach(m => add(m.role, m.content, m.charts, '', m.attachment, null, m.sources));
+    if (data.notice) add('assistant', data.notice, [], 'msg-notice');
+    welcome.hidden = data.messages.length > 0;
+    log.scrollTop = log.scrollHeight;
+  }
+  async function call(url, body) {
+    const isForm = body instanceof FormData;  // avec une pièce jointe : envoi en multipart
+    const r = await fetch(url, body === undefined ? {} : {
+      method: 'POST',
+      headers: isForm ? { 'X-CSRF-Token': root.dataset.csrf }
+                      : { 'Content-Type': 'application/json', 'X-CSRF-Token': root.dataset.csrf },
+      body: isForm ? body : JSON.stringify(body) });
+    let data = null;
+    try { data = await r.json(); } catch (e) { /* page HTML (session expirée…) */ }
+    if (!data) throw new Error('Session expirée : recharge la page.');
+    return data;
+  }
+  async function load() {
+    // bibliothèques de rendu d'abord (2,5 s au plus), puis la conversation
+    const libs = Promise.race([ensureLibs(), new Promise(ok => setTimeout(ok, 2500))]);
+    try { const data = await call(root.dataset.conversationUrl); await libs; render(data); loaded = true; }
+    catch (e) { add('assistant', e.message, [], 'msg-error'); }
+  }
+
+  async function send(text, retryFile) {
+    text = text.trim();
+    const sending = retryFile || file;
+    if ((!text && !sending) || busy) return;
+    busy = true; sendBtn.disabled = true;
+    const shown = sending ? { name: sending.name, kind: sending.type === 'application/pdf' ? 'pdf' : 'image' } : null;
+    const userMsg = add('user', text || 'Explique-moi ce document.', [], '', shown, sending === file ? preview : null);
+    input.value = ''; resize();
+    if (!retryFile) clearFile(false);
+    const typing = add('assistant', shown ? (shown.kind === 'image' ? 'Je lis ta photo…' : 'Je lis ton PDF…') : 'Je regarde…',
+                       [], 'msg-typing');
+    const fields = { text, page: document.title.replace(/\s*\|\s*Rivezli$/, ''), subject_id: root.dataset.subject };
+    let body = fields;
+    if (sending) { body = new FormData(); Object.entries(fields).forEach(([k, v]) => body.append(k, v || '')); body.append('file', sending); }
+
+    // Réponse diffusée : le texte s'affiche au fil de l'écriture, le statut dit ce que fait l'assistant
+    let live = null, liveText = '', frame = 0, done = null, error = '';
+    const paint = () => {
+      frame = 0;
+      if (!live) return;
+      const atEnd = log.scrollHeight - log.scrollTop - log.clientHeight < 60;
+      fill(live.querySelector('.msg-body'), liveText, true, []);
+      if (atEnd) log.scrollTop = log.scrollHeight;
+    };
+    const onEvent = ev => {
+      if (ev.type === 'status') {
+        if (!live) typing.querySelector('.msg-body').textContent = ev.text;
+      } else if (ev.type === 'delta') {
+        if (!live) { typing.remove(); live = add('assistant', '', [], ''); live.classList.add('msg-live'); }
+        liveText += ev.text;
+        if (!frame) frame = requestAnimationFrame(paint);
+      } else if (ev.type === 'done') done = ev;
+      else if (ev.type === 'error') error = ev.error;
+    };
+    try { await stream(root.dataset.streamUrl, body, onEvent); }
+    catch (e) { error = error || e.message || 'Connexion impossible.'; }
+    if (frame) cancelAnimationFrame(frame);
+    typing.remove();
+    if (live) live.remove();
+    if (done && done.message) {
+      if (done.reset) {
+        // nouveau document : la conversation précédente a été effacée côté serveur
+        while (userMsg.previousElementSibling) userMsg.previousElementSibling.remove();
+        const note = document.createElement('p'); note.className = 'assistant-reset';
+        note.textContent = 'Nouveau document : la conversation précédente a été effacée.';
+        log.insertBefore(note, userMsg);
+      }
+      add('assistant', done.message.content, done.message.charts, '', null, null, done.message.sources);
+    } else retry(error || 'Réponse interrompue : réessaie.', text, sending);
+    busy = false; sendBtn.disabled = false; input.focus();
+  }
+  async function stream(url, body, onEvent) {
+    // Server-Sent Events lus avec fetch (POST, pièce jointe possible) : une ligne « data: {json} » par événement
+    const isForm = body instanceof FormData;
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: isForm ? { 'X-CSRF-Token': root.dataset.csrf }
+                      : { 'Content-Type': 'application/json', 'X-CSRF-Token': root.dataset.csrf },
+      body: isForm ? body : JSON.stringify(body) });
+    if (!r.ok || !(r.headers.get('content-type') || '').includes('text/event-stream') || !r.body) {
+      let data = null;
+      try { data = await r.json(); } catch (e) { /* page HTML (session expirée…) */ }
+      throw new Error((data && data.error) || 'Session expirée : recharge la page.');
+    }
+    const reader = r.body.getReader(), decoder = new TextDecoder();
+    let buffer = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let cut;
+      while ((cut = buffer.indexOf('\n\n')) >= 0) {
+        const line = buffer.slice(0, cut).split('\n').find(l => l.startsWith('data: '));
+        buffer = buffer.slice(cut + 2);
+        if (line) { try { onEvent(JSON.parse(line.slice(6))); } catch (e) { /* événement illisible : ignoré */ } }
+      }
+    }
+  }
+  function retry(message, text, sentFile) {
+    const div = add('assistant', message, [], 'msg-error');
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'btn btn-ghost btn-sm'; b.textContent = 'Réessayer';
+    b.addEventListener('click', () => { div.remove(); log.lastElementChild && log.lastElementChild.classList.contains('msg-user') && log.lastElementChild.remove(); send(text, sentFile); });
+    div.append(b);
+  }
+
+  // ------------------------------------------------ pièce jointe : trombone, coller une image (Ctrl+V), glisser-déposer
+  const ACCEPTED = /^image\//, MAX_MB = 15;
+  function setFile(f) {
+    if (!f) return;
+    const isPdf = f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+    const isImage = ACCEPTED.test(f.type) || /\.(heic|heif)$/i.test(f.name);
+    if (!isPdf && !isImage) { add('assistant', 'Formats acceptés : une photo (JPEG, PNG, HEIC…) ou un PDF.', [], 'msg-error'); return; }
+    if (f.size > MAX_MB * 1024 * 1024) { add('assistant', `Fichier trop lourd (${MAX_MB} Mo au plus).`, [], 'msg-error'); return; }
+    clearFile(true);
+    file = isPdf && f.type !== 'application/pdf' ? new File([f], f.name, { type: 'application/pdf' }) : f;
+    const img = fileBox.querySelector('img');
+    preview = isImage && ACCEPTED.test(f.type) ? URL.createObjectURL(f) : null;
+    img.hidden = !preview; if (preview) img.src = preview;
+    fileBox.querySelector('.i-doc').style.display = preview ? 'none' : '';
+    fileBox.querySelector('.assistant-file-name').textContent = f.name;
+    fileBox.hidden = false;
+    input.placeholder = 'Ta question sur ce document (facultatif)…';
+    input.focus();
+  }
+  function clearFile(revoke) {
+    if (revoke && preview) URL.revokeObjectURL(preview);
+    file = null; preview = null; fileInput.value = '';
+    fileBox.hidden = true; input.placeholder = 'Pose ta question…';
+  }
+  form.querySelector('.assistant-attach').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => setFile(fileInput.files[0]));
+  fileBox.querySelector('.assistant-file-remove').addEventListener('click', () => { clearFile(true); input.focus(); });
+  input.addEventListener('paste', e => {
+    const f = [...(e.clipboardData ? e.clipboardData.files : [])][0];
+    if (f) { e.preventDefault(); setFile(f); }
+  });
+  panel.addEventListener('dragover', e => { e.preventDefault(); panel.classList.add('is-drop'); });
+  panel.addEventListener('dragleave', e => { if (!panel.contains(e.relatedTarget)) panel.classList.remove('is-drop'); });
+  panel.addEventListener('drop', e => { e.preventDefault(); panel.classList.remove('is-drop'); setFile(e.dataTransfer.files[0]); });
+
+  // ------------------------------------------------ ouverture / fermeture (gardée d'une page à l'autre)
+  function open(state, focus = true) {
+    panel.hidden = !state;
+    fab.setAttribute('aria-expanded', state);
+    root.classList.toggle('is-open', state);
+    document.body.classList.toggle('assistant-opened', state);
+    try { sessionStorage.setItem('assistant-open', state ? '1' : ''); } catch (e) {}
+    if (state) { if (!loaded) load(); if (focus) input.focus(); }
+    else if (focus) fab.focus();
+  }
+  fab.addEventListener('click', () => open(panel.hidden));
+  root.querySelector('.assistant-close').addEventListener('click', () => open(false));
+  root.querySelector('.assistant-new').addEventListener('click', async () => {
+    if (busy) return;
+    try { render(await call(root.dataset.newUrl, {})); } catch (e) { add('assistant', e.message, [], 'msg-error'); }
+    input.focus();
+  });
+  panel.addEventListener('keydown', e => { if (e.key === 'Escape') open(false); });
+  // Fenêtre agrandie (mémorisée dans ce navigateur) : plus de place pour les explications et les formules
+  const expandBtn = root.querySelector('.assistant-expand');
+  function setWide(wide) {
+    root.classList.toggle('is-wide', wide);
+    expandBtn.setAttribute('aria-pressed', wide);
+    const label = wide ? 'Réduire la fenêtre' : 'Agrandir la fenêtre';
+    expandBtn.title = label; expandBtn.setAttribute('aria-label', label);
+    try { localStorage.setItem('assistant-wide', wide ? '1' : ''); } catch (e) {}
+  }
+  expandBtn.addEventListener('click', () => setWide(!root.classList.contains('is-wide')));
+  try { if (localStorage.getItem('assistant-wide')) setWide(true); } catch (e) {}
+  welcome.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => send(c.textContent)));
+  form.addEventListener('submit', e => { e.preventDefault(); send(input.value); });
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(input.value); }
+  });
+  function resize() { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; }
+  input.addEventListener('input', resize);
+  try { if (sessionStorage.getItem('assistant-open')) open(true, false); } catch (e) {}
+})();
+</script>

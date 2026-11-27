@@ -7,6 +7,8 @@ ajouter les vôtres sans toucher au cœur). Une fonctionnalité peut fournir :
 - des entrées de menu (pour tout utilisateur connecté, ou réservées aux administrateurs) ;
 - des abonnements au bus d'événements (voir core/events.py) ;
 - des panneaux affichés en bas de la page d'une matière (gabarits Jinja) ;
+- des éléments affichés sur toutes les pages d'un utilisateur connecté (gabarits Jinja, ex. la bulle de l'assistant) ;
+- des outils que l'assistant peut appeler (voir core/tools.py) ;
 - une fonction `setup(app)` pour toute autre initialisation.
 """
 import importlib
@@ -16,6 +18,7 @@ from typing import Callable
 from flask import Blueprint, Flask
 
 from . import events
+from .tools import Tool
 
 
 @dataclass(frozen=True)
@@ -38,6 +41,8 @@ class Feature:
     nav: list[NavItem] = field(default_factory=list)
     subscriptions: list[tuple[str, Callable]] = field(default_factory=list)
     subject_panels: list[str] = field(default_factory=list)
+    widgets: list[str] = field(default_factory=list)
+    tools: list[Tool] = field(default_factory=list)
     setup: Callable[[Flask], None] | None = None
 
 
@@ -55,5 +60,7 @@ def load_features(app: Flask, module_paths: list[str]) -> list[Feature]:
     app.extensions["features"] = loaded
     nav = sorted((item for f in loaded for item in f.nav), key=lambda i: i.order)
     panels = [p for f in loaded for p in f.subject_panels]
-    app.jinja_env.globals.update(nav_items=nav, subject_panels=panels)
+    app.extensions["tools"] = {t.name: t for f in loaded for t in f.tools}
+    app.jinja_env.globals.update(nav_items=nav, subject_panels=panels,
+                                 widgets=[w for f in loaded for w in f.widgets])
     return loaded

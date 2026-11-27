@@ -15,8 +15,27 @@ FEATURES = [
     "backend.controllers.api",
     "backend.controllers.admin",
     "backend.controllers.dossier",
+    "backend.controllers.assistant",  # chatbot (bulle flottante), modèle de Groq
     "backend.plugins.revision",  # atelier de révision : fiches, QCM notés, carnet de notes, exercices
 ]
+
+
+def load_env(path: str) -> None:
+    """Lit le fichier .env (lignes CLÉ=valeur, # pour les commentaires) dans les variables d'environnement.
+
+    Une variable déjà définie dans le terminal garde la priorité ; une valeur vide est ignorée.
+    """
+    if not os.path.isfile(path):
+        return
+    with open(path, encoding="utf-8-sig") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, value = (part.strip() for part in line.split("=", 1))
+            value = value.strip("\"'")
+            if key and value and not os.environ.get(key):
+                os.environ[key] = value
 
 
 def _secret_key(instance_path: str) -> str:
