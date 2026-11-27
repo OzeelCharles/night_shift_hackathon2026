@@ -75,7 +75,8 @@ Onglet **Réviser** de la barre du haut, à côté d'**Encadrement** (et un pann
   d'après l'aisance déclarée), réglable aussi **chapitre par chapitre**.
 - **Fiches de révision** par chapitre : définitions, théorèmes et propriétés, formules, l'essentiel, mots-clés.
   En difficile, les définitions deviennent des cartes à retourner (rappel actif). Imprimables.
-- **QCM notés sur 20**, sur toute la matière ou un chapitre : notion à retrouver, texte à trous, vrai/faux, chapitre.
+- **QCM notés sur 20**, sur toute la matière ou un chapitre, **rédigés par Claude après lecture des PDF du cours**
+  (formules comprises : densités, lois, théorèmes et leurs hypothèses), mathématiques en LaTeX affichées par KaTeX.
   Le niveau change le nombre de questions (8, 10, 15), de choix (3, 4, 5), la proximité des distracteurs et ajoute
   −0,25 par erreur en difficile. Correction détaillée après la copie.
 - **Carnet de notes** : courbe de la note au fil des essais, moyenne, meilleure note, progression, réussite par
@@ -83,10 +84,24 @@ Onglet **Réviser** de la barre du haut, à côté d'**Encadrement** (et un pann
   l'atelier propose de changer de niveau.
 - **Exercices** : énoncés « Exercice n » (et leur corrigé) repérés dans tes supports, puis dans des PDF d'exercices
   corrigés trouvés en ligne (adaptés au chapitre, à la difficulté et à ton niveau d'études), classés par chapitre
-  avec une difficulté estimée.
+  avec une difficulté estimée. **Si la recherche ne trouve rien, Claude rédige des exercices corrigés d'après le cours.**
+- **Notebooks Jupyter d'exercices** pour les cours de data science (régression, apprentissage, statistiques…) :
+  d'abord des notebooks existants trouvés en ligne (GitHub, Kaggle, Colab ; lien « Ouvrir dans Colab » pour GitHub).
+  **Si la recherche ne trouve rien, Claude en rédige un** : énoncés, code à compléter (`# TODO`) et corrigés en fin
+  de notebook, sur données simulées, téléchargeable en `.ipynb`.
 
-Sans support déposé, le texte de l'article Wikipédia de la matière sert de cours. Tout fonctionne sans clé d'API ni
-modèle à télécharger : la génération repose sur des règles de traitement du texte (`generator.py`).
+Sans support déposé, l'atelier renvoie vers la page de la matière (espace Encadrement) pour en déposer.
+
+**Claude** (`ai.py`, modèle `claude-opus-5-5`, réglable par `REVISION_AI_MODEL` et `REVISION_AI_EFFORT`) lit les PDF
+eux-mêmes : le texte extrait des PDF abîme les formules (σ devient ε, Σ devient !). Sans clé, ou si Claude ne répond
+pas, les QCM sont fabriqués par des règles de traitement du texte (`generator.py`) et rien n'est rédigé par Claude.
+
+La clé d'API n'est **jamais** dans le code ni dans git. Au choix :
+
+- variable d'environnement, propre à ta session Windows (`setx` l'enregistre pour les prochains terminaux) :
+  `setx ANTHROPIC_API_KEY "sk-ant-..."` ;
+- ou fichier `instance/anthropic_api_key` contenant seulement la clé : le dossier `instance/` est ignoré par git
+  (comme la clé secrète du site), et `.gitignore` exclut aussi tout fichier `anthropic_api_key` et `.env`.
 
 **Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de

@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS rev_difficulty (
 );
 CREATE TABLE IF NOT EXISTS rev_corpus (         -- texte extrait des supports (cache)
     subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
-    source TEXT NOT NULL,                       -- doc:<id> ou wiki
+    source TEXT NOT NULL,                       -- doc:<id>
     text TEXT NOT NULL,
     PRIMARY KEY (subject_id, source)
 );
@@ -48,12 +48,28 @@ CREATE TABLE IF NOT EXISTS rev_exercises (
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
     UNIQUE (subject_id, fingerprint)
 );
+CREATE TABLE IF NOT EXISTS rev_notebooks (        -- notebooks Jupyter rédigés par Claude
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    chapter TEXT NOT NULL DEFAULT '',
+    difficulty TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',           -- fichier .ipynb (JSON) rédigé par Claude
+    url TEXT NOT NULL DEFAULT '',               -- ou notebook existant trouvé en ligne
+    source TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
 CREATE INDEX IF NOT EXISTS idx_rev_quizzes_subject ON rev_quizzes(subject_id, submitted_at);
 """
 
 
 def init_schema() -> None:
-    get_db().executescript(SCHEMA)
+    db = get_db()
+    db.executescript(SCHEMA)
+    columns = {r["name"] for r in db.execute("PRAGMA table_info(rev_notebooks)")}
+    for column in ("url", "source"):  # tables créées avant l'ajout des notebooks trouvés en ligne
+        if column not in columns:
+            db.execute(f"ALTER TABLE rev_notebooks ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
 
 # ---------------------------------------------------------------- difficulté
@@ -152,3 +168,23 @@ def get_exercise(exercise_id, user_id):
 
 def delete_exercise(exercise_id) -> None:
     execute("DELETE FROM rev_exercises WHERE id = ?", exercise_id)
+
+
+# ---------------------------------------------------------------- notebooks
+def add_notebook(subject_id, chapter, difficulty, title, content="", url="", source="") -> bool:
+    """Faux si ce notebook en ligne est déjà dans la liste."""
+    if url and one("SELECT 1 FROM rev_notebooks WHERE subject_id = ? AND url = ?", subject_id, url):
+        return False
+    execute("INSERT INTO rev_notebooks (subject_id, chapter, difficulty, title, content, url, source) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)", subject_id, chapter, difficulty, title[:200], content, url, source[:200])
+    return True
+
+
+def notebooks(subject_id):
+    return query("SELECT id, chapter, difficulty, title, url, source, created_at FROM rev_notebooks "
+                 "WHERE subject_id = ? ORDER BY id DESC", subject_id)
+
+
+def get_notebook(notebook_id, user_id):
+    return one("SELECT n.* FROM rev_notebooks n JOIN subjects s ON s.id = n.subject_id WHERE n.id = ? AND s.user_id = ?",
+               notebook_id, user_id)

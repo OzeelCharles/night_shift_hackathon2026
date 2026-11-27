@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import random
-import time
 from urllib.parse import urlparse
 
 import requests
@@ -18,12 +17,15 @@ from backend.dao import subjects as subjects_dao
 from backend.services.common import owned
 from backend.services.report import Report
 
+from . import ai, sources, store
 from . import generator as gen
-from . import sources, store
 
 MIN_QUESTIONS = 3
-WIKI_RETRY_SECONDS = 600
-_wiki_failed: dict[int, float] = {}  # matière -> heure du dernier échec (évite d'attendre le réseau à chaque page)
+GENERATED = "Généré par Claude d'après ton cours"
+# Mots qui signalent un cours de data science : on y propose des notebooks d'exercices
+DATA_WORDS = ("data", "donnee", "python", "statisti", "regression", "apprentissage", "learning", "machine",
+              "gaussi", "bayes", "classification", "neurone", "neural", "noyau", "kernel", "optimisation",
+              "optimization", "pandas", "numpy", "series temporelles", "time series", "clustering")
 
 
 def web_enabled() -> bool:
@@ -32,6 +34,15 @@ def web_enabled() -> bool:
 
 def subject(user_id, subject_id):
     return owned(subjects_dao.get_owned(subject_id, user_id))
+
+
+def has_docs(subject_id) -> bool:
+    return bool(documents_dao.list_for_subject(subject_id))
+
+
+def is_data_science(s) -> bool:
+    text = gen.norm(s["name"] + " " + " ".join(topics_of(s)))
+    return any(w in text for w in DATA_WORDS)
 
 
 # ---------------------------------------------------------------- niveau de difficulté
@@ -61,12 +72,12 @@ def set_levels(s, form) -> Report:
 
 # ---------------------------------------------------------------- texte du cours
 def course_text(s) -> tuple[str, str]:
-    """(texte, origine). Les supports déposés d'abord ; Wikipédia en secours s'il n'y a presque rien."""
+    """(texte, origine) : texte extrait des supports déposés (gardé en cache), origine « docs » ou « none »."""
     sid = s["id"]
     cached = store.corpus(sid)
     docs = {f"doc:{d['id']}": d for d in documents_dao.list_for_subject(sid)}
     for key in list(cached):
-        if key.startswith("doc:") and key not in docs:
+        if key not in docs:
             store.drop_corpus(sid, key)
     parts = []
     for key, d in docs.items():
@@ -76,18 +87,13 @@ def course_text(s) -> tuple[str, str]:
             store.save_corpus(sid, key, cached[key])
         parts.append(cached[key])
     body = "\n".join(p for p in parts if p).strip()
-    origin = "docs" if body else "none"
-    if len(body) < 400:
-        if "wiki" not in cached and web_enabled() and time.time() - _wiki_failed.get(sid, 0) > WIKI_RETRY_SECONDS:
-            try:
-                cached["wiki"] = sources.wikipedia_text(s["name"])
-                store.save_corpus(sid, "wiki", cached["wiki"])
-            except requests.RequestException:
-                _wiki_failed[sid] = time.time()
-        if cached.get("wiki"):
-            body = (body + "\n" + cached["wiki"]).strip()
-            origin = "docs+wiki" if origin == "docs" else "wiki"
-    return body, origin
+    return body, "docs" if body else "none"
+
+
+def course_for_ai(s) -> list[dict]:
+    """Les supports tels que Claude les lit (PDF entiers, sinon texte extrait)."""
+    course_text(s)  # remplit le cache du texte des supports non PDF
+    return ai.course_blocks(documents_dao.list_for_subject(s["id"]), store.corpus(s["id"]))
 
 
 def chapters(s) -> tuple[dict[str, str], str]:
@@ -111,18 +117,26 @@ def sheets(s, chapter: str = "") -> tuple[list[dict], dict, str]:
 def create_quiz(user, s, chapter: str, difficulty: str) -> tuple[int | None, Report]:
     if difficulty not in gen.DIFFICULTIES:
         return None, Report().error("Choisis un niveau de difficulté.")
-    chs, _ = chapters(s)
-    if chapter and chapter not in chs:
-        chapter = ""
-    questions = gen.build_quiz(chs, difficulty, seed=random.randrange(1 << 30), only=chapter or None)
+    topics = topics_of(s)
+    chapter = chapter if chapter in topics else ""
+    cfg = gen.SETTINGS[difficulty]
+    report = Report()
+    rng = random.Random()
+    questions = []
+    if ai.available():
+        try:
+            questions = ai.quiz(course_for_ai(s), topics, chapter, difficulty, cfg["questions"], cfg["options"], rng)
+        except ai.AIError as e:
+            report.warning(f"{e} Le QCM est fabriqué à partir du texte extrait du cours.")
     if len(questions) < MIN_QUESTIONS:
-        return None, Report().error(
+        chs, _ = chapters(s)
+        questions = gen.build_quiz(chs, difficulty, seed=rng.randrange(1 << 30), only=chapter or None)
+    if len(questions) < MIN_QUESTIONS:
+        return None, report.error(
             "Pas assez de contenu pour fabriquer un QCM" + (f" sur « {chapter} »" if chapter else "")
             + " : dépose tes supports de cours (PDF, diapositives… avec du texte) sur la page de la matière.")
-    report = Report()
-    wanted = gen.SETTINGS[difficulty]["questions"]
-    if len(questions) < wanted:
-        report.info(f"Le cours permet {len(questions)} questions sur les {wanted} prévues à ce niveau.")
+    if len(questions) < cfg["questions"]:
+        report.info(f"Le cours permet {len(questions)} questions sur les {cfg['questions']} prévues à ce niveau.")
     return store.create_quiz(user["id"], s["id"], chapter, difficulty, questions), report
 
 
@@ -195,8 +209,10 @@ def hub(user, subject_id) -> dict:
     ex = [dict(e) for e in store.exercises(subject_id)]
     return {"s": s, "topics": topics_of(s), "levels": lv, "asked": "" in lv, "difficulty": difficulty_of(lv),
             "suggested": gen.suggested_difficulty(s["comfort"]), "chapters": list(chs), "origin": origin,
-            "register": register(s, lv), "exercises": ex, "web_enabled": web_enabled(),
-            "n_docs": len(documents_dao.list_for_subject(subject_id))}
+            "register": register(s, lv), "exercises": ex, "web_enabled": web_enabled(), "ai_enabled": ai.available(),
+            "n_docs": len(documents_dao.list_for_subject(subject_id)),
+            "data_science": is_data_science(s),
+            "notebooks": [dict(n, colab=sources.colab_url(n["url"])) for n in store.notebooks(subject_id)]}
 
 
 def overview(user) -> list[dict]:
@@ -217,7 +233,7 @@ def panel_summary(subject_id) -> dict | None:
         lv = store.difficulties(subject_id)
         rows = store.attempts(subject_id)
         return {"difficulty": lv.get(""), "n": len(rows), "last": rows[-1]["score"] if rows else None,
-                "n_ex": len(store.exercises(subject_id))}
+                "n_ex": len(store.exercises(subject_id)), "has_docs": has_docs(subject_id)}
     except Exception:
         current_app.logger.exception("Atelier de révision : résumé indisponible")
         return None
@@ -246,7 +262,7 @@ def _store_exercises(s, found, topics, chapter, source, url) -> int:
 
 
 def collect_exercises(user, s, chapter: str, difficulty: str) -> Report:
-    """Exercices des supports déposés, puis de PDF d'exercices corrigés trouvés sur internet."""
+    """Exercices des supports déposés, puis de PDF corrigés en ligne ; si rien de nouveau, Claude en rédige."""
     topics = topics_of(s)
     if chapter not in topics:
         chapter = ""
@@ -255,14 +271,29 @@ def collect_exercises(user, s, chapter: str, difficulty: str) -> Report:
     report = Report()
     course_text(s)  # remplit le cache du texte des supports
     cached = store.corpus(s["id"])
-    from_docs = 0
+    added = 0
     for d in documents_dao.list_for_subject(s["id"]):
         found = gen.extract_exercises(cached.get(f"doc:{d['id']}", ""))
-        from_docs += _store_exercises(s, found, topics, chapter, d["filename"], "")
-    report.info(f"{from_docs} nouvel(s) exercice(s) trouvé(s) dans tes supports.")
+        added += _store_exercises(s, found, topics, chapter, d["filename"], "")
+    report.info(f"{added} nouvel(s) exercice(s) trouvé(s) dans tes supports.")
+    if web_enabled():
+        added += _collect_online(user, s, topics, chapter, difficulty, report)
+    if added:
+        return report
+    if not ai.available():
+        return report.info("Aucun nouvel exercice trouvé. Avec une clé d'API Claude, "
+                           "des exercices seraient rédigés d'après ton cours.")
+    try:
+        made = ai.exercises(course_for_ai(s), topics, chapter, difficulty)
+    except ai.AIError as e:
+        return report.warning(f"Aucun exercice trouvé, et Claude n'a pas pu en rédiger : {e}")
+    n = sum(store.add_exercise(s["id"], e["chapter"] if e["chapter"] in topics else chapter, e["title"],
+                               e["statement"], e["solution"], difficulty, GENERATED, "", gen.fingerprint(e["statement"]))
+            for e in made)
+    return report.success(f"Aucun exercice trouvé ailleurs : Claude en a rédigé {n} d'après ton cours.")
 
-    if not web_enabled():
-        return report.info("La recherche sur internet est désactivée sur ce serveur.")
+
+def _collect_online(user, s, topics, chapter, difficulty, report) -> int:
     urls = [r["url"] for r in resources_dao.list_for_subject(s["id"])
             if ".pdf" in r["url"].lower() and r["kind"] in ("web", "exam")]
     try:
@@ -270,7 +301,7 @@ def collect_exercises(user, s, chapter: str, difficulty: str) -> Report:
                                                                 LEVEL_QUERY.get(user["level"], ""))]
     except requests.RequestException:
         report.warning("La recherche d'exercices en ligne n'a pas répondu ; réessaie plus tard.")
-    from_web, tried, useful = 0, 0, 0
+    added, tried, useful = 0, 0, 0
     for url in dict.fromkeys(urls):
         if tried >= 5 or useful >= 3:
             break
@@ -281,12 +312,48 @@ def collect_exercises(user, s, chapter: str, difficulty: str) -> Report:
             continue
         if found:
             useful += 1
-            from_web += _store_exercises(s, found, topics, chapter, urlparse(url).netloc.replace("www.", ""), url)
-    return report.success(f"{from_web} nouvel(s) exercice(s) importé(s) depuis {useful} PDF en ligne.") if from_web \
-        else report.info("Aucun nouvel exercice trouvé en ligne cette fois-ci.")
+            added += _store_exercises(s, found, topics, chapter, urlparse(url).netloc.replace("www.", ""), url)
+    if added:
+        report.success(f"{added} nouvel(s) exercice(s) importé(s) depuis {useful} PDF en ligne.")
+    return added
 
 
 def delete_exercise(user, exercise_id) -> int:
     e = owned(store.get_exercise(exercise_id, user["id"]))
     store.delete_exercise(exercise_id)
     return e["subject_id"]
+
+
+# ---------------------------------------------------------------- notebooks (cours de data science)
+def find_notebooks(s, chapter: str, difficulty: str) -> Report:
+    """Notebooks existants trouvés en ligne d'abord ; si aucun nouveau, Claude en rédige un d'après le cours."""
+    topics = topics_of(s)
+    chapter = chapter if chapter in topics else ""
+    if difficulty not in gen.DIFFICULTIES:
+        difficulty = difficulty_of(levels(s["id"]), chapter)
+    report = Report()
+    if web_enabled():
+        try:
+            found = sources.search_notebooks(s["name"], chapter)
+        except requests.RequestException:
+            found = []
+            report.warning("La recherche de notebooks en ligne n'a pas répondu.")
+        added = sum(store.add_notebook(s["id"], chapter, difficulty, r["title"], url=r["url"], source=r["source"])
+                    for r in found[:5])
+        if added:
+            return report.success(f"{added} notebook(s) trouvé(s) en ligne.")
+    if not ai.available():
+        return report.info("Aucun nouveau notebook trouvé en ligne. Avec une clé d'API Claude, "
+                           "un notebook serait rédigé d'après ton cours.")
+    try:
+        nb = ai.notebook(course_for_ai(s), s["name"], topics, chapter, difficulty)
+    except ai.AIError as e:
+        return report.error(f"Aucun notebook trouvé en ligne, et Claude n'a pas pu en rédiger : {e}")
+    store.add_notebook(s["id"], chapter, difficulty, nb["title"], content=ai.to_ipynb(nb), source=GENERATED)
+    return report.success(f"Aucun notebook trouvé en ligne : Claude en a rédigé un, « {nb['title']} » "
+                          f"({len(nb['exercises'])} exercices).")
+
+
+def notebook(user, notebook_id):
+    nb = owned(store.get_notebook(notebook_id, user["id"]))
+    return owned(nb if nb["content"] else None)  # un notebook en ligne s'ouvre par son lien

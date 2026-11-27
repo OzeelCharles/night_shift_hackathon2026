@@ -35,7 +35,10 @@
   .rv-card-flip { border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
   .rv-card-flip summary { cursor: pointer; font-weight: 700; }
   .rv-ex { border-top: 1px solid var(--line); padding: 14px 0; }
-  .rv-ex pre { white-space: pre-wrap; font: inherit; margin: 8px 0; }
+  .rv-text { white-space: pre-wrap; margin: 8px 0; }
+  .rv-text .katex-display { white-space: normal; margin: .6em 0; }
+  .katex { font-size: 1.05em; }
+  .rv-nb { display: flex; justify-content: space-between; gap: 12px; align-items: center; border-top: 1px solid var(--line); padding: 10px 0; }
   .rv-levels-table td { padding: 6px 8px; vertical-align: middle; }
   .rv-levels-table select { min-height: 38px; padding: 6px 10px; }
   @media (max-width: 720px) { .rv-bars li { grid-template-columns: 1fr; gap: 4px; } }
@@ -45,3 +48,10 @@
     .rv-card-flip[open] summary ~ *, .rv-card-flip summary ~ * { display: block; }
   }
 </style>
+{# Formules en LaTeX ($…$, $$…$$, \(…\), \[…\]) rendues par KaTeX #}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.querySelector('main'), {throwOnError: false, delimiters: [
+          {left: '$$', right: '$$', display: true}, {left: '\\[', right: '\\]', display: true},
+          {left: '$', right: '$', display: false}, {left: '\\(', right: '\\)', display: false}]})"></script>

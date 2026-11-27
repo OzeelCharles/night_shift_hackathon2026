@@ -1,5 +1,5 @@
 """Routes de l'atelier de révision."""
-from flask import Blueprint, g, redirect, render_template, request, url_for
+from flask import Blueprint, Response, flash, g, redirect, render_template, request, url_for
 
 from backend.controllers import flash_report
 from backend.core.security import login_required
@@ -14,6 +14,21 @@ def _hub(subject_id, anchor=""):
     return redirect(url_for("revision.hub", subject_id=subject_id) + anchor)
 
 
+def _no_docs(s):
+    """Sans support, rien à réviser : on renvoie vers la page de la matière (espace Encadrement) pour en déposer."""
+    if service.has_docs(s["id"]):
+        return None
+    flash(f"Dépose d'abord tes supports de cours pour {s['name']} : fiches, QCM et exercices en sont tirés.", "info")
+    return redirect(url_for("subjects.detail", subject_id=s["id"]) + "#supports")
+
+
+def _not_ready(s):
+    """Supports manquants, ou niveau de difficulté pas encore choisi (il est demandé avant toute révision)."""
+    if (back := _no_docs(s)) is not None:
+        return back
+    return None if "" in service.levels(s["id"]) else _hub(s["id"], "#niveau")
+
+
 @bp.route("/reviser")
 @login_required
 def index():
@@ -23,6 +38,8 @@ def index():
 @bp.route("/reviser/<int:subject_id>")
 @login_required
 def hub(subject_id):
+    if (back := _no_docs(service.subject(g.user["id"], subject_id))) is not None:
+        return back
     context = service.hub(g.user, subject_id)
     only = request.args.get("exos", "toutes")  # tous les exercices par défaut
     return render_template("revision/hub.html", **context, only=only,
@@ -42,8 +59,8 @@ def set_level(subject_id):
 @login_required
 def sheets(subject_id):
     s = service.subject(g.user["id"], subject_id)
-    if "" not in service.levels(subject_id):
-        return _hub(subject_id, "#niveau")  # le niveau est demandé avant toute révision
+    if (back := _not_ready(s)) is not None:
+        return back
     chapter = request.args.get("chapitre", "")
     built, lv, origin = service.sheets(s, chapter)
     return render_template("revision/sheets.html", s=s, sheets=built, chapter=chapter, origin=origin,
@@ -54,8 +71,8 @@ def sheets(subject_id):
 @login_required
 def new_quiz(subject_id):
     s = service.subject(g.user["id"], subject_id)
-    if "" not in service.levels(subject_id):
-        return _hub(subject_id, "#niveau")
+    if (back := _not_ready(s)) is not None:
+        return back
     quiz_id, report = service.create_quiz(g.user, s, request.form.get("chapitre", ""),
                                           request.form.get("difficulte", ""))
     flash_report(report)
@@ -76,6 +93,8 @@ def quiz(quiz_id):
 @login_required
 def collect(subject_id):
     s = service.subject(g.user["id"], subject_id)
+    if (back := _no_docs(s)) is not None:
+        return back
     flash_report(service.collect_exercises(g.user, s, request.form.get("chapitre", ""),
                                            request.form.get("difficulte", "")))
     return _hub(subject_id, "#exercices")
@@ -85,3 +104,22 @@ def collect(subject_id):
 @login_required
 def delete_exercise(exercise_id):
     return _hub(service.delete_exercise(g.user, exercise_id), "#exercices")
+
+
+@bp.route("/reviser/<int:subject_id>/notebooks", methods=("POST",))
+@login_required
+def new_notebook(subject_id):
+    s = service.subject(g.user["id"], subject_id)
+    if (back := _no_docs(s)) is not None:
+        return back
+    flash_report(service.find_notebooks(s, request.form.get("chapitre", ""), request.form.get("difficulte", "")))
+    return _hub(subject_id, "#notebooks")
+
+
+@bp.route("/reviser/notebooks/<int:notebook_id>.ipynb")
+@login_required
+def download_notebook(notebook_id):
+    nb = service.notebook(g.user, notebook_id)
+    name = "".join(c if c.isascii() and c.isalnum() else "_" for c in nb["title"])[:60].strip("_") or "notebook"
+    return Response(nb["content"], mimetype="application/x-ipynb+json",
+                    headers={"Content-Disposition": f'attachment; filename="{name}.ipynb"'})

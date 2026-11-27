@@ -1,4 +1,4 @@
-"""Ressources externes de l'atelier : texte Wikipédia (matière sans support), PDF d'exercices en ligne.
+"""Ressources externes de l'atelier : PDF d'exercices corrigés et notebooks Jupyter trouvés en ligne.
 
 Réutilise la recherche web du cœur (backend.dao.web). Les erreurs réseau remontent en
 requests.RequestException ; l'appelant décide quoi afficher.
@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import io
 import ipaddress
-import re
 import socket
 from urllib.parse import urlparse
 
@@ -21,25 +20,27 @@ QUERY_WORDS = {"facile": "exercices corrigés faciles", "moyen": "exercices corr
                "difficile": "exercices corrigés difficiles approfondissement"}
 
 
-def wikipedia_text(subject: str, lang: str = "fr") -> str:
-    """Texte brut de l'article le plus pertinent ; les titres de section deviennent des lignes seules."""
-    hits = web.wikipedia_search(subject, lang, limit=1)
-    if not hits:
-        return ""
-    title = hits[0]["title"].split(" : ", 1)[1]
-    r = requests.get(f"https://{lang}.wikipedia.org/w/api.php",
-                     params={"action": "query", "prop": "extracts", "explaintext": 1, "titles": title,
-                             "format": "json", "redirects": 1},
-                     headers=web.UA, timeout=web.TIMEOUT)
-    r.raise_for_status()
-    pages = r.json().get("query", {}).get("pages", {})
-    text = next(iter(pages.values()), {}).get("extract", "") if pages else ""
-    return re.sub(r"^=+\s*(.*?)\s*=+$", r"\1", text, flags=re.M)
-
-
 def search_exercise_pdfs(subject: str, chapter: str, difficulty: str, level_words: str) -> list[dict]:
     query = " ".join(p for p in (subject, chapter, QUERY_WORDS[difficulty], level_words, "filetype:pdf") if p)
     return [r for r in web.duckduckgo_search(query, limit=8) if ".pdf" in r["url"].lower()]
+
+
+NOTEBOOK_SITES = ("kaggle.com/code/", "colab.research.google.com/")
+
+
+def search_notebooks(subject: str, chapter: str) -> list[dict]:
+    """Notebooks Jupyter existants (.ipynb sur GitHub et ailleurs, Kaggle, Colab) : {title, url, source}."""
+    query = " ".join(p for p in (subject, chapter, "jupyter notebook exercises ipynb") if p)
+    return [r for r in web.duckduckgo_search(query, limit=10)
+            if ".ipynb" in r["url"].lower() or any(site in r["url"] for site in NOTEBOOK_SITES)]
+
+
+def colab_url(url: str) -> str:
+    """Lien « Ouvrir dans Colab » pour un notebook publié sur GitHub (vide sinon)."""
+    parsed = urlparse(url)
+    if parsed.netloc in ("github.com", "www.github.com") and "/blob/" in parsed.path and parsed.path.endswith(".ipynb"):
+        return "https://colab.research.google.com/github" + parsed.path
+    return ""
 
 
 def _public_host(url: str) -> bool:

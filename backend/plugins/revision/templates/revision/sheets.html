@@ -6,7 +6,7 @@
 <div class="page-head">
   <div>
     <h1>Fiches de révision : {{ s.name }}</h1>
-    <p class="small muted">{% if chapter %}Chapitre « {{ chapter }} ». {% endif %}Générées à partir de {{ "Wikipédia (aucun support déposé)" if origin == 'wiki' else "tes supports de cours" }}. Vérifie-les avec ton cours : elles sont extraites automatiquement.</p>
+    <p class="small muted">{% if chapter %}Chapitre « {{ chapter }} ». {% endif %}Générées à partir de tes supports de cours. Vérifie-les avec ton cours : elles sont extraites automatiquement.</p>
   </div>
   <div class="actions rv-noprint">
     <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('.rv-card-flip').forEach(d => d.open = true); window.print()">Imprimer</button>
