@@ -375,3 +375,60 @@ form[data-kind="autre"] .kind-school { display: none; }
 .subbar .admin-link { margin-left: auto; }
 .topbar nav a[aria-current="page"] { background: var(--ink-soft); box-shadow: none; border-radius: 6px; }
 @media (max-width: 720px) { .subbar-inner { padding: 0 12px; } }
+
+/* ---------- Dossier scolaire ---------- */
+:root { --up: #2c7a3f; --down: #c0353e; }
+@media (prefers-color-scheme: dark) { :root { --up: #7fd48f; --down: #ff7a80; } }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.dossier-stats { grid-template-columns: repeat(3, 1fr); }
+.stat { display: flex; flex-direction: column; gap: 4px; }
+.stat .stat-label { font-size: .9rem; font-weight: 700; color: var(--muted); }
+.stat .stat-value { font-size: 2rem; font-weight: 700; color: var(--graphite); line-height: 1.1; }
+.stat small, .course-average small { font-size: .9rem; font-weight: 400; color: var(--muted); }
+.delta { font-weight: 700; white-space: nowrap; }
+.delta-up { color: var(--up); }
+.delta-down { color: var(--down); }
+.delta-flat { color: var(--muted); }
+
+.chart { position: relative; }
+.chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart svg:focus-visible { outline: 3px solid var(--ink); outline-offset: 4px; }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart .line { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.chart .area { fill: var(--ink); opacity: .1; }
+.chart .dot, .sparkline circle { fill: var(--ink); stroke: var(--surface); stroke-width: 2; }
+.chart .end-label { fill: var(--graphite); font-size: 12px; font-weight: 700; }
+.chart .crosshair { stroke: var(--muted); stroke-width: 1; }
+.chart .hit { fill: transparent; cursor: crosshair; }
+.chart-tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--line);
+  border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; font-size: .85rem; white-space: nowrap; }
+.chart-tip strong { font-size: 1rem; }
+.table-view { margin-top: 10px; }
+
+.course-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+.course { margin: 0; padding: 14px 18px; }
+.course-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.course-name { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.course-figures { display: flex; align-items: center; gap: 14px; }
+.course-average { font-size: 1.3rem; font-weight: 700; }
+.sparkline { width: 120px; height: 32px; overflow: visible; }
+.sparkline polyline { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.add-grade, .grades { margin-top: 8px; }
+.add-grade summary, .grades summary { font-size: .92rem; }
+.grade-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 8px; }
+.grade-form label { margin: 0; font-size: .85rem; }
+.grade-form input { width: 90px; }
+.grade-form .grow { flex: 1; min-width: 160px; }
+.grade-form .grow input { width: 100%; }
+.grade-form input[type=date] { width: 150px; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .dossier-stats { grid-template-columns: 1fr; } }
+/* corrections après rendu : spécificité des cartes de stats, éléments masqués du SVG */
+.dossier-stats .stat span { display: inline; font-size: inherit; font-weight: inherit; color: inherit; }
+.dossier-stats .stat .stat-label { display: block; font-size: .9rem; font-weight: 700; color: var(--muted); }
+.dossier-stats .stat .stat-value { display: block; font-size: 2rem; font-weight: 700; color: var(--graphite); }
+.dossier-stats .stat .delta-up { color: var(--up); font-weight: 700; }
+.dossier-stats .stat .delta-down { color: var(--down); font-weight: 700; }
+.dossier-stats .stat .delta-flat { color: var(--muted); font-weight: 700; }
+.chart svg [hidden], .chart-tip[hidden] { display: none; }

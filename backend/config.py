@@ -13,6 +13,7 @@ FEATURES = [
     "backend.controllers.resources",
     "backend.controllers.api",
     "backend.controllers.admin",
+    "backend.controllers.dossier",
 ]
 
 

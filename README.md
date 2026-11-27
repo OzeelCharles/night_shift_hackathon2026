@@ -67,6 +67,21 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 - **Ressources d'examen** : à moins de 21 jours de l'examen, annales et sujets corrigés (de l'établissement d'abord)
   et vidéos de révision sont ajoutés automatiquement.
 
+## Dossier scolaire
+
+Espace à part dans la barre du haut (à côté d'Encadrement). Il liste toutes les matières de l'utilisateur, notées
+ou non : celles qu'il a créées et les cours de son agenda, au départ « Sans note ». Pour chaque note : valeur,
+barème, coefficient, intitulé et date. Le dossier affiche la moyenne de chaque matière (sur 20, pondérée),
+l'effet de la dernière note (en progrès / en baisse), une mini-courbe par matière et la courbe de la moyenne
+générale (avec infobulle et tableau des valeurs).
+
+- **Confidentialité** : les notes ne sont lues et modifiées que par leur propriétaire (toutes les requêtes filtrent
+  sur l'utilisateur connecté) ; l'administration n'y a pas accès ; supprimer un compte supprime ses notes.
+- **Historique** : une note saisie pour un cours de l'agenda est rattachée à la matière quand celle-ci est créée ;
+  supprimer une matière garde ses notes (« ancienne matière »).
+- Code : `backend/business/grades.py` (calculs), `backend/services/dossier_service.py`, `backend/dao/grades.py`,
+  `backend/controllers/dossier.py`, `frontend/templates/dossier/index.html`.
+
 ## Établissements de France
 
 L'autocomplétion de l'école ou de l'université (inscription, profil, admin) cherche parmi environ 18 000 collèges,
