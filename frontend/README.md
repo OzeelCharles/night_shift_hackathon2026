@@ -21,6 +21,8 @@ frontend/
     auth/                inscription, connexion, profil
     admin/               espace administrateur
     dossier/             espace « Dossier scolaire » : notes privées, moyennes, courbes de progression
+    assistant/bubble.html  bulle de l'assistant (chatbot), ajoutée en bas de toutes les pages d'un utilisateur
+                         connecté (champ « widgets » des fonctionnalités, inclus par base.html)
     error.html           pages d'erreur
   static/      fichiers servis tels quels sous /static/ (style.css…)
 ```

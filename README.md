@@ -29,6 +29,19 @@ On peut les fixer à l'avance :
 $env:ADMIN_EMAIL = "admin@ecole.fr"; $env:ADMIN_PASSWORD = "un-mot-de-passe-solide"; python run.py
 ```
 
+## Clés d'API (modèles de langage)
+
+Toutes les clés se mettent dans le fichier **`.env`**, à la racine du projet (à côté de `run.py`). Il est ignoré par
+git. S'il n'existe pas, copier `.env.example` en `.env`. Coller chaque clé après le `=`, puis relancer `python run.py`.
+
+| Variable | Fournisseur | Modèles | Utilisé par |
+|---|---|---|---|
+| `GROQ_API_KEY` | Groq, gratuit (console.groq.com, clé `gsk_…`) | `openai/gpt-oss-120b`, `openai/gpt-oss-20b`, `qwen/qwen3.8-27b` | assistant, atelier « Réviser », lecture de photos |
+| `ANTHROPIC_API_KEY` | Claude, payant (console.anthropic.com, clé `sk-ant-…`) | `claude-opus-5-5`, `claude-haiku-5-5` | assistant (prioritaire sur Groq) ; atelier « Réviser » (seulement si `GROQ_API_KEY` est vide) |
+
+Une variable définie dans le terminal reste prioritaire sur le `.env`. Les anciens fichiers `instance/groq_api_key`
+et `instance/anthropic_api_key` sont encore lus s'ils existent.
+
 ## Tests
 
 ```powershell
@@ -96,15 +109,10 @@ Sans support déposé, l'atelier renvoie vers la page de la matière (espace Enc
 eux-mêmes : le texte extrait des PDF abîme les formules (σ devient ε, Σ devient !). Sans clé, ou si Claude ne répond
 pas, les QCM sont fabriqués par des règles de traitement du texte (`generator.py`) et rien n'est rédigé par Claude.
 
-La clé d'API n'est **jamais** dans le code ni dans git. Au choix :
+La clé d'API n'est **jamais** dans le code ni dans git : elle se met dans le fichier `.env` (`ANTHROPIC_API_KEY=`),
+voir « Clés d'API » plus bas.
 
-- variable d'environnement, propre à ta session Windows (`setx` l'enregistre pour les prochains terminaux) :
-  `setx ANTHROPIC_API_KEY "sk-ant-..."` ;
-- ou fichier `instance/anthropic_api_key` contenant seulement la clé : le dossier `instance/` est ignoré par git
-  (comme la clé secrète du site), et `.gitignore` exclut aussi tout fichier `anthropic_api_key` et `.env`.
-
-**Alternative Groq** (offre gratuite) : une clé `gsk_…` dans `GROQ_API_KEY`, dans `instance/groq_api_key`, ou même
-rangée dans `instance/anthropic_api_key`, est reconnue et prioritaire. QCM, exercices et notebooks passent alors par
+**Alternative Groq** (offre gratuite) : si `GROQ_API_KEY` est remplie, elle est prioritaire. QCM, exercices et notebooks passent alors par
 Groq (`openai/gpt-oss-120b`, modifiable par `REVISION_GROQ_MODEL`). Groq ne lit pas les PDF : il reçoit un extrait du
 texte des supports, limité à ~9 000 caractères pour tenir dans le quota gratuit (8 000 jetons par minute) ; compter
 une minute entre deux générations.
@@ -134,28 +142,65 @@ lecture de la clé, connexion, quotas et erreurs au même endroit.
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
 `FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.
 
-## Campus : affluence de la BU et des restos U
+## Assistant (chatbot)
 
-Espace **Campus** de la barre du haut, deux onglets :
+Bulle flottante en bas à droite de toutes les pages (compte connecté), agrandissable. Fournisseur choisi
+automatiquement (`ASSISTANT_PROVIDER`, « auto ») :
 
-- **Bibliothèque** : l'affluence de la BU de l'établissement indiqué dans le profil.
-- **Restos U** : les restaurants et cafétérias Crous autour de l'école (ville déduite de l'établissement, modifiable),
-  avec leur état du jour, leur affluence et le **menu du jour**.
-- Dans **Encadrement › Mon agenda**, un panneau « Restos U aujourd'hui » (fourni par Campus) montre les restos
-  ouverts près de l'école et le menu du plus proche ; il se charge après la page et disparaît avec Campus.
+- **Claude (Anthropic)** dès que `ANTHROPIC_API_KEY` est remplie : `claude-opus-5-5` (effort `low` pour une
+  conversation rapide, consignes mises en cache), résumés par `claude-haiku-5-5`, photos lues directement,
+  réponses affichées **au fil de l'écriture** (streaming, route `/assistant/messages/flux`) avec l'étape en cours
+  (« Je cherche dans tes supports de cours… ») ; refus d'un filtre de sécurité relancé sur le modèle de secours
+  conseillé (`fallbacks: "default"`) ;
+- sinon **Groq, offre gratuite** : `openai/gpt-oss-120b` (résumés : `gpt-oss-20b`, photos : `qwen/qwen3.8-27b`),
+  réponse affichée d'un bloc.
 
-**D'où viennent les chiffres.** Il n'existe aucune source publique d'affluence en temps réel : l'API d'Affluences est
-réservée aux établissements partenaires et les Crous n'en publient pas. Rivezli ne scrape donc rien et n'invente rien :
-- l'indicateur **« en direct »** vient des signalements des étudiants (Vide, Calme, Animé, Plein), valables 45 min,
-  pondérés par leur fraîcheur, avec une médiane pour qu'un signalement fantaisiste ne fasse pas basculer l'indicateur ;
-  un signalement par lieu et par utilisateur toutes les 10 min ; une BU = un établissement ;
-- **sans signalement récent**, la page affiche la fréquentation **habituelle** à cette heure, étiquetée « estimation »
-  (profils types dans `backend/business/campus.py`), et propose les créneaux les plus calmes.
+Une réponse coupée par la limite de longueur est signalée. Clés : fichier `.env` (voir « Clés d'API » ci-dessous) ;
+sans clé, la bulle explique comment la configurer.
 
-**Restaurants et menus** : API [CROUStillant](https://www.data.gouv.fr/dataservices/api-croustillant) (communautaire,
-sans clé, 200 requêtes/min, usage non commercial), mise en cache 6 h (restaurants) et 30 min (menus) ; en cas de panne,
-la dernière donnée connue est conservée. Ville géolocalisée par la Géoplateforme de l'IGN. Tout est coupé par
-`ENABLE_WEB = False`. Si la BU de l'école figure sur Affluences, la page y renvoie pour le comptage officiel.
+- **Outils** (lecture seule) : `programme_du_jour`, `chapitres`, `notes`, `graphique_notes`, et `graphique_qcm`
+  fourni par l'atelier de révision. Le modèle les appelle pour répondre avec les vraies données de l'étudiant ;
+  les graphiques s'affichent sous la réponse.
+- **Historique** : chaque conversation est enregistrée (privée, supprimée avec le compte). À chaque question, on
+  envoie les 8 derniers messages tels quels et un résumé des plus anciens, ce qui garde la conversation fluide sans
+  dépasser le quota gratuit (environ 30 requêtes et 8 000 jetons par minute). Bouton « + » : nouvelle conversation.
+- **Photo ou PDF joint** (trombone, Ctrl+V d'une image, ou glisser-déposer) : une photo est d'abord recopiée par
+  `qwen/qwen3.8-27b` (texte et formules en LaTeX), un PDF est lu par l'extracteur de texte (un PDF scanné est refusé
+  avec le conseil d'envoyer une photo). Ce contenu (6 000 caractères au plus) accompagne la question ; un extrait
+  reste dans l'historique pour les questions suivantes. Les fichiers eux-mêmes ne sont pas conservés.
+- **Affichage des réponses** : Markdown complet (titres, listes imbriquées, gras, italique, tableaux, citations,
+  code, liens) rendu par marked, nettoyé par DOMPurify, et formules LaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`) rendues
+  par KaTeX. Les formules sont mises de côté avant le Markdown pour que leurs `_` et `*` restent intacts ; les
+  formules des questions sont rendues aussi. Sans connexion aux bibliothèques, une mise en forme simple prend le relais.
+- Quota atteint ou Groq injoignable : message lisible et bouton « Réessayer » ; rien n'est enregistré.
+- Code : `backend/business/assistant.py` (consignes, fenêtre d'historique, graphiques), `backend/services/assistant_service.py`
+  (boucle d'outils), `backend/services/assistant_tools.py`, `backend/dao/llm.py`, `backend/dao/chat.py`,
+  `backend/controllers/assistant.py`, `frontend/templates/assistant/bubble.html`.
+- À venir : modification du planning après confirmation (« j'ai raté ma séance »), forums.
+
+### Recherche dans les supports de cours (RAG)
+
+L'outil `chercher_dans_mes_cours` permet à l'assistant de répondre à partir des supports déposés par l'étudiant
+(PDF, diapositives, Word, notes en photo), en citant la source : `[S1]` devient un petit numéro cliquable, et la
+liste « Sources » sous la réponse ouvre le support à la bonne page.
+
+- **Découpage** (`backend/business/chunking.py`) : passages d'environ 200 mots, coupés en fin de phrase, avec
+  30 mots de chevauchement ; un titre de section commence un passage. Diaporamas (peu de mots par page) : une
+  diapositive = un passage, titré par sa première ligne. Nettoyage des PDF LaTeX (accents « R´egression »),
+  des en-têtes et pieds de page répétés, des diapositives de plan en double.
+- **Embeddings** (`backend/dao/embedder.py`) : **EmbeddingGemma-300m**, en local avec fastembed (sans clé, sans
+  quota). Retenu après un comparatif sur des questions reformulées : 6/6 contre 3/6 pour MiniLM, mpnet et potion
+  multilingues. Téléchargé une fois (~1,2 Go) dans `instance/models`, puis chargé en 2 s, même hors ligne.
+- **Recherche hybride** (`backend/business/retrieval.py`) : sens (cosinus) + mots-clés (BM25, index FTS5 de
+  SQLite), fusionnés par RRF ; limitée aux supports de l'étudiant et, si elle est connue, à la matière. Chaque
+  passage trouvé est donné avec ses voisins de la même section (5 200 caractères au plus pour le quota de Groq).
+  Si des passages viennent de plusieurs matières, l'assistant demande laquelle.
+- **Citations vérifiées** : un `[S7]` sans source est retiré de la réponse.
+- **Indexation** en arrière-plan : à chaque dépôt (événement `documents.added`) et au démarrage pour les supports
+  déjà déposés ; une question n'attend jamais (l'assistant signale un support encore en préparation). Supprimer un
+  support supprime ses passages. Environ 100 s pour un diaporama de 300 pages.
+- Code : `backend/services/rag_service.py`, `backend/dao/rag.py` (tables `doc_chunks`, `doc_chunks_fts`, `doc_index`).
+- En test, le modèle est remplacé par les embeddings par hachage du projet (`RAG_EMBEDDINGS=False`).
 
 ## Établissements de France
 
@@ -225,11 +270,9 @@ feature = Feature(
     blueprints=[bp],                                         # ses pages
     nav=[NavItem("stats.page", "Statistiques", order=35)],   # son entrée de menu (admin=True : réservée aux admins)
     subscriptions=[(events.SUBJECT_CREATED, on_subject_created)],  # ses réactions aux événements
-    schema="CREATE TABLE IF NOT EXISTS stats_vues (…);",      # ses tables, créées au démarrage
-    migrations={"stats_vues": {"source": "TEXT NOT NULL DEFAULT ''"}},  # colonnes ajoutées depuis
-    template_globals={"stats_resume": resume},               # fonctions appelées par ses gabarits
-    panels={"subject": ["stats_panel.html"],                 # un panneau en bas de chaque page matière
-            "agenda": ["stats_agenda.html"]},                # et un dans Encadrement › Mon agenda
+    subject_panels=["stats_panel.html"],                     # un panneau en bas de chaque page matière
+    widgets=["stats_widget.html"],                           # un élément sur toutes les pages (ex. bulle de l'assistant)
+    tools=[Tool("stats", "Ce que l'outil donne à l'assistant.", run)],  # un outil de l'assistant (core/tools.py)
 )
 ```
 
