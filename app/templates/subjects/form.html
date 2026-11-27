@@ -1,19 +1,20 @@
 {% extends "base.html" %}
 {% block title %}{{ "Nouvelle matière" if new else "Modifier la matière" }}{% endblock %}
 {% block content %}
-<h1>{{ "Nouvelle matière" if new else "Modifier la matière" }}</h1>
-<form method="post" enctype="multipart/form-data" class="card form-grid"
+<h1>{{ "Nouvelle matière" if new else "Modifier " ~ (s.name or "la matière") }}</h1>
+{% if new %}<p class="muted">Seul le nom est obligatoire. Le reste affine ton programme.</p>{% endif %}
+<form method="post" enctype="multipart/form-data" class="card form-grid" data-busy="{{ 'Analyse et construction du planning…' if new else 'Mise à jour du planning…' }}"
       action="{{ url_for('main.subject_new') if new else url_for('main.subject_edit', subject_id=subject_id) }}">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <label class="full">Nom de la matière
-    <input name="name" required maxlength="100" placeholder="ex. Probabilités, Droit des contrats, Biologie cellulaire" value="{{ s.name or '' }}"></label>
+    <input name="name" required maxlength="100" placeholder="Probabilités, droit des contrats, biologie cellulaire…" value="{{ s.name or '' }}" {% if new %}autofocus{% endif %}></label>
 
   <fieldset class="full">
     <legend>Objectif</legend>
-    <div class="choices">
+    <div class="segmented segmented-full">
       {% for key, label in goals.items() %}
-      <label class="choice"><input type="radio" name="goal" value="{{ key }}" {% if (s.goal or 'exam') == key %}checked{% endif %}
-             onchange="document.body.dataset.goal=this.value"> <span>{{ label }}</span></label>
+      <label><input type="radio" name="goal" value="{{ key }}" {% if (s.goal or 'exam') == key %}checked{% endif %}
+             onchange="document.body.dataset.goal=this.value"> {{ label }}</label>
       {% endfor %}
     </div>
   </fieldset>
@@ -22,26 +23,35 @@
   <label class="goal-ajour">Heures par semaine à y consacrer
     <input type="number" name="weekly_hours" min="0.5" max="40" step="0.5" value="{{ s.weekly_hours or 3 }}"></label>
 
-  <label class="full">Mon aisance dans ce cours
-    <select name="comfort">
+  <fieldset>
+    <legend>Mon aisance dans ce cours</legend>
+    <div class="segmented segmented-full">
       {% for k, label in comfort.items() %}
-      <option value="{{ k }}" {% if (s.comfort or 3)|int == k %}selected{% endif %}>{{ k }} : {{ label }}</option>
+      <label title="{{ label }}"><input type="radio" name="comfort" value="{{ k }}" {% if (s.comfort or 3)|int == k %}checked{% endif %}> {{ k }}</label>
       {% endfor %}
-    </select>
-    <span class="hint">Moins tu es à l'aise, plus le planning prévoit de temps d'étude et d'entraînement.</span></label>
+    </div>
+    <div class="scale small muted"><span>Très difficile</span><span>Très à l'aise</span></div>
+    <span class="hint">Moins tu es à l'aise, plus le programme prévoit d'étude et d'entraînement.</span>
+  </fieldset>
 
   {% if new %}
-  <label class="full">Supports de cours (facultatif)
-    <input type="file" name="documents" multiple accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md">
-    <span class="hint">PDF, PowerPoint, Word, LibreOffice (ODT/ODP), texte. Les chapitres sont détectés automatiquement.</span></label>
+  <details class="full">
+    <summary>Ajouter mes supports de cours (facultatif)</summary>
+    <label>Fichiers
+      <input type="file" name="documents" multiple accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md">
+      <span class="hint">PDF, PowerPoint, Word, LibreOffice ou texte. Les chapitres sont détectés automatiquement.</span></label>
+  </details>
   {% endif %}
 
-  <label class="full">Chapitres (un par ligne, facultatif)
-    <textarea name="topics" rows="8" placeholder="Laisse vide : les chapitres seront extraits de tes documents ou proposés à partir de Wikipédia.">{{ s.topics or '' }}</textarea></label>
+  <details class="full" {% if not new %}open{% endif %}>
+    <summary>{{ "Chapitres" if not new else "Saisir mes chapitres moi-même (facultatif)" }}</summary>
+    <label>Un chapitre par ligne, dans l'ordre du cours
+      <textarea name="topics" rows="8" placeholder="Laisse vide : les chapitres seront extraits de tes documents ou proposés à partir de Wikipédia.">{{ s.topics or '' }}</textarea></label>
+  </details>
 
   <div class="full actions">
-    <button class="btn">{{ "Créer la matière" if new else "Enregistrer" }}</button>
-    <a class="btn btn-ghost" href="{{ url_for('main.dashboard') if new else url_for('main.subject_detail', subject_id=subject_id) }}">Annuler</a>
+    <button class="btn btn-lg">{{ "Créer la matière et mon planning" if new else "Enregistrer et mettre à jour le planning" }}</button>
+    <a class="btn btn-ghost btn-lg" href="{{ url_for('main.dashboard') if new else url_for('main.subject_detail', subject_id=subject_id) }}">Annuler</a>
   </div>
 </form>
 <script>

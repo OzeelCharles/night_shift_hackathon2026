@@ -3,37 +3,57 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Révisio{% endblock %} · Révisio</title>
+  <title>{% block title %}Révisio{% endblock %} | Révisio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+{% set ep = request.endpoint or '' %}
 <header class="topbar">
-  <a class="brand" href="{{ url_for('main.index') }}">Révisio</a>
+  <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark" aria-hidden="true"></span>Révisio</a>
   {% if g.user %}
-  <nav>
-    <a href="{{ url_for('main.dashboard') }}">Tableau de bord</a>
-    <a href="{{ url_for('main.plan') }}">Planning</a>
-    <a href="{{ url_for('main.calendar') }}">Agenda</a>
-    <a href="{{ url_for('main.preferences') }}">Préférences</a>
-    {% if g.user.role == 'admin' %}<a class="admin-link" href="{{ url_for('admin.index') }}">Admin</a>{% endif %}
+  <nav aria-label="Navigation principale">
+    {% for endpoint, label in [('main.dashboard', "Aujourd'hui"), ('main.plan', 'Planning'), ('main.calendar', 'Mon agenda'), ('main.preferences', 'Mes réglages')] %}
+    <a href="{{ url_for(endpoint) }}" {% if ep == endpoint %}aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+    {% if g.user.role == 'admin' %}<a class="admin-link" href="{{ url_for('admin.index') }}" {% if ep.startswith('admin.') %}aria-current="page"{% endif %}>Administration</a>{% endif %}
   </nav>
   <form method="post" action="{{ url_for('auth.logout') }}" class="logout">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <span class="muted">{{ g.user.username }}</span>
-    <button class="btn-link">Déconnexion</button>
+    <button class="btn-link">Se déconnecter</button>
   </form>
   {% else %}
   <nav>
-    <a href="{{ url_for('auth.login') }}">Connexion</a>
+    <a href="{{ url_for('auth.login') }}">Se connecter</a>
     <a class="btn" href="{{ url_for('auth.register') }}">Créer un compte</a>
   </nav>
   {% endif %}
 </header>
 <main class="container">
   {% with messages = get_flashed_messages(with_categories=true) %}
-    {% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
+    {% if messages %}
+    <div class="flashes" role="status">
+      {% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
+    </div>
+    {% endif %}
   {% endwith %}
   {% block content %}{% endblock %}
 </main>
+<script>
+  // Retour immédiat pendant les traitements longs (loi de Doherty) : le bouton annonce ce qui se passe.
+  document.querySelectorAll('form[data-busy]').forEach(form => {
+    form.addEventListener('submit', () => {
+      const btn = form.querySelector('button:not([type=button])');
+      if (!btn) return;
+      btn.dataset.label = btn.textContent;
+      btn.textContent = form.dataset.busy;
+      btn.classList.add('is-busy');
+      setTimeout(() => { btn.disabled = true; }, 0);
+    });
+  });
+</script>
 </body>
 </html>

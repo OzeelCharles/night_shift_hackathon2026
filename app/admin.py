@@ -100,7 +100,7 @@ def user_edit(user_id):
 def user_delete(user_id):
     u = _get_user(user_id)
     if u["id"] == g.user["id"]:
-        flash("Vous ne pouvez pas supprimer votre propre compte.", "error")
+        flash("Tu ne peux pas supprimer ton propre compte.", "error")
         return redirect(url_for("admin.index"))
     if u["role"] == "admin" and _admin_count() <= 1:
         flash("Impossible de supprimer le dernier administrateur.", "error")

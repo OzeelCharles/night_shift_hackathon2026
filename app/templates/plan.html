@@ -1,52 +1,184 @@
 {% extends "base.html" %}
 {% block title %}Planning{% endblock %}
 {% block content %}
-<div class="page-head">
-  <h1>Semaine du {{ monday|jour }}</h1>
+{% set rest_names = [] %}{% for d in prefs.rest_days|sort %}{% set _ = rest_names.append(jours[d]) %}{% endfor %}
+<div class="plan-head">
+  <div>
+    <h1>Semaine du {{ monday|jour }}</h1>
+    <p class="muted">{% if week_minutes %}{{ week_minutes|duree }} de révision prévues cette semaine.{% else %}Aucune révision prévue cette semaine.{% endif %}</p>
+  </div>
   <div class="actions">
-    <a class="btn btn-ghost" href="{{ url_for('main.plan', semaine=prev.isoformat()) }}">← Précédente</a>
-    <a class="btn btn-ghost" href="{{ url_for('main.plan') }}">Cette semaine</a>
-    <a class="btn btn-ghost" href="{{ url_for('main.plan', semaine=next.isoformat()) }}">Suivante →</a>
-    {% if has_subjects %}
-    <form method="post" action="{{ url_for('main.plan_generate') }}">
+    <div class="segmented" role="group" aria-label="Changer de semaine">
+      <a href="{{ url_for('main.plan', semaine=prev.isoformat(), matiere=sel) }}" aria-label="Semaine précédente">‹</a>
+      <a href="{{ url_for('main.plan', matiere=sel) }}">Aujourd'hui</a>
+      <a href="{{ url_for('main.plan', semaine=next.isoformat(), matiere=sel) }}" aria-label="Semaine suivante">›</a>
+    </div>
+    {% if subjects %}
+    <form method="post" action="{{ url_for('main.plan_generate') }}" data-busy="Calcul en cours…">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <button class="btn">Régénérer</button>
+      <button class="btn">Tout recalculer</button>
     </form>
-    <a class="btn btn-ghost" href="{{ url_for('main.plan_export') }}">Exporter (.ics)</a>
+    <a class="btn btn-ghost" href="{{ url_for('main.plan_export') }}">Exporter vers mon agenda</a>
     {% endif %}
   </div>
 </div>
-{% if not has_subjects %}
-<div class="card empty"><p>Ajoute une matière pour générer ton planning. <a href="{{ url_for('main.subject_new') }}">Ajouter une matière →</a></p></div>
+
+<div class="rules-strip">
+  <span>Tu travailles de <strong>{{ prefs.day_start.strftime('%H:%M') }}</strong> à <strong>{{ prefs.day_end.strftime('%H:%M') }}</strong></span>
+  <span>{{ prefs.daily_max_minutes|duree }} max par jour</span>
+  <span>Séances de {{ prefs.session_minutes }} min, méthode {{ methods[prefs.method].label|lower }}</span>
+  {% if rest_names %}<span>Repos : {{ rest_names|join(', ') }}</span>{% endif %}
+  <a href="{{ url_for('main.preferences') }}">Modifier mes réglages</a>
+</div>
+
+{% if subjects %}
+<nav class="legend" aria-label="Matières">
+  <span class="muted">Clique sur une matière pour voir ou construire son programme :</span>
+  {% for s in subjects %}
+  <a class="chip hl-{{ s.id % 6 }} {% if sel == s.id %}is-active{% endif %}"
+     href="{{ url_for('main.plan', semaine=monday.isoformat(), matiere=None if sel == s.id else s.id) }}"
+     {% if sel == s.id %}aria-current="true"{% endif %}>{{ s.name }}</a>
+  {% endfor %}
+  <a class="chip chip-add" href="{{ url_for('main.subject_new') }}">+ Ajouter une matière</a>
+</nav>
+{% else %}
+<div class="empty-state">
+  <h2>Ton planning est vide</h2>
+  <p>Ajoute une première matière : son nom suffit. Le planning se construit tout seul autour de tes horaires.</p>
+  <a class="btn btn-lg" href="{{ url_for('main.subject_new') }}">Ajouter une matière</a>
+</div>
 {% endif %}
-<p class="muted small">Coche une séance quand elle est faite. Après un imprévu, clique sur « Régénérer » : les séances déjà faites sont conservées et le reste est replanifié.</p>
-<div class="week">
-  {% for d, items in days %}
-  <div class="day-col {% if d == today %}is-today{% endif %}">
-    <div class="day-head">{{ d|jour }}</div>
-    {% for type, it in items %}
-      {% if type == 'session' %}
-      <div class="slot {% if it.done %}is-done{% elif it.end < now %}is-missed{% endif %}" style="--hue: {{ (it.subject_id * 67) % 360 }}">
-        <form method="post" action="{{ url_for('main.session_toggle', session_id=it.id) }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <input type="hidden" name="next" value="{{ request.full_path }}">
-          <button class="check" title="Marquer comme fait">{% if it.done %}✓{% endif %}</button>
-        </form>
-        <div class="when">{{ it.start|hm }}–{{ it.end|hm }} · {{ kinds[it.kind] }}</div>
-        <a href="{{ url_for('main.subject_detail', subject_id=it.subject_id) }}"><strong>{{ it.subject_name }}</strong></a>
-        <div>{{ it.topic }}</div>
-        <div class="muted small">{{ it.activity }}</div>
-      </div>
+
+<div class="plan-layout {% if panel %}has-panel{% endif %}">
+  <div class="cal" style="--hours: {{ hours|length }}">
+    <div class="cal-corner"></div>
+    {% for d in days %}
+    <div class="cal-dayhead {% if d.is_today %}is-today{% endif %} {% if d.is_rest %}is-rest{% endif %}">
+      <span class="dname">{{ jours[d.date.weekday()] }}</span>
+      <span class="dnum">{{ d.date.day }}</span>
+      {% if d.minutes %}<span class="dmin">{{ d.minutes|duree }}</span>{% endif %}
+    </div>
+    {% endfor %}
+
+    <div class="cal-hours">
+      {% for h in hours %}<span>{{ '%02d'|format(h) }}:00</span>{% endfor %}
+    </div>
+    {% for d in days %}
+    <div class="cal-col {% if d.is_today %}is-today{% endif %} {% if d.is_rest %}is-rest{% endif %} {% if d.is_past %}is-past{% endif %}">
+      {% if d.is_rest %}
+        <div class="rest-label">Repos</div>
       {% else %}
-      <div class="slot busy">
-        <div class="when">{{ it.start|hm }}–{{ it.end|hm }}</div>
-        <div>{{ it.title }}</div>
-      </div>
+        {% if d.work_top > 0 %}<div class="off" style="top:0;height:{{ d.work_top }}%" title="Hors de tes heures de travail"></div>{% endif %}
+        {% if d.work_bottom < 100 %}<div class="off" style="top:{{ d.work_bottom }}%;bottom:0" title="Hors de tes heures de travail"></div>{% endif %}
       {% endif %}
-    {% else %}
-      <div class="muted small pad">Libre</div>
+      {% for b in d.blocks %}
+        {% set r = b.row %}
+        {% if b.type == 'event' %}
+        <div class="blk busy {% if b.short %}is-short{% endif %}" style="top:{{ b.top }}%;height:{{ b.height }}%" title="{{ r.title }} ({{ r.start|hm }}–{{ r.end|hm }})">
+          <span class="t">{{ r.start|hm }}</span> {{ r.title }}
+        </div>
+        {% else %}
+        <div class="blk sess hl-{{ r.subject_id % 6 }} {% if r.done %}is-done{% elif r.end < now %}is-missed{% endif %} {% if sel and sel != r.subject_id %}is-dim{% endif %} {% if b.short %}is-short{% endif %}"
+             style="top:{{ b.top }}%;height:{{ b.height }}%">
+          <a href="{{ url_for('main.plan', semaine=monday.isoformat(), matiere=r.subject_id) }}"
+             title="{{ r.subject_name }} : {{ r.topic }} ({{ kinds[r.kind] }}, {{ r.start|hm }}–{{ r.end|hm }})">
+            <span class="t">{{ r.start|hm }}–{{ r.end|hm }}</span>
+            <strong>{{ r.subject_name }}</strong>
+            {% if not b.short %}<span class="topic">{{ kinds[r.kind] }} : {{ r.topic }}</span>{% endif %}
+          </a>
+          <form method="post" action="{{ url_for('main.session_toggle', session_id=r.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <input type="hidden" name="next" value="{{ request.full_path }}">
+            <button class="tick" aria-label="{{ 'Marquer comme à faire' if r.done else 'Marquer comme faite' }}">{% if r.done %}✓{% endif %}</button>
+          </form>
+        </div>
+        {% endif %}
+      {% endfor %}
+      {% if d.is_today and now_top is not none %}<div class="now-line" style="top:{{ now_top }}%"><span>{{ now[11:16] }}</span></div>{% endif %}
+    </div>
     {% endfor %}
   </div>
-  {% endfor %}
+
+  {% if panel %}
+  {% set s = panel.s %}{% set st = panel.stats %}
+  <aside class="panel hl-{{ s.id % 6 }}" aria-label="Programme de {{ s.name }}">
+    <div class="panel-head">
+      <h2>{{ s.name }}</h2>
+      <a class="close" href="{{ url_for('main.plan', semaine=monday.isoformat()) }}" aria-label="Fermer le panneau">×</a>
+    </div>
+    {% if panel.days_left is not none %}
+      <p class="countdown {% if panel.days_left <= 7 %}is-hot{% endif %}">
+        {% if panel.days_left > 1 %}Examen dans <strong>{{ panel.days_left }} jours</strong>{% elif panel.days_left == 1 %}Examen <strong>demain</strong>{% elif panel.days_left == 0 %}Examen <strong>aujourd'hui</strong>{% else %}Examen passé{% endif %}
+        <span class="muted">({{ s.exam_date|datefr }})</span></p>
+    {% else %}
+      <p class="countdown">Objectif : rester à jour, <strong>{{ s.weekly_hours|nombre }} h par semaine</strong></p>
+    {% endif %}
+
+    {% if st.n %}
+    {% set pct = ((st.done_min / st.minutes) * 100)|round|int if st.minutes else 0 %}
+    <div class="goal">
+      <div class="progress"><span style="width: {{ pct }}%"></span></div>
+      <p class="small">{{ st.done }} séance(s) faite(s) sur {{ st.n }}. {% if pct >= 100 %}Programme terminé, bravo !{% elif pct >= 50 %}Plus de la moitié du chemin.{% else %}Encore {{ (st.minutes - st.done_min)|int|duree }} de travail.{% endif %}</p>
+    </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('main.subject_program', subject_id=s.id) }}" class="program-form" data-busy="Construction du programme…">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <h3>{{ "Ajuster le programme" if st.n else "Construire son programme" }}</h3>
+      <fieldset>
+        <legend>Objectif</legend>
+        <div class="segmented segmented-full">
+          {% for key, label in goals.items() %}
+          <label><input type="radio" name="goal" value="{{ key }}" {% if s.goal == key %}checked{% endif %} onchange="this.form.dataset.goal=this.value"> {{ "Examen" if key == 'exam' else "Être à jour" }}</label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      <label class="goal-exam">Date de l'examen <input type="date" name="exam_date" value="{{ s.exam_date or '' }}" min="{{ today.isoformat() }}"></label>
+      <label class="goal-ajour">Heures par semaine <input type="number" name="weekly_hours" min="0.5" max="40" step="0.5" value="{{ s.weekly_hours|nombre }}"></label>
+      <fieldset>
+        <legend>Mon aisance</legend>
+        <div class="segmented segmented-full comfort">
+          {% for k, label in comfort.items() %}
+          <label title="{{ label }}"><input type="radio" name="comfort" value="{{ k }}" {% if s.comfort == k %}checked{% endif %}> {{ k }}</label>
+          {% endfor %}
+        </div>
+        <div class="scale small muted"><span>Difficile</span><span>Très à l'aise</span></div>
+      </fieldset>
+      <button class="btn btn-block">{{ "Recalculer le programme de " ~ s.name if st.n else "Construire le programme de " ~ s.name }}</button>
+      <p class="small muted">Seule cette matière est replanifiée : les autres ne bougent pas.</p>
+    </form>
+
+    {% if panel.upcoming %}
+    <h3>Prochaines séances</h3>
+    <ul class="mini-sessions">
+      {% for se in panel.upcoming %}
+      <li class="{% if se.done %}is-done{% endif %}">
+        <form method="post" action="{{ url_for('main.session_toggle', session_id=se.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="tick" aria-label="{{ 'Marquer comme à faire' if se.done else 'Marquer comme faite' }}">{% if se.done %}✓{% endif %}</button>
+        </form>
+        <div>
+          <a href="{{ url_for('main.plan', semaine=se.start[:10], matiere=s.id) }}" class="when">{{ se.start|jour }}, {{ se.start|hm }}</a>
+          <div>{{ kinds[se.kind] }} : {{ se.topic }}</div>
+          <div class="small muted">{{ se.activity }}</div>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <details>
+      <summary>{{ panel.topics|length }} chapitres</summary>
+      <ol class="topics-compact">{% for t in panel.topics %}<li>{{ t }}</li>{% endfor %}</ol>
+    </details>
+    <p><a href="{{ url_for('main.subject_detail', subject_id=s.id) }}">Documents, ressources en ligne et chapitres</a></p>
+  </aside>
+  {% endif %}
 </div>
+<script>
+  document.querySelectorAll('.program-form').forEach(f => {
+    f.dataset.goal = (f.querySelector('input[name=goal]:checked') || {}).value || 'exam';
+  });
+</script>
 {% endblock %}

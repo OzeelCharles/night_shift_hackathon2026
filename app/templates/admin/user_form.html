@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ "Nouvel utilisateur" if new else "Modifier l'utilisateur" }}{% endblock %}
 {% block content %}
-<p><a href="{{ url_for('admin.index') }}">← Retour à l'administration</a></p>
+<p><a href="{{ url_for('admin.index') }}">Retour à l'administration</a></p>
 <h1>{{ "Nouvel utilisateur" if new else "Modifier " ~ u.email }}</h1>
 <form method="post" class="card form-grid"
       action="{{ url_for('admin.user_new') if new else url_for('admin.user_edit', user_id=user_id) }}">

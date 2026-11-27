@@ -76,7 +76,7 @@ def login_required(view):
     @functools.wraps(view)
     def wrapped(**kwargs):
         if g.user is None:
-            flash("Connectez-vous pour accéder à ce service.", "info")
+            flash("Connecte-toi pour accéder à ce service.", "info")
             return redirect(url_for("auth.login", next=request.path))
         return view(**kwargs)
     return wrapped
@@ -112,7 +112,7 @@ def register():
             uid = create_user(email, username, password)
             session.clear()
             session["user_id"] = uid
-            flash("Bienvenue ! Commencez par régler vos préférences de travail.", "success")
+            flash("Bienvenue ! Règle tes horaires et ta méthode de travail, puis ajoute une matière.", "success")
             return redirect(url_for("main.preferences"))
     return render_template("auth/register.html")
 
@@ -141,5 +141,5 @@ def login():
 @bp.route("/deconnexion", methods=("POST",))
 def logout():
     session.clear()
-    flash("Vous êtes déconnecté.", "info")
+    flash("Tu es déconnecté.", "info")
     return redirect(url_for("main.index"))

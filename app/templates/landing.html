@@ -2,15 +2,16 @@
 {% block title %}Accueil{% endblock %}
 {% block content %}
 <section class="hero">
-  <h1>Ton planning de révision, construit autour de ta vie.</h1>
-  <p class="lead">Donne le nom d'une matière ou dépose tes supports de cours (PDF, slides, ODT…).
-    Révisio repère les chapitres, respecte ton agenda et ta façon de travailler, puis te propose des ressources en ligne pour aller plus loin.</p>
-  <p><a class="btn btn-lg" href="{{ url_for('auth.register') }}">Créer un compte gratuit</a>
-     <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">J'ai déjà un compte</a></p>
+  <h1>Un planning de révision qui tient dans <mark>ta vraie semaine</mark>.</h1>
+  <p class="lead">Donne le nom d'une matière ou dépose tes cours. Révisio repère les chapitres, évite tes heures de cours et tes jours off, puis répartit les révisions jusqu'à l'examen.</p>
+  <p class="actions">
+    <a class="btn btn-lg" href="{{ url_for('auth.register') }}">Créer mon compte</a>
+    <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Se connecter</a>
+  </p>
 </section>
-<section class="grid3">
-  <div class="card"><h3>1. Tes cours</h3><p>Un simple nom de matière suffit. Avec tes PDF, slides ou documents, les chapitres sont détectés automatiquement.</p></div>
-  <div class="card"><h3>2. Ton rythme</h3><p>Pomodoro, sessions longues, flashcards… Tu choisis ta méthode, tes horaires, tes jours off et ton niveau d'aisance.</p></div>
-  <div class="card"><h3>3. Ton planning</h3><p>Objectif examen ou rester à jour : répétition espacée, examens blancs, export vers Google Agenda ou Outlook.</p></div>
-</section>
+<ol class="steps">
+  <li><h3>Ajoute une matière</h3><p class="muted">Son nom suffit. Avec tes PDF, slides ou documents, les chapitres sont détectés tout seuls.</p></li>
+  <li><h3>Dis comment tu travailles</h3><p class="muted">Pomodoro, sessions longues, flashcards ; tes horaires, tes jours de repos, ton aisance dans le cours.</p></li>
+  <li><h3>Révise, coche, avance</h3><p class="muted">Révisions espacées, examens blancs, ressources en ligne. Un imprévu ? Le planning se réorganise.</p></li>
+</ol>
 {% endblock %}

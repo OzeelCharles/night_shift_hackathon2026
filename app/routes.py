@@ -88,7 +88,7 @@ def _subject_form():
             if date.fromisoformat(exam_date) <= date.today():
                 errors.append("La date d'examen doit être dans le futur.")
         except (TypeError, ValueError):
-            errors.append("Indiquez la date de l'examen.")
+            errors.append("Indique la date de l'examen.")
     else:
         exam_date = None
     try:
@@ -195,7 +195,7 @@ def preferences():
             return redirect(url_for("main.preferences"))
         rest = sorted({int(d) for d in f.getlist("rest_days") if d.isdigit() and 0 <= int(d) <= 6})
         if len(rest) == 7:
-            flash("Gardez au moins un jour de travail.", "error")
+            flash("Garde au moins un jour de travail.", "error")
             return redirect(url_for("main.preferences"))
         get_db().execute(
             "UPDATE preferences SET method=?, session_minutes=?, break_minutes=?, daily_max_minutes=?, "
@@ -205,8 +205,8 @@ def preferences():
              ",".join(map(str, rest)), _int(f.get("buffer_minutes"), 15, 0, 120),
              _int(f.get("horizon_weeks"), 4, 1, 16), uid))
         get_db().commit()
-        flash("Préférences enregistrées. Régénérez le planning pour les appliquer.", "success")
-        return redirect(url_for("main.dashboard"))
+        regenerate_and_report(uid, "Préférences enregistrées.")
+        return redirect(url_for("main.plan"))
     return render_template("preferences.html", p=row, methods=planner.METHODS, jours=JOURS_COURTS,
                            rest=[int(d) for d in row["rest_days"].split(",") if d.isdigit()])
 
@@ -239,15 +239,15 @@ def subject_new():
                 topics = []
         if not topics:
             topics = list(planner.DEFAULT_TOPICS)
-            source = "génériques (ajoutez vos chapitres pour un planning plus précis)"
+            source = "génériques (ajoute tes chapitres pour un planning plus précis)"
         db.execute("UPDATE subjects SET topics = ? WHERE id = ?", (json.dumps(topics, ensure_ascii=False), sid))
         db.commit()
         for m in messages:
             flash(m, "info")
-        flash(f"Matière créée avec {len(topics)} chapitres {source}.", "success")
         for e in refresh_resources(own_subject(sid)):
             flash(e, "info")
-        return redirect(url_for("main.subject_detail", subject_id=sid))
+        regenerate_and_report(g.user["id"], f"Matière créée avec {len(topics)} chapitres {source}.")
+        return redirect(url_for("main.plan", matiere=sid))
     return render_template("subjects/form.html", s={}, goals=GOALS, comfort=COMFORT, new=True)
 
 
@@ -280,7 +280,7 @@ def subject_edit(subject_id):
             (data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"],
              json.dumps(data["topics"] or planner.DEFAULT_TOPICS, ensure_ascii=False), subject_id))
         get_db().commit()
-        flash("Matière mise à jour. Régénérez le planning pour l'appliquer.", "success")
+        regenerate_and_report(g.user["id"], "Matière mise à jour.")
         return redirect(url_for("main.subject_detail", subject_id=subject_id))
     form = dict(s)
     form["topics"] = "\n".join(subject_topics(s))
@@ -297,7 +297,7 @@ def subject_delete(subject_id):
         _remove_file(d["stored_path"])
     db.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
     db.commit()
-    flash("Matière supprimée.", "success")
+    regenerate_and_report(g.user["id"], "Matière supprimée.")
     return redirect(url_for("main.dashboard"))
 
 
@@ -324,7 +324,10 @@ def subject_upload(subject_id):
         get_db().commit()
     for m in messages:
         flash(m, "info")
-    flash(f"{len(added)} nouveau(x) chapitre(s) ajouté(s).", "success")
+    if added:
+        regenerate_and_report(g.user["id"], f"{len(added)} nouveau(x) chapitre(s) ajouté(s).")
+    else:
+        flash("Aucun nouveau chapitre trouvé dans ces documents.", "info")
     return redirect(url_for("main.subject_detail", subject_id=subject_id))
 
 
@@ -367,7 +370,7 @@ def calendar():
 def calendar_import():
     f = request.files.get("ics")
     if not f or not f.filename.lower().endswith(".ics"):
-        flash("Choisissez un fichier .ics (export de Google Agenda, Outlook, ENT...).", "error")
+        flash("Choisis un fichier .ics (export de Google Agenda, Outlook, ENT...).", "error")
         return redirect(url_for("main.calendar"))
     text = f.read().decode("utf-8", errors="ignore")
     start = datetime.combine(date.today(), time())
@@ -381,7 +384,7 @@ def calendar_import():
     msg = f"{len(events)} créneau(x) occupé(s) importé(s)."
     if skipped:
         msg += f" {skipped} événement(s) « journée entière » ignoré(s)."
-    flash(msg, "success")
+    regenerate_and_report(g.user["id"], msg)
     return redirect(url_for("main.calendar"))
 
 
@@ -405,7 +408,7 @@ def event_add():
         "INSERT INTO events (user_id, title, start, end, source) VALUES (?, ?, ?, ?, 'manuel')",
         [(g.user["id"], title, _iso(s + timedelta(weeks=k)), _iso(e + timedelta(weeks=k))) for k in range(weeks)])
     get_db().commit()
-    flash(f"{weeks} créneau(x) ajouté(s).", "success")
+    regenerate_and_report(g.user["id"], f"{weeks} créneau(x) ajouté(s).")
     return redirect(url_for("main.calendar"))
 
 
@@ -414,6 +417,7 @@ def event_add():
 def event_delete(event_id):
     get_db().execute("DELETE FROM events WHERE id = ? AND user_id = ?", (event_id, g.user["id"]))
     get_db().commit()
+    regenerate_and_report(g.user["id"], "Créneau supprimé.")
     return redirect(url_for("main.calendar"))
 
 
@@ -422,7 +426,7 @@ def event_delete(event_id):
 def events_clear():
     get_db().execute("DELETE FROM events WHERE user_id = ?", (g.user["id"],))
     get_db().commit()
-    flash("Agenda vidé.", "success")
+    regenerate_and_report(g.user["id"], "Agenda vidé.")
     return redirect(url_for("main.calendar"))
 
 
@@ -438,37 +442,93 @@ def plan():
     end = monday + timedelta(days=7)
     db = get_db()
     uid = g.user["id"]
+    now = datetime.now()
+    prefs, _ = load_prefs(uid)
     sessions = db.execute(
         "SELECT se.*, su.name AS subject_name FROM sessions se JOIN subjects su ON su.id = se.subject_id "
         "WHERE se.user_id = ? AND se.start >= ? AND se.start < ? ORDER BY se.start",
         (uid, monday.isoformat(), end.isoformat())).fetchall()
     events = db.execute("SELECT * FROM events WHERE user_id = ? AND start < ? AND end > ? ORDER BY start",
                         (uid, end.isoformat(), monday.isoformat())).fetchall()
+
+    # Plage horaire affichée : vos heures de travail, élargies si un événement déborde.
+    lo = prefs.day_start.hour
+    hi = prefs.day_end.hour + (1 if prefs.day_end.minute else 0)
+    for r in list(sessions) + list(events):
+        s, e = datetime.fromisoformat(r["start"]), datetime.fromisoformat(r["end"])
+        if s.date() == e.date():
+            lo = min(lo, s.hour)
+            hi = max(hi, e.hour + (1 if e.minute else 0))
+    lo, hi = max(0, lo), min(24, max(hi, lo + 1))
+    g_min, g_len = lo * 60, (hi - lo) * 60
+
+    def pct(minutes):
+        return round((min(max(minutes, g_min), g_min + g_len) - g_min) / g_len * 100, 3)
+
+    def block(kind, row, d):
+        s, e = datetime.fromisoformat(row["start"]), datetime.fromisoformat(row["end"])
+        day0 = datetime.combine(d, time())
+        sm = max(0, (s - day0).total_seconds() / 60)
+        em = min(1440, (e - day0).total_seconds() / 60)
+        top, bottom = pct(sm), pct(em)
+        if bottom <= top:
+            return None
+        return {"type": kind, "row": row, "top": top, "height": bottom - top, "short": (em - sm) < 60}
+
     days = []
     for i in range(7):
         d = monday + timedelta(days=i)
-        items = [("session", s) for s in sessions if s["start"][:10] == d.isoformat()]
-        items += [("event", e) for e in events if e["start"][:10] <= d.isoformat() <= e["end"][:10]]
-        items.sort(key=lambda x: x[1]["start"][11:] if x[1]["start"][:10] == d.isoformat() else "00:00")
-        days.append((d, items))
-    total = sum(1 for _ in sessions)
-    has_subjects = db.execute("SELECT 1 FROM subjects WHERE user_id = ?", (uid,)).fetchone() is not None
+        ds = d.isoformat()
+        blocks = [block("event", e, d) for e in events if e["start"][:10] <= ds <= e["end"][:10]]
+        blocks += [block("session", s, d) for s in sessions if s["start"][:10] == ds]
+        days.append({
+            "date": d, "is_today": d == date.today(), "is_rest": d.weekday() in prefs.rest_days,
+            "is_past": d < date.today(), "blocks": [b for b in blocks if b],
+            "work_top": pct(prefs.day_start.hour * 60 + prefs.day_start.minute),
+            "work_bottom": pct(prefs.day_end.hour * 60 + prefs.day_end.minute),
+            "minutes": sum(int((datetime.fromisoformat(s["end"]) - datetime.fromisoformat(s["start"]))
+                               .total_seconds() // 60) for s in sessions if s["start"][:10] == ds),
+        })
+    now_top = pct(now.hour * 60 + now.minute) if monday <= now.date() < end and lo * 60 <= now.hour * 60 + now.minute < hi * 60 else None
+
+    subjects = db.execute("SELECT id, name FROM subjects WHERE user_id = ? ORDER BY name", (uid,)).fetchall()
+    panel = None
+    sel = request.args.get("matiere", type=int)
+    if sel:
+        s = own_subject(sel)
+        stats = db.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(done), 0) AS done,"
+            " COALESCE(SUM((julianday(end) - julianday(start)) * 1440), 0) AS minutes,"
+            " COALESCE(SUM(CASE WHEN done THEN (julianday(end) - julianday(start)) * 1440 END), 0) AS done_min "
+            "FROM sessions WHERE subject_id = ?", (sel,)).fetchone()
+        upcoming = db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end >= ? ORDER BY start LIMIT 8",
+                              (sel, _iso(now))).fetchall()
+        panel = {"s": s, "stats": stats, "upcoming": upcoming, "topics": subject_topics(s),
+                 "days_left": (date.fromisoformat(s["exam_date"]) - date.today()).days if s["exam_date"] else None}
+
     return render_template("plan.html", days=days, monday=monday, prev=monday - timedelta(days=7),
-                           next=end, total=total, today=date.today(), has_subjects=has_subjects,
-                           kinds=planner.KIND_LABELS, now=_iso(datetime.now()))
+                           next=end, today=date.today(), subjects=subjects, panel=panel, sel=sel,
+                           hours=list(range(lo, hi)), now_top=now_top, prefs=prefs,
+                           week_minutes=sum(d["minutes"] for d in days), goals=GOALS, comfort=COMFORT,
+                           kinds=planner.KIND_LABELS, methods=planner.METHODS, now=_iso(now),
+                           jours=JOURS_COURTS)
 
 
-@bp.route("/planning/generer", methods=("POST",))
-@login_required
-def plan_generate():
+def regenerate(uid: int, only: set[int] | None = None):
+    """Recalcule le planning à partir de l'état actuel (préférences, agenda, matières).
+
+    `only` : ne replanifie que ces matières ; les séances des autres restent en place
+    et sont traitées comme des créneaux occupés. Retourne None s'il n'y a rien à planifier.
+    """
     db = get_db()
-    uid = g.user["id"]
     now = datetime.now()
     prefs, prow = load_prefs(uid)
     rows = db.execute("SELECT * FROM subjects WHERE user_id = ?", (uid,)).fetchall()
+    comfort = {r["id"]: r["comfort"] for r in rows}
+    if only is not None:
+        rows = [r for r in rows if r["id"] in only]
     if not rows:
-        flash("Ajoutez d'abord une matière.", "error")
-        return redirect(url_for("main.subject_new"))
+        return None
     subjects = [planner.SubjectIn(
         id=r["id"], name=r["name"], goal=r["goal"], comfort=r["comfort"],
         exam_date=date.fromisoformat(r["exam_date"]) if r["exam_date"] else None,
@@ -476,16 +536,17 @@ def plan_generate():
 
     # Chapitres déjà étudiés (séances d'étude cochées) : on ne les replanifie pas.
     done_study = defaultdict(dict)
-    comfort = {r["id"]: r["comfort"] for r in rows}
     for d in db.execute(
             "SELECT subject_id, topic, MAX(substr(start, 1, 10)) AS last,"
             " SUM((julianday(end) - julianday(start)) * 1440) AS minutes "
             "FROM sessions WHERE user_id = ? AND kind = 'study' AND done = 1 GROUP BY subject_id, topic", (uid,)):
-        if d["minutes"] + 1 >= planner.study_minutes(comfort[d["subject_id"]]):
+        if d["minutes"] + 1 >= planner.study_minutes(comfort.get(d["subject_id"], 3)):
             done_study[d["subject_id"]][d["topic"]] = date.fromisoformat(d["last"])
 
     # On garde l'historique et les séances déjà faites ; on replanifie le reste.
-    db.execute("DELETE FROM sessions WHERE user_id = ? AND done = 0 AND start >= ?", (uid, _iso(now)))
+    ids = [r["id"] for r in rows]
+    db.execute(f"DELETE FROM sessions WHERE user_id = ? AND done = 0 AND start >= ? "
+               f"AND subject_id IN ({','.join('?' * len(ids))})", (uid, _iso(now), *ids))
     busy = [planner.Busy(datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"]))
             for e in db.execute("SELECT start, end FROM events WHERE user_id = ? AND end >= ?", (uid, _iso(now)))]
     busy += [planner.Busy(datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
@@ -497,11 +558,61 @@ def plan_generate():
         "INSERT INTO sessions (user_id, subject_id, start, end, topic, kind, activity) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [(uid, s.subject_id, _iso(s.start), _iso(s.end), s.topic, s.kind, s.activity) for s in result.sessions])
     db.commit()
+    return result
+
+
+def regenerate_and_report(uid: int, reason: str, only: set[int] | None = None):
+    """Recalcule et explique le résultat à l'utilisateur (retour immédiat : loi de Doherty)."""
+    result = regenerate(uid, only)
+    if result is None:
+        flash(reason, "success")
+        return
     planned = sum(int((s.end - s.start).total_seconds() // 60) for s in result.sessions)
-    flash(f"Planning généré : {len(result.sessions)} séances, {planner.fmt_minutes(planned)} de travail.", "success")
+    flash(f"{reason} Planning mis à jour : {len(result.sessions)} séances, "
+          f"{planner.fmt_minutes(planned)} de travail.", "success")
     for w in result.warnings:
         flash(w, "warning")
+
+
+@bp.route("/planning/generer", methods=("POST",))
+@login_required
+def plan_generate():
+    if not get_db().execute("SELECT 1 FROM subjects WHERE user_id = ?", (g.user["id"],)).fetchone():
+        flash("Ajoute d'abord une matière.", "error")
+        return redirect(url_for("main.subject_new"))
+    regenerate_and_report(g.user["id"], "C'est fait.")
     return redirect(url_for("main.plan"))
+
+
+@bp.route("/matieres/<int:subject_id>/programme", methods=("POST",))
+@login_required
+def subject_program(subject_id):
+    """Programme de révision d'une seule matière, depuis le panneau du planning."""
+    s = own_subject(subject_id)
+    f = request.form
+    goal = f.get("goal") if f.get("goal") in GOALS else s["goal"]
+    exam_date = s["exam_date"]
+    if goal == "exam":
+        try:
+            exam_date = date.fromisoformat(f.get("exam_date", "")).isoformat()
+        except ValueError:
+            exam_date = None
+        if not exam_date or exam_date <= date.today().isoformat():
+            flash("Indique une date d'examen à venir pour construire le programme.", "error")
+            return redirect(url_for("main.plan", matiere=subject_id))
+    else:
+        exam_date = None
+    try:
+        weekly = max(0.5, min(40.0, float(f.get("weekly_hours", s["weekly_hours"]))))
+    except ValueError:
+        weekly = s["weekly_hours"]
+    get_db().execute("UPDATE subjects SET goal=?, exam_date=?, comfort=?, weekly_hours=? WHERE id=?",
+                     (goal, exam_date, _int(f.get("comfort"), s["comfort"], 1, 5), weekly, subject_id))
+    get_db().commit()
+    regenerate_and_report(g.user["id"], f"Programme de « {s['name']} » construit.", only={subject_id})
+    first = get_db().execute("SELECT MIN(start) FROM sessions WHERE subject_id = ? AND start >= ?",
+                             (subject_id, _iso(datetime.now()))).fetchone()[0]
+    return redirect(url_for("main.plan", matiere=subject_id, semaine=first[:10] if first else None))
 
 
 @bp.route("/seances/<int:session_id>/fait", methods=("POST",))

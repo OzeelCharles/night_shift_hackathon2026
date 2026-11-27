@@ -276,7 +276,8 @@ def free_slots(day: date, prefs: Prefs, busy: list[Busy], now: datetime) -> list
 def activity_label(method: str, kind: str, minutes: int) -> str:
     label = METHODS.get(method, METHODS["mixte"])[kind]
     if method == "pomodoro":
-        label += f" ({max(1, round(minutes / 30))} × 25 min)"
+        n = minutes // 25 if minutes >= 50 else 1
+        label += f" ({n} × 25 min)" if minutes >= 25 else " (séance courte)"
     return label
 
 
@@ -339,6 +340,9 @@ def schedule(tasks: list[Task], prefs: Prefs, busy: list[Busy], now: datetime) -
                     break
                 t = _pick(ready, day, last_subject)
                 dur = min(t.remaining, limit)
+                leftover = t.remaining - dur
+                if 0 < leftover < MIN_SLOT and dur - (MIN_SLOT - leftover) >= MIN_SLOT:
+                    dur -= MIN_SLOT - leftover  # évite de laisser un bout de séance trop court
                 end = cursor + timedelta(minutes=dur)
                 sessions.append(PlannedSession(t.subject_id, cursor, end, t.topic, t.kind,
                                                activity_label(prefs.method, t.kind, dur)))
@@ -383,7 +387,7 @@ def generate_plan(subjects: list[SubjectIn], prefs: Prefs, busy: list[Busy], now
         if m >= MIN_SLOT:
             warnings.append(
                 f"« {names[sid]} » : {fmt_minutes(m)} de travail n'ont pas pu être placées avant l'échéance. "
-                "Augmentez la durée quotidienne, élargissez vos horaires ou réduisez le nombre de chapitres.")
+                "Augmente le temps max par jour, élargis tes horaires ou réduis le nombre de chapitres.")
     if result.needed_minutes > result.available_minutes and not missing:
         warnings.append("Planning serré : certaines révisions optionnelles ont été abandonnées.")
     result.warnings = warnings

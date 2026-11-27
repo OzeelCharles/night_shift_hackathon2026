@@ -66,7 +66,7 @@ def create_app(test_config=None):
         if request.method == "POST" and not app.config.get("WTF_CSRF_DISABLED"):
             token = request.form.get("_csrf") or request.headers.get("X-CSRF-Token")
             if not token or not secrets.compare_digest(token, session.get("_csrf", "")):
-                abort(400, "Jeton CSRF invalide : rechargez la page.")
+                abort(400, "Jeton CSRF invalide : recharge la page.")
 
     app.jinja_env.globals["csrf_token"] = csrf_token
 
@@ -89,12 +89,18 @@ def create_app(test_config=None):
 
     app.jinja_env.filters["duree"] = fmt_minutes
 
+    @app.template_filter("nombre")
+    def nombre(v):
+        """4.0 -> « 4 », 2.5 -> « 2,5 »"""
+        v = float(v or 0)
+        return str(int(v)) if v.is_integer() else f"{v:.1f}".replace(".", ",")
+
     @app.errorhandler(403)
-    def forbidden(e):
+    def forbidden(_e):
         return render_template("error.html", code=403, message="Accès réservé aux administrateurs."), 403
 
     @app.errorhandler(404)
-    def not_found(e):
+    def not_found(_e):
         return render_template("error.html", code=404, message="Page introuvable."), 404
 
     @app.errorhandler(400)
@@ -102,7 +108,7 @@ def create_app(test_config=None):
         return render_template("error.html", code=400, message=e.description), 400
 
     @app.errorhandler(413)
-    def too_large(e):
+    def too_large(_e):
         return render_template("error.html", code=413, message="Fichier trop volumineux (25 Mo max)."), 413
 
     return app

@@ -5,10 +5,11 @@
   <div>
     <h1>{{ s.name }}</h1>
     <span class="tag">{{ goals[s.goal] }}</span>
-    {% if s.exam_date %}<span class="tag">Examen le {{ s.exam_date|datefr }}</span>{% else %}<span class="tag">{{ s.weekly_hours }} h / semaine</span>{% endif %}
+    {% if s.exam_date %}<span class="tag">Examen le {{ s.exam_date|datefr }}</span>{% else %}<span class="tag">{{ s.weekly_hours|nombre }} h / semaine</span>{% endif %}
     <span class="tag">Aisance : {{ comfort[s.comfort] }}</span>
   </div>
   <div class="actions">
+    <a class="btn" href="{{ url_for('main.plan', matiere=s.id) }}">Voir son programme dans le planning</a>
     <a class="btn btn-ghost" href="{{ url_for('main.subject_edit', subject_id=s.id) }}">Modifier</a>
     <form method="post" action="{{ url_for('main.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière, ses documents et ses séances ?')">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -27,7 +28,7 @@
     {% if docs %}
     <ul class="docs">
       {% for d in docs %}
-      <li>{{ d.filename }} <span class="muted small">· {{ d.topics_found }} chapitre(s) détecté(s)</span>
+      <li>{{ d.filename }} <span class="muted small">({{ d.topics_found }} chapitre(s) détecté(s))</span>
         <form method="post" action="{{ url_for('main.document_delete', doc_id=d.id) }}" class="inline">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <button class="btn-link danger">supprimer</button>
@@ -84,6 +85,6 @@
     {% endfor %}
     </tbody>
   </table>
-  {% else %}<p class="muted">Pas encore de planning : génère-le depuis le tableau de bord.</p>{% endif %}
+  {% else %}<p class="muted">Aucune séance pour l'instant. <a href="{{ url_for('main.plan', matiere=s.id) }}">Construis son programme depuis le planning.</a></p>{% endif %}
 </section>
 {% endblock %}
