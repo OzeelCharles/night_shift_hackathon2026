@@ -659,3 +659,26 @@ form[data-kind="autre"] .kind-school { display: none; }
   body { background: #fff; }
   .card { box-shadow: none; }
 }
+
+/* ---------- Campus ---------- */
+.cp-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 16px; }
+.cp-list > li.card { margin-bottom: 0; }
+.cp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.cp-gauge { margin: 8px 0 12px; }
+.cp-big { font-size: 1.5rem; }
+.cp-l1 .progress span { background: var(--ok); }
+.cp-l2 .progress span { background: color-mix(in srgb, var(--ok) 55%, var(--warn)); }
+.cp-l3 .progress span { background: var(--warn); }
+.cp-l4 .progress span { background: var(--margin); }
+.cp-report { border-top: 1px dashed var(--line); padding-top: 10px; margin-top: 8px; }
+.cp-report p { margin: 0 0 8px; }
+.cp-menu { margin: 8px 0 12px; }
+.cp-cat { margin: 0 0 .8em; }
+.cp-chart { margin: 0 0 12px; }
+.cp-bars { list-style: none; padding: 0; margin: 8px 0 0; display: flex; align-items: flex-end; gap: 4px; height: 130px; }
+.cp-bars li { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+.cp-bar { display: block; width: 100%; max-width: 34px; border-radius: 4px 4px 0 0; background: var(--seyes-strong); }
+.cp-bars li.now .cp-bar { background: var(--ink); }
+.cp-bars li.off .cp-bar { background: var(--line); }
+.cp-bars li.now .cp-h { font-weight: 700; color: var(--ink); }
+.cp-h { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }

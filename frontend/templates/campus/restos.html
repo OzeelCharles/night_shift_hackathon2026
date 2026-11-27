@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set space = "campus" %}
+{% from "campus/_macros.html" import affluence %}
+{% block title %}Restos U{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Restaurants universitaires</h1>
+  <p class="muted">Les restos U et cafétérias Crous autour de ton école : affluence et menu du jour.</p></div></div>
+
+<form method="get" class="com-search" role="search">
+  <label class="visually-hidden" for="ville">Ville</label>
+  <input id="ville" name="ville" value="{{ city_input }}" placeholder="{{ 'Autour de ' ~ school_city if school_city else 'Autour de quelle ville ?' }}" autocomplete="off">
+  <button class="btn btn-ghost">Chercher</button>
+</form>
+
+{% if need_city %}
+<div class="notice"><p>Je ne connais pas la ville de ton école. Indique une ville ci-dessus, ou complète <a href="{{ url_for('auth.profile') }}">ton profil</a>.</p></div>
+{% elif error %}
+<div class="notice"><p>{{ error }}</p></div>
+{% else %}
+<p class="muted">Autour de <strong>{{ place }}</strong>{% if not city_input and school_city %} (la ville de ton école){% endif %}.
+  {% if not inside %}Aucun restaurant dans {{ radius | int }} km : voici les plus proches.{% endif %}</p>
+<ul class="cp-list">
+  {% for r in restaurants %}
+  <li class="card">
+    <div class="cp-head">
+      <a class="com-title" href="{{ url_for('campus.resto', code=r.code) }}">{{ r.nom }}</a>
+      <span class="small muted">{{ r.type.libelle }} · {{ ('%.1f' | format(r.distance_km)) | replace('.', ',') }} km</span>
+    </div>
+    <p class="small"><span class="tag {{ '' if r.state.open_today else 'tag-hot' }}">{{ r.state.text }}</span> {{ r.adresse }}</p>
+    {{ affluence(r.gauge) }}
+    <div class="cp-menu small" data-menu-url="{{ url_for('campus.resto_menu', code=r.code) }}" {% if not r.state.open_today %}hidden{% endif %}></div>
+    <a class="btn btn-ghost btn-sm" href="{{ url_for('campus.resto', code=r.code) }}">Menu complet et signalement</a>
+  </li>
+  {% else %}
+  <li class="empty-state"><p>Aucun restaurant trouvé.</p></li>
+  {% endfor %}
+</ul>
+<p class="small muted">Données : restaurants et menus des Crous via <a href="https://www.data.gouv.fr/dataservices/api-croustillant" target="_blank" rel="noopener">CROUStillant</a> (projet communautaire non officiel).
+  L'affluence vient des signalements des étudiants ; sans signalement, c'est une estimation de la fréquentation habituelle.</p>
+<script>
+  // Aperçu du menu du jour, chargé après coup pour ne pas ralentir la liste.
+  document.querySelectorAll('.cp-menu[data-menu-url]:not([hidden])').forEach(async box => {
+    try {
+      const data = await (await fetch(box.dataset.menuUrl)).json();
+      const meals = data.meals || {};
+      const meal = meals.midi ? 'midi' : (meals.soir ? 'soir' : null);
+      if (!meal) { box.textContent = data.error ? '' : "Menu du jour non publié."; return; }
+      const main = meals[meal][0];
+      const strong = document.createElement('strong');
+      strong.textContent = (meal === 'midi' ? 'Ce midi' : 'Ce soir') + (main.category ? ' · ' + main.category : '') + ' : ';
+      box.replaceChildren(strong, document.createTextNode(main.dishes.join(', ')));
+    } catch (e) { /* hors ligne : le lien vers le menu complet reste disponible */ }
+  });
+</script>
+{% endif %}
+{% endblock %}
