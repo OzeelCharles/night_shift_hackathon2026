@@ -85,5 +85,19 @@ def delete_manual(session_id, user_id) -> None:
     execute("DELETE FROM sessions WHERE id = ? AND user_id = ? AND manual = 1", session_id, user_id)
 
 
+def missed(user_id, since_iso: str, until_iso: str):
+    """Séances non faites qui commencent entre deux dates (séances ratées, ou du jour pas encore faites)."""
+    return query(WITH_SUBJECT + "WHERE se.user_id = ? AND se.done = 0 AND se.start >= ? AND se.start < ? "
+                 "ORDER BY se.start", user_id, since_iso, until_iso)
+
+
+def owned_not_done(user_id, ids) -> list:
+    ids = list(ids)
+    if not ids:
+        return []
+    return query(WITH_SUBJECT + f"WHERE se.user_id = ? AND se.done = 0 AND se.id IN ({placeholders(ids)}) "
+                 "ORDER BY se.start", user_id, *ids)
+
+
 def toggle_done(session_id, user_id) -> None:
     execute("UPDATE sessions SET done = 1 - done WHERE id = ? AND user_id = ?", session_id, user_id)

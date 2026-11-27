@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 
-from backend.business import agenda_analysis, exams, matching, planner
+from backend.business import agenda_analysis, exams, matching, planner, rescheduling
 from backend.business import assistant as rules
 from backend.business import grades as grade_rules
 from backend.business.subjects import topics_of
@@ -19,7 +19,7 @@ from backend.dao import subjects as subjects_dao
 
 from backend.dao import rag as rag_dao
 
-from . import dossier_service, rag_service
+from . import dossier_service, rag_service, reschedule_service
 
 SUBJECT = text_param("Nom de la matière, tel que l'étudiant l'a écrit (ex. « proba », « Économétrie »).")
 
@@ -189,7 +189,35 @@ def chercher_dans_mes_cours(user, question: str = "", matiere: str = "", **_) ->
     return out
 
 
+# ---------------------------------------------------------------- séances ratées
+def seances_a_rattraper(user, matiere: str = "", **_) -> dict:
+    missed, error = reschedule_service.to_catch_up(user["id"], matiere)
+    if error:
+        return error
+    later, _ = reschedule_service.to_catch_up(user["id"], matiere, later_today=True)
+    return {"seances_ratees": [{"id": r["id"], "seance": rescheduling.session_line(r)} for r in missed],
+            "a_venir_aujourd_hui": [{"id": r["id"], "seance": rescheduling.session_line(r)} for r in later],
+            "remarque": "Pour « je vais rater celle de ce soir », passe son id à preparer_rattrapage (seances)."}
+
+
+def preparer_rattrapage(user, matiere: str = "", seances: str = "", **_) -> dict:
+    return reschedule_service.prepare(user, matiere, seances)
+
+
 TOOLS = [
+    Tool("seances_a_rattraper",
+         "Séances de révision ratées (non faites, 14 derniers jours) et celles encore à venir aujourd'hui, avec "
+         "leur identifiant.",
+         seances_a_rattraper, params(matiere=text_param("Matière (facultatif)."))),
+    Tool("preparer_rattrapage",
+         "Quand l'étudiant a raté (ou va rater) une séance : calcule les options pour la rattraper (replacer la "
+         "séance, réorganiser le planning, ajouter du temps) avec leurs conséquences réelles. Ne modifie rien : "
+         "l'étudiant valide une option avec un bouton. Sans « seances » : les séances ratées (déjà commencées, non "
+         "faites, 14 derniers jours) ; pour une séance à venir qu'il va rater, passe son id (voir "
+         "seances_a_rattraper).",
+         preparer_rattrapage,
+         params(matiere=text_param("Matière de la séance ratée (facultatif)."),
+                seances=text_param("Identifiants des séances à rattraper, séparés par des virgules (facultatif)."))),
     Tool("chercher_dans_mes_cours",
          "Cherche dans les supports de cours déposés par l'étudiant (PDF, diapositives, notes en photo) les passages "
          "qui répondent à une question de cours. À utiliser avant d'expliquer une notion, une formule ou un exercice.",

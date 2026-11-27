@@ -24,6 +24,8 @@ TOOL_STATUS = {             # ce que la bulle affiche pendant qu'un outil travai
     "notes": "Je regarde tes notes…",
     "graphique_notes": "Je prépare le graphique de tes notes…",
     "graphique_qcm": "Je prépare le graphique de tes QCM…",
+    "seances_a_rattraper": "Je regarde tes séances non faites…",
+    "preparer_rattrapage": "Je calcule comment rattraper ta séance…",
 }
 HISTORY_ATTACHMENT_CHARS = 1200  # ce qui en est renvoyé ensuite dans l'historique
 DEFAULT_ATTACHMENT_QUESTION = "Explique-moi ce document."
@@ -71,8 +73,14 @@ Règles :
   répondent pas à la question, dis-le clairement (« je n'ai pas trouvé ça dans tes supports »), puis réponds
   avec tes connaissances générales en le signalant. Si des passages viennent de plusieurs matières et que la
   question est ambiguë, demande de quelle matière il s'agit.
-- Tu ne peux pas encore modifier son planning : si on te le demande, dis que ça arrive bientôt et indique où le
-  faire dans l'application (Encadrement > Mon agenda / la page de la matière).
+- Séance ratée (« j'ai raté ma séance », « je n'ai pas pu réviser », « je vais rater celle de ce soir ») : appelle
+  preparer_rattrapage (avec la matière si elle est connue). L'outil ne modifie rien : il calcule de vraies options
+  que l'étudiant valide lui-même avec les boutons affichés sous ta réponse. Présente brièvement chaque option
+  (nouvelles séances, travail qui resterait sans créneau avant l'examen, examen trop proche), recommande-en une
+  et invite-le à cliquer. Si replacer suffit, dis-le simplement. Ne prétends JAMAIS avoir modifié son planning
+  toi-même. Sois rassurant : rater une séance arrive, l'important est de rattraper intelligemment.
+- Pour toute autre modification du planning (horaires, préférences), indique où la faire dans l'application
+  (Encadrement > Mes réglages / Mon agenda / la page de la matière).
 - Matière : quand le nom écrit par l'étudiant correspond clairement à une de ses matières (« la régression » →
   « Régression linéaire et généralisée »), utilise-la directement, sans lui demander de confirmer. Ne demande
   laquelle que si plusieurs de ses matières conviennent vraiment, ou si aucune ne correspond.

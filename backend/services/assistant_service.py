@@ -26,10 +26,13 @@ from werkzeug.datastructures import FileStorage
 
 from backend.business import accounts, extractor, retrieval
 from backend.business import assistant as rules
+from backend.dao import actions as actions_dao
 from backend.dao import chat as dao
 from backend.dao import llm, vision
 from backend.dao import subjects as subjects_dao
 from backend.dao.db import commit
+
+from . import reschedule_service
 
 MAX_PDF_BYTES = 15 * 1024 * 1024
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif", "heic", "heif"}
@@ -80,11 +83,45 @@ def on_startup(app) -> None:
         commit()
 
 
-def _public(m: dict) -> dict:
+def _with_status(user, actions: list[dict]) -> list[dict]:
+    """Propositions avec leur état actuel (en attente, faite, annulée) : les boutons d'une proposition
+    déjà traitée ne sont plus affichés."""
+    states = actions_dao.statuses(user["id"], [a["id"] for a in actions])
+    return [a | states.get(a["id"], {"status": "expired", "choice": ""}) for a in actions]
+
+
+def _public(m: dict, user=None) -> dict:
     a = m["meta"].get("attachment")
+    actions = m["meta"].get("actions", [])
     return {"id": m["id"], "role": m["role"], "content": m["content"], "charts": m["meta"].get("charts", []),
             "sources": m["meta"].get("sources", []),
+            "actions": _with_status(user, actions) if (actions and user) else actions,
             "attachment": {"name": a["name"], "kind": a["kind"]} if a else None}
+
+
+def apply_action(user, action_id: int, choice: str) -> dict:
+    """L'étudiant valide une option : elle est appliquée, et la confirmation s'ajoute à la conversation."""
+    text, error = reschedule_service.apply(user, action_id, choice)
+    if error:
+        return {"error": error}
+    return {"message": _record(user, text)}
+
+
+def cancel_action(user, action_id: int) -> dict:
+    error = reschedule_service.cancel(user, action_id)
+    if error:
+        return {"error": error}
+    return {"message": _record(user, "D'accord, je ne change rien à ton planning.")}
+
+
+def _record(user, text: str) -> dict:
+    """Message de l'assistant ajouté à la conversation en cours (hors réponse du modèle)."""
+    conv = _current(user)
+    conv_id = conv["id"] if conv else dao.create(user["id"], _session_key())
+    message_id = dao.add_message(conv_id, "assistant", text)
+    dao.touch(conv_id, user["id"])
+    return {"id": message_id, "role": "assistant", "content": text, "charts": [], "sources": [], "actions": [],
+            "attachment": None}
 
 
 def read_attachment(file) -> tuple[dict | None, str | None]:
@@ -136,7 +173,7 @@ def conversation(user) -> dict:
     messages = dao.messages(conv["id"], user["id"]) if conv else []
     return {"available": llm.available(), "notice": "" if llm.available() else NOT_CONFIGURED,
             "provider": {"anthropic": "Anthropic (Claude)", "groq": "Groq"}.get(llm.provider(), ""),
-            "messages": [_public(m) for m in messages]}
+            "messages": [_public(m, user) for m in messages]}
 
 
 def new_conversation(user) -> None:
@@ -161,10 +198,11 @@ def _profile(user) -> dict:
 
 
 def _run_tool(user, tools: dict, name: str, arguments: dict,
-              source_offset: int = 0) -> tuple[str, dict | None, list[dict]]:
+              source_offset: int = 0) -> tuple[str, dict | None, list[dict], dict | None]:
+    """(texte pour le modèle, graphique, sources, modification proposée à valider par l'étudiant)."""
     tool = tools.get(name)
     if tool is None:
-        return json.dumps({"erreur": f"Outil inconnu : {name}."}, ensure_ascii=False), None, []
+        return json.dumps({"erreur": f"Outil inconnu : {name}."}, ensure_ascii=False), None, [], None
     allowed = tool.parameters.get("properties", {})
     args = {k: str(v)[:200] for k, v in (arguments or {}).items()   # arguments vérifiés ; null = non renseigné
             if k in allowed and v is not None and str(v).strip()}
@@ -173,7 +211,11 @@ def _run_tool(user, tools: dict, name: str, arguments: dict,
     except Exception:  # un outil en panne ne doit pas couper la conversation
         current_app.logger.exception("Assistant : l'outil %s a échoué", tool.name)
         result = {"erreur": "Cette information est momentanément indisponible."}
-    return rules.split_result(result, source_offset)
+    result = dict(result or {})
+    action = result.pop("action", None)   # proposition affichée avec des boutons, pas envoyée au modèle
+    if action:
+        result["boutons"] = "affichés sous ta réponse : l'étudiant choisit lui-même une option"
+    return (*rules.split_result(result, source_offset), action)
 
 
 def send(user, text: str, page: str = "", subject_id=None, file=None) -> dict:
@@ -234,12 +276,14 @@ def send_events(user, text: str, page: str = "", subject_id=None, file=None):
     history_messages = [{"role": m["role"], "content": rules.with_attachment(m)} for m in recent]
     tools = current_app.extensions.get("tools", {})
     tool_list = [{"name": t.name, "description": t.description, "parameters": t.parameters} for t in tools.values()]
-    charts, sources = [], []
+    charts, sources, actions = [], [], []
 
     def run_tool(name: str, arguments: dict) -> str:
-        content, chart, found = _run_tool(user, tools, name, arguments, len(sources))
+        content, chart, found, action = _run_tool(user, tools, name, arguments, len(sources))
         if chart:
             charts.append(chart)
+        if action:
+            actions.append(action)
         sources.extend(found)
         return content
 
@@ -276,11 +320,12 @@ def send_events(user, text: str, page: str = "", subject_id=None, file=None):
     meta = {"attachment": {"name": attachment["name"], "kind": attachment["kind"],
                            "excerpt": attachment["text"][:rules.HISTORY_ATTACHMENT_CHARS]}} if attachment else {}
     user_id_msg = dao.add_message(conv_id, "user", text, meta)
-    answer_id = dao.add_message(conv_id, "assistant", answer, {"charts": charts, "sources": sources})
+    answer_id = dao.add_message(conv_id, "assistant", answer,
+                                {"charts": charts, "sources": sources, "actions": actions})
     dao.touch(conv_id, uid, title=rules.title_from(text))
     commit()  # réponse diffusée : la requête se termine après l'envoi du dernier événement
     yield {"type": "done", "reset": reset,
            "message": {"id": answer_id, "role": "assistant", "content": answer, "charts": charts,
-                       "sources": sources, "attachment": None},
+                       "sources": sources, "actions": _with_status(user, actions), "attachment": None},
            "question": {"id": user_id_msg, "role": "user", "content": text, "charts": [],
                         "attachment": {"name": attachment["name"], "kind": attachment["kind"]} if attachment else None}}

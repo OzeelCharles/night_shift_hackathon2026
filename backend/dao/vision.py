@@ -16,6 +16,7 @@ from . import groq
 
 MODEL = "qwen/qwen3.8-27b"  # seul modèle de Groq qui lit les images (modifiable par VISION_MODEL)
 MAX_IMAGE_BYTES = 3 * 1024 * 1024
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"}  # photos acceptées
 
 VisionError = groq.GroqError
 
@@ -52,21 +53,9 @@ def shrink(data: bytes) -> tuple[bytes, str]:
     return _shrink(data)
 
 
-def _session() -> requests.Session:
-    """Certificats vérifiés avec le magasin du système (antivirus qui inspectent le TLS)."""
-    class _Adapter(HTTPAdapter):
-        def init_poolmanager(self, *args, **kwargs):
-            kwargs["ssl_context"] = ssl.create_default_context()
-            return super().init_poolmanager(*args, **kwargs)
-
-    s = requests.Session()
-    s.mount("https://", _Adapter())
-    return s
-
-
 def ask(image: bytes, prompt: str, as_json: bool = True, max_tokens: int = 4000):
     """Envoie la photo et la consigne ; renvoie l'objet JSON (as_json) ou le texte de la réponse."""
-    if not api_key():
+    if not groq.api_key():
         raise VisionError("Aucune clé Groq : colle-la après GROQ_API_KEY= dans le fichier .env.")
     data, mime = _shrink(image)
     image_url = f"data:{mime};base64,{base64.b64encode(data).decode()}"

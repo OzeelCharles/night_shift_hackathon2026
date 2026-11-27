@@ -46,6 +46,22 @@ def send_stream():
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
+@bp.route("/actions/<int:action_id>", methods=("POST",))
+@login_required
+def apply_action(action_id):
+    """L'étudiant valide une option proposée par l'assistant (ex. rattraper une séance) : JSON {choice}."""
+    data = request.get_json(silent=True) or request.form
+    result = assistant_service.apply_action(g.user, action_id, str(data.get("choice", "")))
+    return jsonify(result), (200 if "message" in result else 422)
+
+
+@bp.route("/actions/<int:action_id>/annuler", methods=("POST",))
+@login_required
+def cancel_action(action_id):
+    result = assistant_service.cancel_action(g.user, action_id)
+    return jsonify(result), (200 if "message" in result else 422)
+
+
 @bp.route("/nouvelle", methods=("POST",))
 @login_required
 def new():
