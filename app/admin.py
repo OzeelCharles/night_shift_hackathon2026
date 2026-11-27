@@ -4,7 +4,7 @@ import os
 from flask import Blueprint, abort, current_app, flash, g, redirect, render_template, request, url_for
 from werkzeug.security import generate_password_hash
 
-from .auth import admin_required, create_user, validate_account
+from .auth import LEVELS, admin_required, create_user, validate_account
 from .db import get_db
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -40,7 +40,7 @@ def index():
         "sessions": db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0],
         "done": db.execute("SELECT COUNT(*) FROM sessions WHERE done = 1").fetchone()[0],
     }
-    return render_template("admin/index.html", users=users, stats=stats, q=q)
+    return render_template("admin/index.html", users=users, stats=stats, q=q, levels=LEVELS)
 
 
 @bp.route("/utilisateurs/nouveau", methods=("GET", "POST"))
@@ -56,11 +56,12 @@ def user_new():
         if errors:
             for e in errors:
                 flash(e, "error")
-            return render_template("admin/user_form.html", u=f, new=True)
-        create_user(email, username, f["password"], role)
+            return render_template("admin/user_form.html", u=f, new=True, levels=LEVELS)
+        create_user(email, username, f["password"], role, level=f.get("level", "autre"),
+                    school=f.get("school", ""))
         flash(f"Utilisateur {email} créé.", "success")
         return redirect(url_for("admin.index"))
-    return render_template("admin/user_form.html", u={"role": "user", "is_active": 1}, new=True)
+    return render_template("admin/user_form.html", u={"role": "user", "is_active": 1}, new=True, levels=LEVELS)
 
 
 @bp.route("/utilisateurs/<int:user_id>", methods=("GET", "POST"))
@@ -83,16 +84,19 @@ def user_edit(user_id):
         if errors:
             for e in errors:
                 flash(e, "error")
-            return render_template("admin/user_form.html", u={**dict(u), **f.to_dict()}, new=False, user_id=user_id)
-        db.execute("UPDATE users SET email=?, username=?, role=?, is_active=? WHERE id=?",
-                   (email, username, role, active, user_id))
+            return render_template("admin/user_form.html", u={**dict(u), **f.to_dict()}, new=False, user_id=user_id,
+                                   levels=LEVELS)
+        level = f.get("level") if f.get("level") in LEVELS else u["level"]
+        db.execute("UPDATE users SET email=?, username=?, role=?, is_active=?, level=?, school=? WHERE id=?",
+                   (email, username, role, active, level, f.get("school", "").strip()[:120], user_id))
         if password:
             db.execute("UPDATE users SET password_hash=? WHERE id=?", (generate_password_hash(password), user_id))
         db.commit()
         flash("Utilisateur mis à jour.", "success")
         return redirect(url_for("admin.index"))
     subjects = db.execute("SELECT * FROM subjects WHERE user_id = ? ORDER BY name", (user_id,)).fetchall()
-    return render_template("admin/user_form.html", u=u, new=False, user_id=user_id, subjects=subjects)
+    return render_template("admin/user_form.html", u=u, new=False, user_id=user_id, subjects=subjects,
+                           levels=LEVELS)
 
 
 @bp.route("/utilisateurs/<int:user_id>/supprimer", methods=("POST",))

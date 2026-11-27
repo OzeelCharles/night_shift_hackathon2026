@@ -22,7 +22,7 @@
   </nav>
   <form method="post" action="{{ url_for('auth.logout') }}" class="logout">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <span class="muted">{{ g.user.username }}</span>
+    <a href="{{ url_for('auth.profile') }}" class="profile-link" {% if ep == 'auth.profile' %}aria-current="page"{% endif %} title="Mon profil : niveau et établissement">{{ g.user.username }}{% if g.user.school %}<span class="muted">, {{ g.user.school }}</span>{% endif %}</a>
     <button class="btn-link">Se déconnecter</button>
   </form>
   {% else %}
@@ -33,6 +33,9 @@
   {% endif %}
 </header>
 <main class="container">
+  {% if g.user and not g.user.school and ep != 'auth.profile' %}
+  <div class="notice"><p>Indique ton niveau et ton établissement pour recevoir des ressources adaptées. <a href="{{ url_for('auth.profile') }}">Compléter mon profil</a></p></div>
+  {% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
     <div class="flashes" role="status">

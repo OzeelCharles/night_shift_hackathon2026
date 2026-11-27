@@ -6,6 +6,12 @@
 <form method="post" enctype="multipart/form-data" class="card form-grid" data-busy="{{ 'Analyse et construction du planning…' if new else 'Mise à jour du planning…' }}"
       action="{{ url_for('main.subject_new') if new else url_for('main.subject_edit', subject_id=subject_id) }}">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {% if new and force_new %}
+  <input type="hidden" name="force_new" value="1">
+  <p class="full notice">Cette matière sera créée séparément, même si son nom ressemble à une matière existante.</p>
+  {% elif new %}
+  <p class="full small muted">Si le nom ressemble à une de tes matières (« Proba » et « Probabilités »), tout y sera ajouté au lieu de créer un doublon.</p>
+  {% endif %}
   <label class="full">Nom de la matière
     <input name="name" required maxlength="100" placeholder="Probabilités, droit des contrats, biologie cellulaire…" value="{{ s.name or '' }}" {% if new %}autofocus{% endif %}></label>
 

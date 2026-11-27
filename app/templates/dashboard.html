@@ -9,7 +9,7 @@
   </form>
   <div>
     <div class="when">{% if show_day %}{{ s.start|jour }}, {% endif %}{{ s.start|hm }} à {{ s.end|hm }}{% if is_next %}<span class="next-badge">À suivre</span>{% endif %}</div>
-    <strong>{{ s.subject_name }}</strong> : {{ s.topic }}
+    <a class="plain-link" href="{{ url_for('main.subject_detail', subject_id=s.subject_id) }}"><strong>{{ s.subject_name }}</strong></a> : {{ s.topic }}
     <div class="small muted">{{ s.activity }}</div>
   </div>
 </li>
@@ -64,7 +64,7 @@
       {% set pct = ((s.done_min / s.planned) * 100)|round|int if s.planned else 0 %}
       <li class="hl-{{ s.id % 6 }}">
         <div class="subj-row">
-          <a class="subj-name" href="{{ url_for('main.plan', matiere=s.id) }}">{{ s.name }}</a>
+          <a class="subj-name" href="{{ url_for('main.subject_detail', subject_id=s.id) }}">{{ s.name }}</a>
           <span>
           {% if s.exam_date %}
             {% set left = (date_fromiso(s.exam_date) - today).days %}

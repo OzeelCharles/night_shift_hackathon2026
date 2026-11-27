@@ -10,6 +10,11 @@
   <label>E-mail <input type="email" name="email" required value="{{ u.email or '' }}"></label>
   <label>{{ "Mot de passe" if new else "Nouveau mot de passe (laisser vide pour ne pas changer)" }}
     <input type="password" name="password" minlength="8" {% if new %}required{% endif %}></label>
+  <label>Niveau d'études
+    <select name="level">
+      {% for key, label in levels.items() %}<option value="{{ key }}" {% if (u.level or 'autre') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select></label>
+  <label>École ou université <input name="school" maxlength="120" value="{{ u.school or '' }}"></label>
   <label>Rôle
     <select name="role">
       <option value="user" {% if u.role != 'admin' %}selected{% endif %}>Utilisateur</option>

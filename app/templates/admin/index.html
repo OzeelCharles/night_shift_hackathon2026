@@ -20,11 +20,11 @@
     <button class="btn btn-ghost">Rechercher</button>
   </form>
   <table>
-    <thead><tr><th>Utilisateur</th><th>E-mail</th><th>Rôle</th><th>Statut</th><th>Matières</th><th>Séances</th><th>Inscrit le</th><th></th></tr></thead>
+    <thead><tr><th>Utilisateur</th><th>E-mail</th><th>Niveau</th><th>Établissement</th><th>Rôle</th><th>Statut</th><th>Matières</th><th>Séances</th><th>Inscrit le</th><th></th></tr></thead>
     <tbody>
     {% for u in users %}
     <tr>
-      <td>{{ u.username }}</td><td>{{ u.email }}</td>
+      <td>{{ u.username }}</td><td>{{ u.email }}</td><td>{{ levels.get(u.level, '') }}</td><td>{{ u.school }}</td>
       <td><span class="tag {% if u.role == 'admin' %}tag-hot{% endif %}">{{ u.role }}</span></td>
       <td>{{ "actif" if u.is_active else "désactivé" }}</td>
       <td>{{ u.n_subjects }}</td><td>{{ u.n_sessions }}</td><td class="small">{{ u.created_at[:10]|datefr }}</td>

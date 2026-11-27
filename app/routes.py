@@ -1,15 +1,18 @@
 import json
+import mimetypes
 import os
+import threading
 import uuid
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
+from urllib.parse import urlparse
 
 from flask import (Blueprint, Response, abort, current_app, flash, g, redirect, render_template,
-                   request, url_for)
+                   request, send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
-from . import calendar_ics, extractor, planner, resources
-from .auth import login_required
+from . import calendar_ics, extractor, matching, planner, resources
+from .auth import LEVELS, login_required
 from .db import get_db
 
 bp = Blueprint("main", __name__)
@@ -17,6 +20,7 @@ bp = Blueprint("main", __name__)
 GOALS = {"exam": "Préparer un examen", "a_jour": "Être à jour dans le cours"}
 COMFORT = {1: "Très difficile", 2: "Difficile", 3: "Moyen", 4: "À l'aise", 5: "Très à l'aise"}
 JOURS_COURTS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+EVENT_KINDS = {"cours": "Cours en classe", "revision": "Révision que je prévois", "autre": "Autre occupation"}
 
 
 # ---------------------------------------------------------------- helpers
@@ -36,6 +40,11 @@ def _time(value, default):
         return datetime.strptime(value, "%H:%M").time()
     except (TypeError, ValueError):
         return default
+
+
+def _safe_next(default: str) -> str:
+    nxt = request.form.get("next", "")
+    return nxt if nxt.startswith("/") and not nxt.startswith("//") else default
 
 
 def load_prefs(uid: int):
@@ -62,6 +71,10 @@ def own_subject(subject_id: int):
     return s
 
 
+def user_subjects(uid: int):
+    return get_db().execute("SELECT * FROM subjects WHERE user_id = ? ORDER BY name", (uid,)).fetchall()
+
+
 def subject_topics(s) -> list[str]:
     try:
         return json.loads(s["topics"])
@@ -71,6 +84,10 @@ def subject_topics(s) -> list[str]:
 
 def _parse_topics(text: str) -> list[str]:
     return extractor.clean_topics(text.splitlines(), limit=60)
+
+
+def _profile_sig(user) -> str:
+    return f"{user['level']}|{user['school']}"
 
 
 def _subject_form():
@@ -102,6 +119,56 @@ def _subject_form():
     }, errors
 
 
+def _initial_topics(name: str) -> tuple[list[str], str]:
+    """Chapitres d'une matière créée sans support : plan Wikipédia, sinon plan générique."""
+    if current_app.config.get("ENABLE_WEB"):
+        try:
+            topics = extractor.clean_topics(resources.wikipedia_outline(name), limit=15)
+            if topics:
+                return topics, "proposés à partir de Wikipédia"
+        except Exception:
+            pass
+    return list(planner.DEFAULT_TOPICS), "génériques (ajoute tes chapitres pour un planning plus précis)"
+
+
+def _merge_topics(current: list[str], new: list[str]) -> list[str]:
+    if current == planner.DEFAULT_TOPICS:
+        current = []
+    lower = {t.lower() for t in current}
+    return (current + [t for t in new if t.lower() not in lower])[:60]
+
+
+def create_subject(name: str, goal="a_jour", exam_date=None, comfort=3, weekly_hours=2.0, topics=None) -> int:
+    if topics is None:
+        topics, _ = _initial_topics(name)
+    cur = get_db().execute(
+        "INSERT INTO subjects (user_id, name, goal, exam_date, comfort, weekly_hours, topics) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (g.user["id"], name[:100], goal, exam_date, comfort, weekly_hours, json.dumps(topics, ensure_ascii=False)))
+    get_db().commit()
+    return cur.lastrowid
+
+
+def resolve_subject(title: str, explicit: str | None, create: bool = True, subjects=None):
+    """Associe un intitulé (cours, créneau) à une matière.
+
+    explicit : id choisi par l'utilisateur, « auto » pour la détection, « aucune » pour ne rien associer.
+    Retourne (matière | None, statut, score) ; statut ∈ explicit / matched / created / none.
+    """
+    if explicit and explicit.isdigit():
+        return own_subject(int(explicit)), "explicit", 1.0
+    if explicit == "aucune":
+        return None, "none", 0.0
+    subjects = subjects if subjects is not None else user_subjects(g.user["id"])
+    match, score = matching.best_match(title, subjects)
+    if match is not None:
+        return match, "matched", score
+    if not create:
+        return None, "none", score
+    name = matching.clean_title(title) or title
+    sid = create_subject(name)
+    return own_subject(sid), "created", score
+
+
 def _save_documents(subject_id: int, files) -> tuple[list[str], list[str]]:
     """Enregistre et analyse les fichiers. Retourne (chapitres trouvés, messages)."""
     topics, messages = [], []
@@ -129,20 +196,66 @@ def _save_documents(subject_id: int, files) -> tuple[list[str], list[str]]:
     return topics, messages
 
 
-def refresh_resources(subject) -> list[str]:
-    if not current_app.config.get("ENABLE_WEB"):
-        return ["Recherche internet désactivée."]
+def _remove_file(path):
+    root = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
+    real = os.path.realpath(path)
+    if real.startswith(root + os.sep) and os.path.exists(real):
+        os.remove(real)
+
+
+# ---------------------------------------------------------------- ressources (en arrière-plan)
+def refresh_resources(subject, user) -> list[str]:
+    """Remplace les suggestions d'une matière (les ressources gardées par l'utilisateur restent)."""
     db = get_db()
     excerpts = " ".join(r["excerpt"] for r in db.execute(
         "SELECT excerpt FROM documents WHERE subject_id = ?", (subject["id"],)))
     kw = extractor.keywords(excerpts, 5) if excerpts else None
-    found, errors = resources.find_resources(subject["name"], subject_topics(subject), kw)
-    db.execute("DELETE FROM resources WHERE subject_id = ?", (subject["id"],))
-    db.executemany("INSERT INTO resources (subject_id, title, url, source, snippet) VALUES (?, ?, ?, ?, ?)",
-                   [(subject["id"], r["title"][:300], r["url"], r["source"], r.get("snippet", ""))
-                    for r in found])
+    found, errors = resources.find_resources(subject["name"], subject_topics(subject), kw,
+                                             level=user["level"], school=user["school"])
+    saved = {r["url"] for r in db.execute("SELECT url FROM resources WHERE subject_id = ? AND saved = 1",
+                                          (subject["id"],))}
+    db.execute("DELETE FROM resources WHERE subject_id = ? AND saved = 0", (subject["id"],))
+    db.executemany(
+        "INSERT INTO resources (subject_id, title, url, source, snippet, kind, thumbnail, meta) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        [(subject["id"], r["title"][:300], r["url"], r["source"], r["snippet"], r["kind"], r["thumbnail"], r["meta"])
+         for r in found if r["url"] not in saved])
+    db.execute("UPDATE subjects SET resources_status = ?, resources_sig = ? WHERE id = ?",
+               ("error" if errors and len(found) <= 6 else "ok", _profile_sig(user), subject["id"]))
     db.commit()
     return errors
+
+
+def _refresh_worker(app, uid: int, ids: list[int]):
+    with app.app_context():
+        db = get_db()
+        user = db.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
+        for sid in ids:
+            s = db.execute("SELECT * FROM subjects WHERE id = ? AND user_id = ?", (sid, uid)).fetchone()
+            if s is None or user is None:
+                continue
+            try:
+                refresh_resources(s, user)
+            except Exception:
+                db.execute("UPDATE subjects SET resources_status = 'error' WHERE id = ?", (sid,))
+                db.commit()
+
+
+def refresh_resources_async(uid: int, ids: list[int]) -> bool:
+    """Lance la recherche sans faire attendre l'utilisateur ; la page affiche « en cours »."""
+    if not ids or not current_app.config.get("ENABLE_WEB"):
+        return False
+    db = get_db()
+    db.executemany("UPDATE subjects SET resources_status = 'pending' WHERE id = ?", [(i,) for i in ids])
+    db.commit()
+    threading.Thread(target=_refresh_worker, args=(current_app._get_current_object(), uid, list(ids)),
+                     daemon=True).start()
+    return True
+
+
+def refresh_all_resources_async(uid: int) -> int:
+    ids = [r["id"] for r in user_subjects(uid)]
+    return len(ids) if refresh_resources_async(uid, ids) else 0
 
 
 # ---------------------------------------------------------------- pages
@@ -220,35 +333,48 @@ def subject_new():
         if errors:
             for e in errors:
                 flash(e, "error")
-            return render_template("subjects/form.html", s=request.form, goals=GOALS, comfort=COMFORT, new=True)
+            return render_template("subjects/form.html", s=request.form, goals=GOALS, comfort=COMFORT, new=True,
+                                   force_new=request.form.get("force_new"))
         db = get_db()
-        cur = db.execute(
-            "INSERT INTO subjects (user_id, name, goal, exam_date, comfort, weekly_hours, topics) "
-            "VALUES (?, ?, ?, ?, ?, ?, '[]')",
-            (g.user["id"], data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"]))
-        sid = cur.lastrowid
-        db.commit()
-        doc_topics, messages = _save_documents(sid, request.files.getlist("documents"))
+        files = request.files.getlist("documents")
+
+        # Le nom ressemble-t-il à une matière existante ? (similarité cosinus, voir matching.py)
+        match, score = (None, 0.0)
+        if not request.form.get("force_new"):
+            match, score = matching.best_match(data["name"], user_subjects(g.user["id"]))
+        if match is not None:
+            doc_topics, messages = _save_documents(match["id"], files)
+            new_topics = data["topics"] + extractor.clean_topics(doc_topics, limit=40)
+            if new_topics:
+                db.execute("UPDATE subjects SET topics = ? WHERE id = ?",
+                           (json.dumps(_merge_topics(subject_topics(match), new_topics), ensure_ascii=False),
+                            match["id"]))
+                db.commit()
+            for m in messages:
+                flash(m, "info")
+            session["merged_hint"] = {"subject_id": match["id"], "name": data["name"]}
+            regenerate_and_report(
+                g.user["id"], f"« {data['name']} » correspond à ta matière « {match['name']} » "
+                              f"(similarité {score:.0%}) : tout a été ajouté à cette matière.")
+            return redirect(url_for("main.subject_detail", subject_id=match["id"]))
+
+        sid = create_subject(data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"],
+                             topics=data["topics"] or [])
+        doc_topics, messages = _save_documents(sid, files)
         topics = data["topics"] or extractor.clean_topics(doc_topics, limit=40)
         source = "saisis" if data["topics"] else "extraits des documents"
-        if not topics and current_app.config.get("ENABLE_WEB"):
-            try:
-                topics = extractor.clean_topics(resources.wikipedia_outline(data["name"]), limit=15)
-                source = "proposés à partir de Wikipédia"
-            except Exception:
-                topics = []
         if not topics:
-            topics = list(planner.DEFAULT_TOPICS)
-            source = "génériques (ajoute tes chapitres pour un planning plus précis)"
+            topics, source = _initial_topics(data["name"])
         db.execute("UPDATE subjects SET topics = ? WHERE id = ?", (json.dumps(topics, ensure_ascii=False), sid))
         db.commit()
         for m in messages:
             flash(m, "info")
-        for e in refresh_resources(own_subject(sid)):
-            flash(e, "info")
+        refresh_resources_async(g.user["id"], [sid])
         regenerate_and_report(g.user["id"], f"Matière créée avec {len(topics)} chapitres {source}.")
-        return redirect(url_for("main.plan", matiere=sid))
-    return render_template("subjects/form.html", s={}, goals=GOALS, comfort=COMFORT, new=True)
+        return redirect(url_for("main.subject_detail", subject_id=sid))
+    prefill = {"name": request.args.get("nom", "")}
+    return render_template("subjects/form.html", s=prefill, goals=GOALS, comfort=COMFORT, new=True,
+                           force_new=request.args.get("nouvelle"))
 
 
 @bp.route("/matieres/<int:subject_id>")
@@ -256,12 +382,36 @@ def subject_new():
 def subject_detail(subject_id):
     s = own_subject(subject_id)
     db = get_db()
-    docs = db.execute("SELECT * FROM documents WHERE subject_id = ? ORDER BY created_at DESC", (subject_id,)).fetchall()
+    now = _iso(datetime.now())
+    hint = session.get("merged_hint")
+    if hint and hint.get("subject_id") == subject_id:
+        session.pop("merged_hint")
+    else:
+        hint = None
     res = db.execute("SELECT * FROM resources WHERE subject_id = ? ORDER BY id", (subject_id,)).fetchall()
-    sessions = db.execute("SELECT * FROM sessions WHERE subject_id = ? ORDER BY start", (subject_id,)).fetchall()
-    return render_template("subjects/detail.html", s=s, topics=subject_topics(s), docs=docs, resources=res,
-                           sessions=sessions, goals=GOALS, comfort=COMFORT, now=_iso(datetime.now()),
-                           kinds=planner.KIND_LABELS)
+    stats = db.execute(
+        "SELECT COUNT(*) AS n, COALESCE(SUM(done), 0) AS done,"
+        " COALESCE(SUM((julianday(end) - julianday(start)) * 1440), 0) AS minutes,"
+        " COALESCE(SUM(CASE WHEN done THEN (julianday(end) - julianday(start)) * 1440 END), 0) AS done_min "
+        "FROM sessions WHERE subject_id = ?", (subject_id,)).fetchone()
+    return render_template(
+        "subjects/detail.html", s=s, topics=subject_topics(s), goals=GOALS, comfort=COMFORT, now=now,
+        kinds=planner.KIND_LABELS, stats=stats, hint=hint, today=date.today(),
+        classes=db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
+                           "ORDER BY start LIMIT 6", (subject_id, g.user["id"], now)).fetchall(),
+        upcoming=db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end >= ? ORDER BY start LIMIT 8",
+                            (subject_id, now)).fetchall(),
+        history=db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end < ? ORDER BY start DESC LIMIT 40",
+                           (subject_id, now)).fetchall(),
+        docs=db.execute("SELECT * FROM documents WHERE subject_id = ? ORDER BY created_at DESC",
+                        (subject_id,)).fetchall(),
+        saved=[r for r in res if r["saved"]],
+        videos=[r for r in res if not r["saved"] and r["kind"] == "video"],
+        web=[r for r in res if not r["saved"] and r["kind"] == "web"],
+        platforms=[r for r in res if not r["saved"] and r["kind"] == "platform"],
+        days_left=(date.fromisoformat(s["exam_date"]) - date.today()).days if s["exam_date"] else None,
+        profile_changed=bool(res) and s["resources_sig"] not in ("", _profile_sig(g.user)),
+        level_label=LEVELS.get(g.user["level"], ""), web_enabled=current_app.config.get("ENABLE_WEB"))
 
 
 @bp.route("/matieres/<int:subject_id>/modifier", methods=("GET", "POST"))
@@ -275,11 +425,16 @@ def subject_edit(subject_id):
                 flash(e, "error")
             return render_template("subjects/form.html", s=request.form, goals=GOALS, comfort=COMFORT, new=False,
                                    subject_id=subject_id)
+        others = [o for o in user_subjects(g.user["id"]) if o["id"] != subject_id]
+        twin, score = matching.best_match(data["name"], others)
         get_db().execute(
             "UPDATE subjects SET name=?, goal=?, exam_date=?, comfort=?, weekly_hours=?, topics=? WHERE id=?",
             (data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"],
              json.dumps(data["topics"] or planner.DEFAULT_TOPICS, ensure_ascii=False), subject_id))
         get_db().commit()
+        if twin is not None:
+            flash(f"Attention : « {data['name']} » ressemble beaucoup à ta matière « {twin['name']} » "
+                  f"(similarité {score:.0%}).", "warning")
         regenerate_and_report(g.user["id"], "Matière mise à jour.")
         return redirect(url_for("main.subject_detail", subject_id=subject_id))
     form = dict(s)
@@ -295,17 +450,11 @@ def subject_delete(subject_id):
     db = get_db()
     for d in db.execute("SELECT stored_path FROM documents WHERE subject_id = ?", (subject_id,)):
         _remove_file(d["stored_path"])
+    db.execute("UPDATE events SET subject_id = NULL, kind = 'autre' WHERE subject_id = ?", (subject_id,))
     db.execute("DELETE FROM subjects WHERE id = ?", (subject_id,))
     db.commit()
     regenerate_and_report(g.user["id"], "Matière supprimée.")
     return redirect(url_for("main.dashboard"))
-
-
-def _remove_file(path):
-    root = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
-    real = os.path.realpath(path)
-    if real.startswith(root + os.sep) and os.path.exists(real):
-        os.remove(real)
 
 
 @bp.route("/matieres/<int:subject_id>/documents", methods=("POST",))
@@ -314,55 +463,138 @@ def subject_upload(subject_id):
     s = own_subject(subject_id)
     found, messages = _save_documents(subject_id, request.files.getlist("documents"))
     current = subject_topics(s)
-    if current == planner.DEFAULT_TOPICS:
-        current = []
-    lower = {t.lower() for t in current}
-    added = [t for t in extractor.clean_topics(found, 40) if t.lower() not in lower]
-    if added:
+    merged = _merge_topics(current, extractor.clean_topics(found, 40))
+    added = len(merged) - len([t for t in current if t not in planner.DEFAULT_TOPICS])
+    if added > 0:
         get_db().execute("UPDATE subjects SET topics = ? WHERE id = ?",
-                         (json.dumps((current + added)[:60], ensure_ascii=False), subject_id))
+                         (json.dumps(merged, ensure_ascii=False), subject_id))
         get_db().commit()
     for m in messages:
         flash(m, "info")
-    if added:
-        regenerate_and_report(g.user["id"], f"{len(added)} nouveau(x) chapitre(s) ajouté(s).")
+    if added > 0:
+        regenerate_and_report(g.user["id"], f"{added} nouveau(x) chapitre(s) ajouté(s).")
     else:
         flash("Aucun nouveau chapitre trouvé dans ces documents.", "info")
-    return redirect(url_for("main.subject_detail", subject_id=subject_id))
+    return redirect(url_for("main.subject_detail", subject_id=subject_id) + "#supports")
+
+
+def _own_document(doc_id: int):
+    d = get_db().execute("SELECT d.* FROM documents d JOIN subjects s ON s.id = d.subject_id "
+                         "WHERE d.id = ? AND s.user_id = ?", (doc_id, g.user["id"])).fetchone()
+    if d is None:
+        abort(404)
+    return d
+
+
+@bp.route("/documents/<int:doc_id>")
+@login_required
+def document_open(doc_id):
+    d = _own_document(doc_id)
+    root = os.path.realpath(current_app.config["UPLOAD_FOLDER"])
+    real = os.path.realpath(d["stored_path"])
+    if not real.startswith(root + os.sep) or not os.path.exists(real):
+        abort(404)
+    mime = mimetypes.guess_type(d["filename"])[0] or "application/octet-stream"
+    inline = mime in ("application/pdf", "text/plain", "text/markdown") and not request.args.get("telecharger")
+    return send_file(real, mimetype=mime, as_attachment=not inline, download_name=d["filename"])
 
 
 @bp.route("/documents/<int:doc_id>/supprimer", methods=("POST",))
 @login_required
 def document_delete(doc_id):
-    d = get_db().execute("SELECT d.* FROM documents d JOIN subjects s ON s.id = d.subject_id "
-                         "WHERE d.id = ? AND s.user_id = ?", (doc_id, g.user["id"])).fetchone()
-    if d is None:
-        abort(404)
+    d = _own_document(doc_id)
     _remove_file(d["stored_path"])
     get_db().execute("DELETE FROM documents WHERE id = ?", (doc_id,))
     get_db().commit()
     flash("Document supprimé.", "success")
-    return redirect(url_for("main.subject_detail", subject_id=d["subject_id"]))
+    return redirect(url_for("main.subject_detail", subject_id=d["subject_id"]) + "#supports")
 
 
+# ---------------------------------------------------------------- ressources de l'utilisateur
 @bp.route("/matieres/<int:subject_id>/ressources", methods=("POST",))
 @login_required
 def subject_resources(subject_id):
-    errors = refresh_resources(own_subject(subject_id))
-    for e in errors:
-        flash(e, "error")
-    if not errors:
-        flash("Ressources mises à jour.", "success")
-    return redirect(url_for("main.subject_detail", subject_id=subject_id) + "#ressources")
+    own_subject(subject_id)
+    if refresh_resources_async(g.user["id"], [subject_id]):
+        flash("Recherche de nouvelles ressources lancée : elles s'affichent dans quelques secondes.", "info")
+    else:
+        flash("La recherche sur internet est désactivée sur ce serveur.", "error")
+    return redirect(url_for("main.subject_detail", subject_id=subject_id) + "#proposees")
+
+
+def _own_resource(resource_id: int):
+    r = get_db().execute("SELECT r.* FROM resources r JOIN subjects s ON s.id = r.subject_id "
+                         "WHERE r.id = ? AND s.user_id = ?", (resource_id, g.user["id"])).fetchone()
+    if r is None:
+        abort(404)
+    return r
+
+
+@bp.route("/ressources/<int:resource_id>/garder", methods=("POST",))
+@login_required
+def resource_keep(resource_id):
+    r = _own_resource(resource_id)
+    get_db().execute("UPDATE resources SET saved = 1 WHERE id = ?", (resource_id,))
+    get_db().commit()
+    flash(f"« {r['title'][:80]} » ajouté à tes ressources.", "success")
+    return redirect(url_for("main.subject_detail", subject_id=r["subject_id"]) + "#mes-ressources")
+
+
+@bp.route("/ressources/<int:resource_id>/retirer", methods=("POST",))
+@login_required
+def resource_remove(resource_id):
+    r = _own_resource(resource_id)
+    if r["kind"] == "perso":
+        get_db().execute("DELETE FROM resources WHERE id = ?", (resource_id,))
+    else:
+        get_db().execute("UPDATE resources SET saved = 0 WHERE id = ?", (resource_id,))
+    get_db().commit()
+    flash("Ressource retirée de ta liste.", "success")
+    return redirect(url_for("main.subject_detail", subject_id=r["subject_id"]) + "#mes-ressources")
+
+
+@bp.route("/matieres/<int:subject_id>/ressources/ajouter", methods=("POST",))
+@login_required
+def resource_add(subject_id):
+    own_subject(subject_id)
+    url = request.form.get("url", "").strip()
+    title = request.form.get("title", "").strip()
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        flash("Lien invalide : il doit commencer par http:// ou https://.", "error")
+    else:
+        get_db().execute(
+            "INSERT INTO resources (subject_id, title, url, source, kind, saved) VALUES (?, ?, ?, ?, 'perso', 1)",
+            (subject_id, (title or parsed.netloc)[:300], url, parsed.netloc.replace("www.", "")))
+        get_db().commit()
+        flash("Lien ajouté à tes ressources.", "success")
+    return redirect(url_for("main.subject_detail", subject_id=subject_id) + "#mes-ressources")
 
 
 # ---------------------------------------------------------------- agenda
 @bp.route("/agenda")
 @login_required
 def calendar():
-    events = get_db().execute("SELECT * FROM events WHERE user_id = ? AND end >= ? ORDER BY start LIMIT 300",
-                              (g.user["id"], date.today().isoformat())).fetchall()
-    return render_template("calendar.html", events=events)
+    db = get_db()
+    uid = g.user["id"]
+    now = _iso(datetime.now())
+    events = db.execute(
+        "SELECT e.*, s.name AS subject_name FROM events e LEFT JOIN subjects s ON s.id = e.subject_id "
+        "WHERE e.user_id = ? AND e.end >= ? ORDER BY e.start LIMIT 300", (uid, now)).fetchall()
+    revisions = db.execute(
+        "SELECT se.*, s.name AS subject_name FROM sessions se JOIN subjects s ON s.id = se.subject_id "
+        "WHERE se.user_id = ? AND se.manual = 1 AND se.end >= ? ORDER BY se.start", (uid, now)).fetchall()
+    return render_template("calendar.html", events=events, revisions=revisions, subjects=user_subjects(uid),
+                           event_kinds=EVENT_KINDS)
+
+
+def _association_message(title: str, subject, status: str, score: float) -> str | None:
+    if status == "matched":
+        return f"« {title} » associé à ta matière « {subject['name']} » (similarité {score:.0%})."
+    if status == "created":
+        return (f"Aucune matière ne ressemble à « {title} » : la matière « {subject['name']} » a été créée. "
+                "Complète-la depuis sa page (objectif, supports).")
+    return None
 
 
 @bp.route("/agenda/import", methods=("POST",))
@@ -373,18 +605,41 @@ def calendar_import():
         flash("Choisis un fichier .ics (export de Google Agenda, Outlook, ENT...).", "error")
         return redirect(url_for("main.calendar"))
     text = f.read().decode("utf-8", errors="ignore")
-    start = datetime.combine(date.today(), time())
-    events, skipped = calendar_ics.parse_ics(text, start)
+    events, skipped = calendar_ics.parse_ics(text, datetime.combine(date.today(), time()))
     db = get_db()
+    uid = g.user["id"]
     if request.form.get("replace"):
-        db.execute("DELETE FROM events WHERE user_id = ? AND source = 'ics'", (g.user["id"],))
-    db.executemany("INSERT INTO events (user_id, title, start, end, source) VALUES (?, ?, ?, ?, 'ics')",
-                   [(g.user["id"], e["title"][:200], _iso(e["start"]), _iso(e["end"])) for e in events])
+        db.execute("DELETE FROM events WHERE user_id = ? AND source = 'ics'", (uid,))
+    create = bool(request.form.get("create_missing"))
+    subjects = list(user_subjects(uid))
+    cache: dict[str, tuple] = {}
+    created, linked, new_ids = [], 0, []
+    rows = []
+    for e in events:
+        key = matching.normalize(e["title"])
+        if key not in cache:
+            match, _ = matching.best_match(e["title"], subjects)
+            if match is None and create and key:
+                sid = create_subject(matching.clean_title(e["title"]), topics=list(planner.DEFAULT_TOPICS))
+                match = own_subject(sid)
+                subjects.append(match)
+                created.append(match["name"])
+                new_ids.append(sid)
+            cache[key] = match
+        match = cache[key]
+        linked += match is not None
+        rows.append((uid, e["title"][:200], _iso(e["start"]), _iso(e["end"]),
+                     match["id"] if match else None, "cours" if match else "autre"))
+    db.executemany("INSERT INTO events (user_id, title, start, end, source, subject_id, kind) "
+                   "VALUES (?, ?, ?, ?, 'ics', ?, ?)", rows)
     db.commit()
-    msg = f"{len(events)} créneau(x) occupé(s) importé(s)."
+    msg = f"{len(events)} créneau(x) importé(s), dont {linked} rattaché(s) à une matière."
+    if created:
+        msg += f" Nouvelles matières : {', '.join(created)}."
     if skipped:
         msg += f" {skipped} événement(s) « journée entière » ignoré(s)."
-    regenerate_and_report(g.user["id"], msg)
+    refresh_resources_async(uid, new_ids)
+    regenerate_and_report(uid, msg)
     return redirect(url_for("main.calendar"))
 
 
@@ -403,12 +658,57 @@ def event_add():
         flash("L'heure de fin doit être après l'heure de début.", "error")
         return redirect(url_for("main.calendar"))
     weeks = _int(f.get("repeat_weeks"), 1, 1, 52)
-    title = (f.get("title") or "Occupé").strip()[:200]
-    get_db().executemany(
-        "INSERT INTO events (user_id, title, start, end, source) VALUES (?, ?, ?, ?, 'manuel')",
-        [(g.user["id"], title, _iso(s + timedelta(weeks=k)), _iso(e + timedelta(weeks=k))) for k in range(weeks)])
+    kind = f.get("kind") if f.get("kind") in EVENT_KINDS else "autre"
+    title = (f.get("title") or "").strip()[:200]
+    uid = g.user["id"]
+    db = get_db()
+    slots = [(s + timedelta(weeks=k), e + timedelta(weeks=k)) for k in range(weeks)]
+
+    if kind == "autre":
+        db.executemany("INSERT INTO events (user_id, title, start, end, source, kind) VALUES (?, ?, ?, ?, 'manuel', 'autre')",
+                       [(uid, title or "Occupé", _iso(a), _iso(b)) for a, b in slots])
+        db.commit()
+        regenerate_and_report(uid, f"{weeks} créneau(x) occupé(s) ajouté(s).")
+        return redirect(url_for("main.calendar"))
+
+    if not title and not (f.get("subject") or "").isdigit():
+        flash("Donne un nom au cours ou choisis une matière.", "error")
+        return redirect(url_for("main.calendar"))
+    subject, status, score = resolve_subject(title, f.get("subject") or "auto")
+    title = title or subject["name"]
+    msg = _association_message(title, subject, status, score)
+    if status == "created":
+        refresh_resources_async(uid, [subject["id"]])
+    if kind == "cours":
+        db.executemany("INSERT INTO events (user_id, title, start, end, source, kind, subject_id) "
+                       "VALUES (?, ?, ?, ?, 'manuel', 'cours', ?)",
+                       [(uid, title, _iso(a), _iso(b), subject["id"]) for a, b in slots])
+        label = f"{weeks} cours ajouté(s)."
+    else:  # créneau de révision choisi par l'utilisateur : une séance fixe, jamais déplacée
+        db.executemany("INSERT INTO sessions (user_id, subject_id, start, end, topic, kind, activity, manual) "
+                       "VALUES (?, ?, ?, ?, ?, 'review', ?, 1)",
+                       [(uid, subject["id"], _iso(a), _iso(b),
+                         "Révision libre" if title == subject["name"] else title,
+                         "Créneau de révision choisi par toi") for a, b in slots])
+        label = f"{weeks} créneau(x) de révision ajouté(s)."
+    db.commit()
+    regenerate_and_report(uid, " ".join(x for x in (msg, label) if x))
+    return redirect(url_for("main.calendar"))
+
+
+@bp.route("/agenda/<int:event_id>/matiere", methods=("POST",))
+@login_required
+def event_link(event_id):
+    ev = get_db().execute("SELECT * FROM events WHERE id = ? AND user_id = ?", (event_id, g.user["id"])).fetchone()
+    if ev is None:
+        abort(404)
+    choice = request.form.get("subject", "")
+    sid = own_subject(int(choice))["id"] if choice.isdigit() else None
+    # on rattache aussi les autres occurrences du même cours (même intitulé)
+    get_db().execute("UPDATE events SET subject_id = ?, kind = ? WHERE user_id = ? AND title = ?",
+                     (sid, "cours" if sid else "autre", g.user["id"], ev["title"]))
     get_db().commit()
-    regenerate_and_report(g.user["id"], f"{weeks} créneau(x) ajouté(s).")
+    flash("Rattachement mis à jour pour toutes les occurrences de ce cours.", "success")
     return redirect(url_for("main.calendar"))
 
 
@@ -418,7 +718,16 @@ def event_delete(event_id):
     get_db().execute("DELETE FROM events WHERE id = ? AND user_id = ?", (event_id, g.user["id"]))
     get_db().commit()
     regenerate_and_report(g.user["id"], "Créneau supprimé.")
-    return redirect(url_for("main.calendar"))
+    return redirect(_safe_next(url_for("main.calendar")))
+
+
+@bp.route("/seances/<int:session_id>/supprimer", methods=("POST",))
+@login_required
+def session_delete(session_id):
+    get_db().execute("DELETE FROM sessions WHERE id = ? AND user_id = ? AND manual = 1", (session_id, g.user["id"]))
+    get_db().commit()
+    regenerate_and_report(g.user["id"], "Créneau de révision supprimé.")
+    return redirect(_safe_next(url_for("main.calendar")))
 
 
 @bp.route("/agenda/vider", methods=("POST",))
@@ -448,10 +757,12 @@ def plan():
         "SELECT se.*, su.name AS subject_name FROM sessions se JOIN subjects su ON su.id = se.subject_id "
         "WHERE se.user_id = ? AND se.start >= ? AND se.start < ? ORDER BY se.start",
         (uid, monday.isoformat(), end.isoformat())).fetchall()
-    events = db.execute("SELECT * FROM events WHERE user_id = ? AND start < ? AND end > ? ORDER BY start",
-                        (uid, end.isoformat(), monday.isoformat())).fetchall()
+    events = db.execute(
+        "SELECT e.*, s.name AS subject_name FROM events e LEFT JOIN subjects s ON s.id = e.subject_id "
+        "WHERE e.user_id = ? AND e.start < ? AND e.end > ? ORDER BY e.start",
+        (uid, end.isoformat(), monday.isoformat())).fetchall()
 
-    # Plage horaire affichée : vos heures de travail, élargies si un événement déborde.
+    # Plage horaire affichée : tes heures de travail, élargies si un événement déborde.
     lo = prefs.day_start.hour
     hi = prefs.day_end.hour + (1 if prefs.day_end.minute else 0)
     for r in list(sessions) + list(events):
@@ -489,27 +800,13 @@ def plan():
             "minutes": sum(int((datetime.fromisoformat(s["end"]) - datetime.fromisoformat(s["start"]))
                                .total_seconds() // 60) for s in sessions if s["start"][:10] == ds),
         })
-    now_top = pct(now.hour * 60 + now.minute) if monday <= now.date() < end and lo * 60 <= now.hour * 60 + now.minute < hi * 60 else None
-
-    subjects = db.execute("SELECT id, name FROM subjects WHERE user_id = ? ORDER BY name", (uid,)).fetchall()
-    panel = None
-    sel = request.args.get("matiere", type=int)
-    if sel:
-        s = own_subject(sel)
-        stats = db.execute(
-            "SELECT COUNT(*) AS n, COALESCE(SUM(done), 0) AS done,"
-            " COALESCE(SUM((julianday(end) - julianday(start)) * 1440), 0) AS minutes,"
-            " COALESCE(SUM(CASE WHEN done THEN (julianday(end) - julianday(start)) * 1440 END), 0) AS done_min "
-            "FROM sessions WHERE subject_id = ?", (sel,)).fetchone()
-        upcoming = db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end >= ? ORDER BY start LIMIT 8",
-                              (sel, _iso(now))).fetchall()
-        panel = {"s": s, "stats": stats, "upcoming": upcoming, "topics": subject_topics(s),
-                 "days_left": (date.fromisoformat(s["exam_date"]) - date.today()).days if s["exam_date"] else None}
+    now_min = now.hour * 60 + now.minute
+    now_top = pct(now_min) if monday <= now.date() < end and lo * 60 <= now_min < hi * 60 else None
 
     return render_template("plan.html", days=days, monday=monday, prev=monday - timedelta(days=7),
-                           next=end, today=date.today(), subjects=subjects, panel=panel, sel=sel,
+                           next=end, today=date.today(), subjects=user_subjects(uid),
                            hours=list(range(lo, hi)), now_top=now_top, prefs=prefs,
-                           week_minutes=sum(d["minutes"] for d in days), goals=GOALS, comfort=COMFORT,
+                           week_minutes=sum(d["minutes"] for d in days),
                            kinds=planner.KIND_LABELS, methods=planner.METHODS, now=_iso(now),
                            jours=JOURS_COURTS)
 
@@ -518,7 +815,8 @@ def regenerate(uid: int, only: set[int] | None = None):
     """Recalcule le planning à partir de l'état actuel (préférences, agenda, matières).
 
     `only` : ne replanifie que ces matières ; les séances des autres restent en place
-    et sont traitées comme des créneaux occupés. Retourne None s'il n'y a rien à planifier.
+    et sont traitées comme des créneaux occupés. Les créneaux de révision posés à la main
+    par l'utilisateur (manual = 1) ne sont jamais déplacés. Retourne None s'il n'y a rien à planifier.
     """
     db = get_db()
     now = datetime.now()
@@ -543,9 +841,8 @@ def regenerate(uid: int, only: set[int] | None = None):
         if d["minutes"] + 1 >= planner.study_minutes(comfort.get(d["subject_id"], 3)):
             done_study[d["subject_id"]][d["topic"]] = date.fromisoformat(d["last"])
 
-    # On garde l'historique et les séances déjà faites ; on replanifie le reste.
     ids = [r["id"] for r in rows]
-    db.execute(f"DELETE FROM sessions WHERE user_id = ? AND done = 0 AND start >= ? "
+    db.execute(f"DELETE FROM sessions WHERE user_id = ? AND done = 0 AND manual = 0 AND start >= ? "
                f"AND subject_id IN ({','.join('?' * len(ids))})", (uid, _iso(now), *ids))
     busy = [planner.Busy(datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"]))
             for e in db.execute("SELECT start, end FROM events WHERE user_id = ? AND end >= ?", (uid, _iso(now)))]
@@ -581,15 +878,16 @@ def plan_generate():
         flash("Ajoute d'abord une matière.", "error")
         return redirect(url_for("main.subject_new"))
     regenerate_and_report(g.user["id"], "C'est fait.")
-    return redirect(url_for("main.plan"))
+    return redirect(_safe_next(url_for("main.plan")))
 
 
 @bp.route("/matieres/<int:subject_id>/programme", methods=("POST",))
 @login_required
 def subject_program(subject_id):
-    """Programme de révision d'une seule matière, depuis le panneau du planning."""
+    """Programme de révision d'une seule matière (depuis sa page)."""
     s = own_subject(subject_id)
     f = request.form
+    back = url_for("main.subject_detail", subject_id=subject_id) + "#programme"
     goal = f.get("goal") if f.get("goal") in GOALS else s["goal"]
     exam_date = s["exam_date"]
     if goal == "exam":
@@ -599,7 +897,7 @@ def subject_program(subject_id):
             exam_date = None
         if not exam_date or exam_date <= date.today().isoformat():
             flash("Indique une date d'examen à venir pour construire le programme.", "error")
-            return redirect(url_for("main.plan", matiere=subject_id))
+            return redirect(back)
     else:
         exam_date = None
     try:
@@ -610,9 +908,7 @@ def subject_program(subject_id):
                      (goal, exam_date, _int(f.get("comfort"), s["comfort"], 1, 5), weekly, subject_id))
     get_db().commit()
     regenerate_and_report(g.user["id"], f"Programme de « {s['name']} » construit.", only={subject_id})
-    first = get_db().execute("SELECT MIN(start) FROM sessions WHERE subject_id = ? AND start >= ?",
-                             (subject_id, _iso(datetime.now()))).fetchone()[0]
-    return redirect(url_for("main.plan", matiere=subject_id, semaine=first[:10] if first else None))
+    return redirect(back)
 
 
 @bp.route("/seances/<int:session_id>/fait", methods=("POST",))
@@ -621,10 +917,7 @@ def session_toggle(session_id):
     db = get_db()
     db.execute("UPDATE sessions SET done = 1 - done WHERE id = ? AND user_id = ?", (session_id, g.user["id"]))
     db.commit()
-    nxt = request.form.get("next", "")
-    if not nxt.startswith("/") or nxt.startswith("//"):
-        nxt = url_for("main.plan")
-    return redirect(nxt)
+    return redirect(_safe_next(url_for("main.plan")))
 
 
 @bp.route("/planning/export.ics")

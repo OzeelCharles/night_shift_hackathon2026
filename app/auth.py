@@ -13,6 +13,25 @@ bp = Blueprint("auth", __name__)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 MIN_PASSWORD = 8
 
+# Niveau scolaire : sert à adapter les ressources proposées (requêtes, tri des vidéos, plateformes).
+LEVELS = {
+    "college": "Collège",
+    "lycee": "Lycée",
+    "prepa": "Classe préparatoire",
+    "bts_but": "BTS / BUT",
+    "licence": "Licence (L1 à L3)",
+    "master": "Master",
+    "ecole": "École d'ingénieur ou de commerce",
+    "doctorat": "Doctorat",
+    "autre": "Autre / formation continue",
+}
+SCHOOL_SUGGESTIONS = [
+    "ENSAI", "Université de Rennes", "Université Rennes 2", "INSA Rennes", "Sciences Po Rennes",
+    "Sorbonne Université", "Université Paris Cité", "Université Paris-Saclay", "Université de Lyon",
+    "Université de Bordeaux", "Université de Lille", "Université de Nantes", "École polytechnique",
+    "ENSAE Paris", "CentraleSupélec", "Lycée",
+]
+
 
 def validate_account(email: str, username: str, password: str | None, require_password=True) -> list[str]:
     errors = []
@@ -25,11 +44,22 @@ def validate_account(email: str, username: str, password: str | None, require_pa
     return errors
 
 
-def create_user(email: str, username: str, password: str, role: str = "user") -> int:
+def validate_profile(level: str, school: str) -> list[str]:
+    errors = []
+    if level not in LEVELS:
+        errors.append("Choisis ton niveau d'études.")
+    if not (2 <= len(school) <= 120):
+        errors.append("Indique ton école ou ton université (2 à 120 caractères).")
+    return errors
+
+
+def create_user(email: str, username: str, password: str, role: str = "user",
+                level: str = "autre", school: str = "") -> int:
     db = get_db()
     cur = db.execute(
-        "INSERT INTO users (email, username, password_hash, role) VALUES (?, ?, ?, ?)",
-        (email.lower(), username, generate_password_hash(password), role),
+        "INSERT INTO users (email, username, password_hash, role, level, school) VALUES (?, ?, ?, ?, ?, ?)",
+        (email.lower(), username, generate_password_hash(password), role,
+         level if level in LEVELS else "autre", school.strip()[:120]),
     )
     db.execute("INSERT INTO preferences (user_id) VALUES (?)", (cur.lastrowid,))
     db.commit()
@@ -100,7 +130,9 @@ def register():
         email = request.form.get("email", "").strip().lower()
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        errors = validate_account(email, username, password)
+        level = request.form.get("level", "")
+        school = request.form.get("school", "").strip()
+        errors = validate_account(email, username, password) + validate_profile(level, school)
         if password != request.form.get("password2", ""):
             errors.append("Les mots de passe ne correspondent pas.")
         if not errors and get_db().execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
@@ -109,12 +141,42 @@ def register():
             for e in errors:
                 flash(e, "error")
         else:
-            uid = create_user(email, username, password)
+            uid = create_user(email, username, password, level=level, school=school)
             session.clear()
             session["user_id"] = uid
             flash("Bienvenue ! Règle tes horaires et ta méthode de travail, puis ajoute une matière.", "success")
             return redirect(url_for("main.preferences"))
-    return render_template("auth/register.html")
+    return render_template("auth/register.html", levels=LEVELS, schools=SCHOOL_SUGGESTIONS)
+
+
+@bp.route("/profil", methods=("GET", "POST"))
+@login_required
+def profile():
+    u = g.user
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        level = request.form.get("level", "")
+        school = request.form.get("school", "").strip()
+        errors = validate_profile(level, school)
+        if not (2 <= len(username) <= 40):
+            errors.append("Le nom d'utilisateur doit faire entre 2 et 40 caractères.")
+        if errors:
+            for e in errors:
+                flash(e, "error")
+            return render_template("auth/profile.html", u=request.form, levels=LEVELS, schools=SCHOOL_SUGGESTIONS)
+        db = get_db()
+        changed = (level, school) != (u["level"], u["school"])
+        db.execute("UPDATE users SET username=?, level=?, school=? WHERE id=?", (username, level, school, u["id"]))
+        db.commit()
+        if changed:
+            from .routes import refresh_all_resources_async
+            n = refresh_all_resources_async(u["id"])
+            flash(f"Profil enregistré. Les ressources de tes {n} matière(s) sont en cours d'adaptation "
+                  f"à ton niveau ({LEVELS[level]}) et à {school}." if n else "Profil enregistré.", "success")
+        else:
+            flash("Profil enregistré.", "success")
+        return redirect(url_for("auth.profile"))
+    return render_template("auth/profile.html", u=u, levels=LEVELS, schools=SCHOOL_SUGGESTIONS)
 
 
 @bp.route("/connexion", methods=("GET", "POST"))

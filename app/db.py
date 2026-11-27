@@ -94,3 +94,27 @@ def init_app(app):
     app.teardown_appcontext(close_db)
     with app.app_context():
         get_db().executescript(SCHEMA)
+        migrate(get_db())
+
+
+# Colonnes ajoutées après la première version : on les crée sur les bases existantes
+# sans perdre les données.
+MIGRATIONS = {
+    "users": {"level": "TEXT NOT NULL DEFAULT 'autre'", "school": "TEXT NOT NULL DEFAULT ''"},
+    "subjects": {"resources_status": "TEXT NOT NULL DEFAULT 'ok'", "resources_sig": "TEXT NOT NULL DEFAULT ''"},
+    "events": {"subject_id": "INTEGER REFERENCES subjects(id) ON DELETE SET NULL",
+               "kind": "TEXT NOT NULL DEFAULT 'autre'"},
+    "sessions": {"manual": "INTEGER NOT NULL DEFAULT 0"},
+    "resources": {"kind": "TEXT NOT NULL DEFAULT 'web'", "thumbnail": "TEXT NOT NULL DEFAULT ''",
+                  "meta": "TEXT NOT NULL DEFAULT ''", "saved": "INTEGER NOT NULL DEFAULT 0"},
+}
+
+
+def migrate(db: sqlite3.Connection):
+    for table, columns in MIGRATIONS.items():
+        existing = {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}
+        for name, decl in columns.items():
+            if name not in existing:
+                db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+    db.execute("CREATE INDEX IF NOT EXISTS idx_events_subject ON events(subject_id)")
+    db.commit()

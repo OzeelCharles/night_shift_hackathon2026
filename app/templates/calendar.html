@@ -1,32 +1,70 @@
 {% extends "base.html" %}
-{% block title %}Agenda{% endblock %}
+{% block title %}Mon agenda{% endblock %}
 {% block content %}
 <h1>Mon agenda</h1>
-<p class="muted">Les créneaux ci-dessous sont bloqués : aucune révision n'y sera placée. L'agenda est facultatif.</p>
+<p class="muted">Tes cours et occupations bloquent ces créneaux : aucune révision n'y sera placée. Un cours dont le nom ressemble à une de tes matières y est rattaché automatiquement.</p>
 <div class="grid2">
-  <form method="post" enctype="multipart/form-data" action="{{ url_for('main.calendar_import') }}" class="card">
+  <form method="post" action="{{ url_for('main.event_add') }}" class="card form-grid" data-busy="Ajout et mise à jour du planning…">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <h2>Importer un fichier .ics</h2>
-    <p class="muted small">Export de Google Agenda, Outlook, Apple Calendrier ou de l'emploi du temps de l'ENT. Les cours récurrents sont pris en compte.</p>
-    <input type="file" name="ics" accept=".ics" required>
-    <label class="inline-check"><input type="checkbox" name="replace" checked> Remplacer le précédent import</label>
-    <button class="btn">Importer</button>
-  </form>
-  <form method="post" action="{{ url_for('main.event_add') }}" class="card form-grid">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <h2 class="full">Ajouter un créneau occupé</h2>
-    <label class="full">Intitulé <input name="title" placeholder="Cours, sport, job étudiant…"></label>
+    <h2 class="full">Ajouter un créneau</h2>
+    <fieldset class="full">
+      <legend>C'est…</legend>
+      <div class="segmented segmented-full">
+        {% for key, label in event_kinds.items() %}
+        <label><input type="radio" name="kind" value="{{ key }}" {% if loop.first %}checked{% endif %} onchange="this.form.dataset.kind=this.value"> {{ label }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <label class="full">Intitulé
+      <input name="title" maxlength="200" placeholder="CM Probabilités, TD Droit, sport…">
+      <span class="hint kind-school">Tape le nom du cours tel qu'il apparaît dans ton emploi du temps : « TD Proba » sera rattaché à « Probabilités ». Sans matière proche, une nouvelle matière est créée.</span></label>
+    <label class="full kind-school">Matière
+      <select name="subject">
+        <option value="auto">Détecter automatiquement d'après l'intitulé</option>
+        {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+      </select></label>
     <label>Date <input type="date" name="date" required></label>
     <label>Répéter (semaines) <input type="number" name="repeat_weeks" value="1" min="1" max="52"></label>
     <label>Début <input type="time" name="start" required></label>
     <label>Fin <input type="time" name="end" required></label>
     <div class="full"><button class="btn">Ajouter</button></div>
   </form>
+
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('main.calendar_import') }}" class="card" data-busy="Import et rattachement des cours…">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <h2>Importer mon emploi du temps</h2>
+    <p class="muted small">Fichier .ics exporté de Google Agenda, Outlook, Apple Calendrier ou de l'ENT. Les cours récurrents sont pris en compte.</p>
+    <input type="file" name="ics" accept=".ics" required>
+    <label class="inline-check"><input type="checkbox" name="replace" checked> Remplacer le précédent import</label>
+    <label class="inline-check"><input type="checkbox" name="create_missing"> Créer une matière pour chaque cours qui ne ressemble à aucune de mes matières</label>
+    <button class="btn">Importer</button>
+  </form>
 </div>
+
+{% if revisions %}
+<section class="card">
+  <h2>Mes créneaux de révision ({{ revisions|length }})</h2>
+  <p class="small muted">Posés par toi : ils ne sont jamais déplacés quand le planning est recalculé.</p>
+  <table>
+    <thead><tr><th>Jour</th><th>Horaire</th><th>Matière</th><th>Sujet</th><th></th></tr></thead>
+    <tbody>
+    {% for r in revisions %}
+    <tr class="{% if r.done %}is-done{% endif %}">
+      <td>{{ r.start|jour }}</td><td>{{ r.start|hm }} à {{ r.end|hm }}</td>
+      <td><a class="subj-link hl-{{ r.subject_id % 6 }}" href="{{ url_for('main.subject_detail', subject_id=r.subject_id) }}">{{ r.subject_name }}</a></td>
+      <td>{{ r.topic }}</td>
+      <td><form method="post" action="{{ url_for('main.session_delete', session_id=r.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link danger">Supprimer</button></form></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 <section class="card">
   <div class="page-head">
-    <h2>Créneaux à venir ({{ events|length }})</h2>
+    <h2>Cours et occupations à venir ({{ events|length }})</h2>
     {% if events %}
     <form method="post" action="{{ url_for('main.events_clear') }}" onsubmit="return confirm('Vider tout l\'agenda ?')">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
@@ -36,16 +74,34 @@
   </div>
   {% if events %}
   <table>
-    <thead><tr><th>Jour</th><th>Horaire</th><th>Intitulé</th><th>Source</th><th></th></tr></thead>
+    <thead><tr><th>Jour</th><th>Horaire</th><th>Intitulé</th><th>Matière</th><th></th></tr></thead>
     <tbody>
     {% for e in events %}
-    <tr><td>{{ e.start|jour }}</td><td>{{ e.start|hm }}–{{ e.end|hm }}</td><td>{{ e.title }}</td>
-      <td><span class="tag">{{ e.source }}</span></td>
+    <tr>
+      <td>{{ e.start|jour }}</td><td>{{ e.start|hm }} à {{ e.end|hm }}</td>
+      <td>{% if e.subject_id %}<a href="{{ url_for('main.subject_detail', subject_id=e.subject_id) }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}</td>
+      <td>
+        <form method="post" action="{{ url_for('main.event_link', event_id=e.id) }}" class="link-form">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <select name="subject" onchange="this.form.requestSubmit()" aria-label="Matière rattachée à {{ e.title }}" class="hl-select {% if e.subject_id %}hl-{{ e.subject_id % 6 }}{% endif %}">
+            <option value="">Aucune (occupation)</option>
+            {% for s in subjects %}<option value="{{ s.id }}" {% if s.id == e.subject_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+          </select>
+          <noscript><button class="btn-link">OK</button></noscript>
+        </form>
+      </td>
       <td><form method="post" action="{{ url_for('main.event_delete', event_id=e.id) }}">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link danger">supprimer</button></form></td></tr>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link danger">Supprimer</button></form></td>
+    </tr>
     {% endfor %}
     </tbody>
   </table>
-  {% else %}<p class="muted">Aucun créneau occupé.</p>{% endif %}
+  {% else %}<p class="muted">Aucun créneau pour l'instant.</p>{% endif %}
 </section>
+<script>
+  document.querySelectorAll('form').forEach(f => {
+    const k = f.querySelector('input[name=kind]:checked');
+    if (k) f.dataset.kind = k.value;
+  });
+</script>
 {% endblock %}
