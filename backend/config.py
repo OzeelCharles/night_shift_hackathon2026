@@ -16,6 +16,7 @@ FEATURES = [
     "backend.controllers.admin",
     "backend.controllers.dossier",
     "backend.plugins.revision",  # atelier de révision : fiches, QCM notés, carnet de notes, exercices
+    "backend.plugins.stages",  # recherche de stage : offres, suivi des candidatures, lettres de motivation
 ]
 
 

@@ -71,7 +71,7 @@ def _shrink(data: bytes) -> tuple[bytes, str]:
     return out.getvalue(), "image/jpeg"
 
 
-def _session() -> requests.Session:
+def session() -> requests.Session:
     """Certificats vérifiés avec le magasin du système (antivirus qui inspectent le TLS)."""
     class _Adapter(HTTPAdapter):
         def init_poolmanager(self, *args, **kwargs):
@@ -100,7 +100,7 @@ def ask(image: bytes, prompt: str, as_json: bool = True, max_tokens: int = 4000)
     if as_json:
         body["response_format"] = {"type": "json_object"}
     try:
-        r = _session().post(URL, timeout=120, headers={"Authorization": f"Bearer {api_key()}"}, json=body)
+        r = session().post(URL, timeout=120, headers={"Authorization": f"Bearer {api_key()}"}, json=body)
     except requests.RequestException as e:
         raise VisionError("Groq ne répond pas (connexion impossible).") from e
     if r.status_code in (413, 429):

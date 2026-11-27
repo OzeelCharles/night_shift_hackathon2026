@@ -11,7 +11,7 @@
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Crimson+Pro:wght@600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -76,6 +76,7 @@
             const o = document.createElement('option');
             o.value = s.value;
             o.label = [s.name !== s.value ? s.name : '', s.city, s.kind].filter(Boolean).join(', ');
+            if (s.city) o.dataset.city = s.city;
             return o;
           }));
         } catch (e) { /* hors ligne : saisie libre */ }
@@ -125,9 +126,43 @@
     if (timer) timer.addEventListener('animationend', close);
   });
 
-  // Entrée des blocs de la page, décalée de 40 ms (seulement les premiers, jamais bloquant)
-  [...document.querySelectorAll('main > *')].slice(0, 8).forEach((el, i) => {
-    el.classList.add('reveal'); el.style.setProperty('--i', i);
+  // Phrases à trous : chaque case s'élargit avec ce qu'on y écrit, et se surligne une fois remplie
+  const fit = el => {
+    if (CSS.supports('field-sizing', 'content')) return;
+    const n = Math.max((el.value || el.placeholder || '').length, el.dataset.min ? +el.dataset.min : 3);
+    el.style.width = (n + 1.5) + 'ch';
+  };
+  document.querySelectorAll('.blank').forEach(el => {
+    fit(el);
+    const mark = () => el.classList.toggle('is-filled', !!el.value);
+    mark();
+    el.addEventListener('input', () => { fit(el); mark(); });
+    el.addEventListener('change', mark);
+  });
+
+  // Établissement choisi dans la liste : sa ville remplit « ville d'études » si elle est vide
+  document.querySelectorAll('input[data-city-target]').forEach(input => {
+    input.addEventListener('change', () => {
+      const opt = [...document.getElementById(input.getAttribute('list')).options].find(o => o.value === input.value);
+      const target = document.getElementById(input.dataset.cityTarget);
+      if (opt && opt.dataset.city && target && !target.value) {
+        target.value = opt.dataset.city;
+        target.dispatchEvent(new Event('input'));
+      }
+    });
+  });
+
+  // Suggestions cliquables (compétences…) : ajoutées au champ visé, sans rien retaper
+  document.querySelectorAll('[data-append-to]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const field = document.getElementById(btn.dataset.appendTo);
+      const words = field.value.split(',').map(w => w.trim()).filter(Boolean);
+      if (!words.includes(btn.textContent.trim())) words.push(btn.textContent.trim());
+      field.value = words.join(', ');
+      field.dispatchEvent(new Event('input'));
+      btn.classList.add('is-added');
+      btn.setAttribute('aria-pressed', 'true');
+    });
   });
 
   // Ancres d'une page (matière) : surligne la section visible

@@ -116,6 +116,15 @@ une minute entre deux générations.
   en Markdown (formules en LaTeX) et rangée comme support de cours : chapitres détectés, atelier de révision.
 Code : `backend/dao/vision.py` (appel à Groq), `backend/business/timetable_photo.py` (créneaux tirés de la réponse).
 
+**Recherche de stage** (plugin `backend/plugins/stages/`, espace « Stages » de la barre du haut, tables `stg_*`) :
+- postes recherchés → recherches préremplies sur Indeed, LinkedIn, Glassdoor, Welcome to the Jungle, HelloWork,
+  JobTeaser et Google. Ces sites interdisent l'aspiration de leurs résultats : on ouvre leur propre recherche ;
+- offres suivies avec statut de candidature ; une offre est lue à partir de son lien quand la page publie ses
+  données schema.org `JobPosting` (sinon on recopie l'intitulé et le texte) ;
+- lettres de motivation rédigées par Groq (`openai/gpt-oss-120b`, modifiable par `STAGES_MODEL`) d'après un profil
+  candidat valable pour toute filière (domaine, formation, compétences, expériences), avec ton et langue au choix ;
+  sans clé, une lettre type remplie avec le profil. Lettres modifiables, copiables et téléchargeables.
+
 **Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
 `FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.

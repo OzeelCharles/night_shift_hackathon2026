@@ -1,25 +1,81 @@
 {% extends "base.html" %}
-{% block title %}Mon profil{% endblock %}
+{% set space = none %}
+{% block title %}Mon compte{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <h1>Mon profil</h1>
-  <p class="muted">Changer de niveau ou d'établissement adapte aussitôt les ressources proposées pour toutes tes matières.</p>
-  <form method="post" data-busy="Enregistrement…">
-    {{ csrf_field() }}
-    <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" value="{{ u.username }}"></label>
-    <label>Niveau d'études
-      <select name="level" required>
+<div class="page-head">
+  <div>
+    <h1>Mon compte</h1>
+    <p class="lead">Complète les phrases à ton rythme : seuls ton niveau et ton école sont nécessaires. Le reste remplit tes lettres de motivation à ta place.</p>
+  </div>
+</div>
+
+<form method="post" class="account-form" data-busy="Enregistrement…">
+  {{ csrf_field() }}
+  <section class="sheet" aria-labelledby="h-toi">
+    <h2 id="h-toi">Toi</h2>
+    <p class="madlib">
+      Je m'appelle <input class="blank" name="full_name" maxlength="80" autocomplete="name" placeholder="prénom et nom" value="{{ u.full_name or '' }}" aria-label="Prénom et nom" data-min="12">,
+      et ici on m'appelle <input class="blank" name="username" required minlength="2" maxlength="40" value="{{ u.username }}" aria-label="Nom d'utilisateur">.
+      Je suis né·e le <input class="blank" type="date" name="birth_date" value="{{ u.birth_date or '' }}" aria-label="Date de naissance">
+      et j'habite à <input class="blank" name="home_city" maxlength="80" autocomplete="address-level2" placeholder="ta ville" value="{{ u.home_city or '' }}" aria-label="Ville où tu habites">.
+    </p>
+    <p class="madlib">
+      On peut me joindre au <input class="blank" type="tel" name="phone" maxlength="30" autocomplete="tel" placeholder="06 12 34 56 78" value="{{ u.phone or '' }}" aria-label="Téléphone" data-min="12">{% if g.user.email %} ou à {{ g.user.email }}{% endif %}.
+    </p>
+  </section>
+
+  <section class="sheet" aria-labelledby="h-etudes">
+    <h2 id="h-etudes">Tes études</h2>
+    <p class="madlib">
+      Je suis en
+      <select class="blank" name="level" required aria-label="Niveau d'études">
         {% for key, label in levels.items() %}
         <option value="{{ key }}" {% if u.level == key %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
-      </select></label>
-    <label>École ou université
-      <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
-             data-schools-url="{{ url_for('api.schools') }}" value="{{ u.school }}">
-      <span class="hint">Tape quelques lettres pour chercher parmi tous les établissements de France.</span></label>
+      </select>
+      à <input class="blank" name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
+               data-schools-url="{{ url_for('api.schools') }}" data-city-target="study_city" placeholder="ton école"
+               value="{{ u.school }}" aria-label="École ou université" data-min="14">,
+      à <input class="blank" id="study_city" name="study_city" maxlength="80" placeholder="ville" value="{{ u.study_city or '' }}" aria-label="Ville d'études">.
+    </p>
     <datalist id="schools"></datalist>
-    {% if g.user.email %}<p class="small muted">Compte : {{ g.user.email }}</p>{% endif %}
-    <button class="btn btn-block">Enregistrer mon profil</button>
-  </form>
-</div>
+    <p class="madlib">
+      Mon domaine, c'est <input class="blank" name="field" maxlength="80" list="study-fields" placeholder="le droit, la santé, l'informatique…" value="{{ u.field or '' }}" aria-label="Domaine d'études" data-min="16">,
+      et ma formation s'appelle <input class="blank" name="program" maxlength="120" placeholder="L3 droit privé, BTS MCO, IFSI 2e année…" value="{{ u.program or '' }}" aria-label="Intitulé de la formation" data-min="18">.
+    </p>
+    <datalist id="study-fields">{% for f in study_fields %}<option value="{{ f }}">{% endfor %}</datalist>
+    <p class="madlib">
+      Je parle <input class="blank" name="languages" maxlength="160" placeholder="français, anglais (B2)…" value="{{ u.languages or '' }}" aria-label="Langues parlées" data-min="16">.
+    </p>
+  </section>
+
+  <section class="sheet" aria-labelledby="h-pratique">
+    <h2 id="h-pratique">Côté pratique</h2>
+    <fieldset class="ask">
+      <legend>As-tu le permis de conduire ?</legend>
+      <div class="pills">
+        {% for key, label in licenses.items() %}
+        <label><input type="radio" name="driving_license" value="{{ key }}" {% if u.driving_license == key %}checked{% endif %}><span>{{ label }}</span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <fieldset class="ask">
+      <legend>Cherches-tu un stage ?</legend>
+      <div class="pills">
+        {% for key, label in internship_choices.items() %}
+        <label><input type="radio" name="wants_internship" value="{{ key }}" {% if u.wants_internship == key %}checked{% endif %}><span>{{ label }}</span></label>
+        {% endfor %}
+      </div>
+      <p class="hint">Avec « Non », l'espace Stages disparaît du menu. Tu peux changer d'avis quand tu veux.</p>
+    </fieldset>
+    <p class="madlib">
+      Mon portfolio ou mon profil LinkedIn : <input class="blank" name="website" maxlength="200" inputmode="url" placeholder="linkedin.com/in/…" value="{{ u.website or '' }}" aria-label="Portfolio ou LinkedIn" data-min="16">.
+    </p>
+  </section>
+
+  <div class="savebar">
+    <p class="small muted">Changer de niveau ou d'école adapte aussitôt les ressources proposées dans toutes tes matières.</p>
+    <button class="btn btn-lg">Enregistrer</button>
+  </div>
+</form>
 {% endblock %}

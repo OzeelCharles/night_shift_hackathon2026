@@ -1,4 +1,4 @@
-{# Éléments communs aux barres du haut (page de départ et espace Encadrement). #}
+{# Éléments communs à la barre du haut : marque, espaces, compte, thème. #}
 
 {% macro brand() %}
 <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark" aria-hidden="true"></span>Rivezli</a>
@@ -9,13 +9,13 @@
 {% if g.user %}
 <form method="post" action="{{ url_for('auth.logout') }}" class="logout account">
   {{ csrf_field() }}
-  <a href="{{ url_for('auth.profile') }}" class="profile-link" data-initial="{{ g.user.username[:1] | upper }}"{% if ep == 'auth.profile' %}aria-current="page"{% endif %} title="Mon profil : niveau et établissement">{{ g.user.username }}{% if g.user.school %}<span class="muted">, {{ g.user.school }}</span>{% endif %}</a>
-  <button class="btn-link">Se déconnecter</button>
+  <a href="{{ url_for('auth.profile') }}" class="profile-link" data-initial="{{ (g.user.full_name or g.user.username)[:1] | upper }}"{% if ep == 'auth.profile' %} aria-current="page"{% endif %} title="Mon compte">{{ g.user.full_name or g.user.username }}</a>
+  <button class="btn-link logout-btn">Se déconnecter</button>
 </form>
 {% else %}
 <nav class="account" aria-label="Compte">
   <a href="{{ url_for('auth.login') }}">Se connecter</a>
-  <a class="btn" href="{{ url_for('auth.register') }}">Créer un compte</a>
+  <a class="btn btn-sm" href="{{ url_for('auth.register') }}">Créer un compte</a>
 </nav>
 {% endif %}
 {% endmacro %}
@@ -29,9 +29,11 @@
 
 {% macro nav_links(section, space=none) %}
 {# Entrées de menu fournies par les fonctionnalités (core/features.py), pour une barre donnée.
-   space : l'espace où l'on se trouve (son entrée de la barre du haut est surlignée). #}
+   space : l'espace où l'on se trouve (son entrée de la barre du haut est surlignée).
+   hidden_if : entrée masquée selon le compte (ex. Stages pour qui ne cherche pas de stage). #}
 {% set ep = request.endpoint or '' %}
-{% for item in nav_items if item.section == section and (not item.admin or (g.user and g.user.role == 'admin')) %}
+{% for item in nav_items if item.section == section and (not item.admin or (g.user and g.user.role == 'admin'))
+     and not (item.hidden_if and g.user and g.user[item.hidden_if[0]] == item.hidden_if[1]) %}
 {% set prefix = item.endpoint.split('.')[0] ~ '.' %}
 <a href="{{ url_for(item.endpoint) }}" {% if item.admin %}class="admin-link"{% endif %}
    {% if ep == item.endpoint or (item.opens and item.opens == space) or (item.admin and ep.startswith(prefix)) %}aria-current="page"{% endif %}>{{ item.label }}</a>

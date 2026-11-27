@@ -29,6 +29,7 @@ class NavItem:
     # - sinon le nom d'un espace (« encadrement » par défaut) : ses onglets, dans la seconde barre.
     section: str = "encadrement"
     opens: str | None = None   # pour une entrée « site » : l'espace qu'elle ouvre (surligné quand on y est)
+    hidden_if: tuple[str, str] | None = None  # (colonne du compte, valeur) : entrée masquée si le compte a cette valeur
 
 
 @dataclass

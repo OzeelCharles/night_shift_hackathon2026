@@ -165,7 +165,11 @@ MINUTES = "((julianday(end) - julianday(start)) * 1440)"
 # Colonnes ajoutées après la première version : on les crée sur les bases existantes
 # sans perdre les données.
 MIGRATIONS = {
-    "users": {"level": "TEXT NOT NULL DEFAULT 'autre'", "school": "TEXT NOT NULL DEFAULT ''"},
+    "users": {"level": "TEXT NOT NULL DEFAULT 'autre'", "school": "TEXT NOT NULL DEFAULT ''",
+              # informations personnelles facultatives (préremplissent lettres de motivation et stages)
+              **{c: "TEXT NOT NULL DEFAULT ''" for c in (
+                  "full_name", "birth_date", "phone", "home_city", "study_city", "driving_license",
+                  "wants_internship", "field", "program", "languages", "website")}},
     "subjects": {"resources_status": "TEXT NOT NULL DEFAULT 'ok'", "resources_sig": "TEXT NOT NULL DEFAULT ''",
                  # date d'examen choisie par l'utilisateur (prioritaire) et origine de la date retenue :
                  # manuel, agenda (épreuve de l'emploi du temps) ou derniere_seance (par défaut)

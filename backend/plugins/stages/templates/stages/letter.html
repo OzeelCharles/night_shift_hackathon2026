@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% set space = "stages" %}
+{% block title %}Lettre de motivation{% endblock %}
+{% block content %}
+<style>
+  .stg-letter { width: 100%; min-height: 60vh; font-family: Georgia, "Times New Roman", serif; font-size: 1rem; line-height: 1.55; padding: 20px; }
+  .stg-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+</style>
+<p><a href="{{ url_for('stages.index') }}#lettres">← Stages</a></p>
+<div class="page-head">
+  <div>
+    <h1>Lettre : {{ letter.title }}{% if letter.company %} · {{ letter.company }}{% endif %}</h1>
+    <p class="muted">{{ "Rédigée par Groq" if letter.author == "Groq" else "Lettre type remplie avec ton profil" }}. Relis-la, complète ce qui est [entre crochets] et personnalise-la avant de l'envoyer.</p>
+  </div>
+</div>
+<form method="post" class="card">
+  {{ csrf_field() }}
+  <textarea id="content" name="content" aria-label="Texte de la lettre" class="stg-letter" maxlength="12000">{{ letter.content }}</textarea>
+  <div class="stg-actions">
+    <button class="btn">Enregistrer</button>
+    <button class="btn btn-ghost" type="button" id="copy">Copier</button>
+    <a class="btn btn-ghost" href="{{ url_for('stages.download', letter_id=letter.id) }}">Télécharger (.txt)</a>
+    {% if letter.offer_id %}
+    <button class="btn btn-ghost" form="again">Régénérer</button>
+    {% endif %}
+    <span class="muted small" id="copied" aria-live="polite"></span>
+  </div>
+</form>
+{% if letter.offer_id %}
+<form method="post" action="{{ url_for('stages.generate') }}" id="again" data-busy="Rédaction de la lettre…">
+  {{ csrf_field() }}<input type="hidden" name="offer_id" value="{{ letter.offer_id }}">
+</form>
+{% endif %}
+<form method="post" action="{{ url_for('stages.delete_letter', letter_id=letter.id) }}" onsubmit="return confirm('Supprimer cette lettre ?')">
+  {{ csrf_field() }}<button class="btn-link danger">Supprimer cette lettre</button>
+</form>
+<script>
+  document.getElementById("copy").addEventListener("click", async () => {
+    const text = document.getElementById("content").value, out = document.getElementById("copied");
+    try { await navigator.clipboard.writeText(text); out.textContent = "Lettre copiée."; }
+    catch (e) { out.textContent = "Copie impossible : sélectionne le texte."; }
+  });
+</script>
+{% endblock %}
