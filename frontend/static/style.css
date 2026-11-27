@@ -885,7 +885,6 @@ form[data-kind="autre"] .kind-school { display: none; }
   border: 1px dashed var(--line-strong); border-radius: var(--r-pill); }
 
 .assistant-welcome { padding: 0 14px 6px; }
-.assistant-welcome p { margin: 0 0 10px; }
 .assistant-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .assistant-chips .chip { --hl: var(--ink); font: inherit; font-size: .88rem; font-weight: 700; cursor: pointer; background: var(--ink-soft); color: var(--ink); text-align: left; }
 
