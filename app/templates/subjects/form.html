@@ -12,8 +12,16 @@
   {% elif new %}
   <p class="full small muted">Si le nom ressemble à une de tes matières (« Proba » et « Probabilités »), tout y sera ajouté au lieu de créer un doublon.</p>
   {% endif %}
-  <label class="full">Nom de la matière
-    <input name="name" required maxlength="100" placeholder="Probabilités, droit des contrats, biologie cellulaire…" value="{{ s.name or '' }}" {% if new %}autofocus{% endif %}></label>
+  <div class="full">
+    <label>Nom de la matière
+      <input name="name" required maxlength="100" placeholder="Probabilités, droit des contrats, biologie cellulaire…" value="{{ s.name or '' }}"
+             {% if new %}autofocus autocomplete="off" aria-controls="suggest-box"{% endif %}></label>
+    {% if new %}
+    <div class="suggest-box" id="suggest-box" aria-live="polite"
+         data-url="{{ url_for('main.api_subject_suggestions') }}" data-initial='{{ agenda_suggestions|tojson }}'
+         data-subject-url="{{ url_for('main.subject_detail', subject_id=0) }}"></div>
+    {% endif %}
+  </div>
 
   <fieldset class="full">
     <legend>Objectif</legend>
@@ -25,7 +33,8 @@
     </div>
   </fieldset>
   <label class="goal-exam">Date de l'examen
-    <input type="date" name="exam_date" value="{{ s.exam_date or '' }}"></label>
+    <input type="date" name="exam_date" value="{{ s.exam_date or '' }}">
+    {% if new %}<span class="hint">Laisse vide si l'épreuve est dans ton agenda : la date y sera lue.</span>{% endif %}</label>
   <label class="goal-ajour">Heures par semaine à y consacrer
     <input type="number" name="weekly_hours" min="0.5" max="40" step="0.5" value="{{ s.weekly_hours or 3 }}"></label>
 
@@ -62,5 +71,74 @@
 </form>
 <script>
   document.body.dataset.goal = (document.querySelector('input[name=goal]:checked') || {}).value || 'exam';
+
+  // Suggestions de matières tirées de l'agenda (classées côté serveur par similarité cosinus d'embeddings)
+  (function () {
+    const box = document.getElementById('suggest-box');
+    if (!box) return;
+    const input = document.querySelector('input[name=name]');
+    // une date seule (AAAA-MM-JJ) est lue en heure locale, sinon elle serait décalée d'un jour à l'ouest de Greenwich
+    const fmt = iso => new Date(iso.length === 10 ? iso + 'T00:00' : iso)
+      .toLocaleDateString('fr-FR', {weekday: 'long', day: 'numeric', month: 'long'});
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; };
+
+    function pick(s) {
+      input.value = s.name;
+      if (s.exam_date) {
+        const radio = document.querySelector('input[name=goal][value=exam]');
+        radio.checked = true;
+        document.body.dataset.goal = 'exam';
+        document.querySelector('input[name=exam_date]').value = s.exam_date;
+      }
+      render([s], true);
+      input.focus();
+    }
+
+    function render(items, picked) {
+      box.replaceChildren();
+      if (!items.length) return;
+      box.append(el('p', 'small muted', picked ? 'Choisi dans ton agenda :' :
+        (input.value.trim() ? 'Dans ton agenda, ça ressemble à :' : 'Cours trouvés dans ton agenda, sans matière pour l\'instant :')));
+      const list = el('ul', 'suggest-list');
+      for (const s of items) {
+        const li = el('li');
+        if (s.existing) {
+          li.append(el('span', null, 'Tu as déjà la matière « ' + s.existing.name + ' ». '));
+          const a = el('a', null, 'Ouvrir sa page');
+          a.href = box.dataset.subjectUrl.replace(/0$/, s.existing.id);
+          li.append(a);
+        } else {
+          const b = el('button', 'suggest-item');
+          b.type = 'button';
+          b.append(el('strong', null, s.name));
+          const meta = [];
+          if (s.count) meta.push(s.count + ' cours');
+          if (s.next) meta.push('prochain ' + fmt(s.next));
+          if (meta.length) b.append(el('span', 'small muted', meta.join(', ')));
+          if (s.exam_date) b.append(el('span', 'tag tag-hot', 'Examen ' + fmt(s.exam_date)));
+          if (s.score !== null && s.score !== undefined) b.append(el('span', 'score', Math.round(s.score * 100) + ' %'));
+          b.addEventListener('click', () => pick(s));
+          li.append(b);
+        }
+        list.append(li);
+      }
+      box.append(list);
+    }
+
+    render(JSON.parse(box.dataset.initial || '[]'));
+    let timer, last = '';
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const q = input.value.trim();
+        if (q === last) return;
+        last = q;
+        try {
+          const r = await fetch(box.dataset.url + '?q=' + encodeURIComponent(q));
+          if (r.ok && input.value.trim() === q) render(await r.json());
+        } catch (e) { /* hors ligne : pas de suggestions, le formulaire reste utilisable */ }
+      }, 150);
+    });
+  })();
 </script>
 {% endblock %}

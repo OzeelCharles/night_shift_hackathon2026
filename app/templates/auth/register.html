@@ -16,8 +16,10 @@
         {% endfor %}
       </select></label>
     <label>École ou université
-      <input name="school" required minlength="2" maxlength="120" list="schools" placeholder="ENSAI, Université de Rennes, lycée Chateaubriand…" value="{{ request.form.school }}"></label>
-    <datalist id="schools">{% for s in schools %}<option value="{{ s }}">{% endfor %}</datalist>
+      <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
+             data-schools-url="{{ url_for('main.api_schools') }}" placeholder="Tape quelques lettres : ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}">
+      <span class="hint">Tous les collèges, lycées, universités et écoles de France. Ton établissement n'y est pas ? Écris son nom.</span></label>
+    <datalist id="schools"></datalist>
     <label>Mot de passe (8 caractères min.) <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
     <label>Confirmation <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
     <button class="btn btn-block">Créer mon compte</button>

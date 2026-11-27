@@ -318,3 +318,18 @@ form[data-kind="autre"] .kind-school { display: none; }
 .profile-link:hover, .profile-link[aria-current="page"] { color: var(--ink); text-decoration: underline; }
 .plain-link { color: inherit; text-decoration: none; }
 .plain-link:hover { text-decoration: underline; }
+
+/* ---------- Suggestions de matières (agenda) et examens ---------- */
+.suggest-box:empty { display: none; }
+.suggest-box { margin: -6px 0 16px; }
+.suggest-box p { margin: 0 0 6px; }
+.suggest-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.suggest-item { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 44px; padding: 6px 14px;
+  border: 1.5px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--graphite); font: inherit; cursor: pointer; text-align: left; }
+.suggest-item:hover, .suggest-item:focus-visible { border-color: var(--ink); background: var(--ink-soft); }
+.suggest-item .tag { margin: 0; }
+.score { font-size: .78rem; color: var(--muted); }
+.notice-action { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; border-left: 4px solid var(--margin); }
+.timeline-exam li { border-left-color: var(--margin); }
+.timeline-exam li:first-child { border-left-color: var(--margin); }
+.blk.busy.is-exam { border-left-color: var(--margin); background: color-mix(in srgb, var(--margin) 10%, var(--surface)); }

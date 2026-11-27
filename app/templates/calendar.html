@@ -17,7 +17,7 @@
     </fieldset>
     <label class="full">Intitulé
       <input name="title" maxlength="200" placeholder="CM Probabilités, TD Droit, sport…">
-      <span class="hint kind-school">Tape le nom du cours tel qu'il apparaît dans ton emploi du temps : « TD Proba » sera rattaché à « Probabilités ». Sans matière proche, une nouvelle matière est créée.</span></label>
+      <span class="hint kind-school">Tape le nom du cours tel qu'il apparaît dans ton emploi du temps : « TD Proba » sera rattaché à « Probabilités ». Sans matière proche, une nouvelle matière est créée. Pour un examen, sa date devient celle de la matière.</span></label>
     <label class="full kind-school">Matière
       <select name="subject">
         <option value="auto">Détecter automatiquement d'après l'intitulé</option>
@@ -79,7 +79,8 @@
     {% for e in events %}
     <tr>
       <td>{{ e.start|jour }}</td><td>{{ e.start|hm }} à {{ e.end|hm }}</td>
-      <td>{% if e.subject_id %}<a href="{{ url_for('main.subject_detail', subject_id=e.subject_id) }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}</td>
+      <td>{% if e.subject_id %}<a href="{{ url_for('main.subject_detail', subject_id=e.subject_id) }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}
+        {% if e.kind == 'examen' %}<span class="tag tag-hot">Examen</span>{% endif %}</td>
       <td>
         <form method="post" action="{{ url_for('main.event_link', event_id=e.id) }}" class="link-form">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

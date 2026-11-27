@@ -127,5 +127,7 @@ def clean_title(title: str) -> str:
     parts = re.split(r"\s+[-–|/]\s+|\s*\(.*?\)\s*", title or "")
     words = [w for w in (parts[0] if parts else title).split()
              if w.lower().strip(".:") not in DISPLAY_NOISE and not ROOM.match(w.lower())]
+    while words and words[0].lower() in ("de", "du", "des", "d'", "la", "le", "les", "l'"):
+        words = words[1:]  # « Cours de statistique » -> « statistique », pas « de statistique »
     out = " ".join(words).strip(" -–:")
     return (out[:1].upper() + out[1:]) if out else (title or "").strip()

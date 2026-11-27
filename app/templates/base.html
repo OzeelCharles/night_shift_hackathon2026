@@ -46,6 +46,31 @@
   {% block content %}{% endblock %}
 </main>
 <script>
+  // Autocomplétion des établissements de France (liste locale de ~18 000 collèges, lycées et établissements du supérieur)
+  document.querySelectorAll('input[data-schools-url]').forEach(input => {
+    const list = document.getElementById(input.getAttribute('list'));
+    const level = input.form && input.form.querySelector('select[name=level]');
+    let timer, last = '';
+    input.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const q = input.value.trim();
+        if (q.length < 2 || q === last) return;
+        last = q;
+        try {
+          const r = await fetch(input.dataset.schoolsUrl + '?q=' + encodeURIComponent(q) + '&niveau=' + (level ? level.value : ''));
+          const items = await r.json();
+          list.replaceChildren(...items.map(s => {
+            const o = document.createElement('option');
+            o.value = s.value;
+            o.label = [s.name !== s.value ? s.name : '', s.city, s.kind].filter(Boolean).join(', ');
+            return o;
+          }));
+        } catch (e) { /* hors ligne : saisie libre */ }
+      }, 120);
+    });
+  });
+
   // Retour immédiat pendant les traitements longs (loi de Doherty) : le bouton annonce ce qui se passe.
   document.querySelectorAll('form[data-busy]').forEach(form => {
     form.addEventListener('submit', () => {

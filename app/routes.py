@@ -7,11 +7,11 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from urllib.parse import urlparse
 
-from flask import (Blueprint, Response, abort, current_app, flash, g, redirect, render_template,
+from flask import (Blueprint, Response, abort, current_app, flash, g, jsonify, redirect, render_template,
                    request, send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
-from . import calendar_ics, extractor, matching, planner, resources
+from . import calendar_ics, extractor, matching, planner, resources, schools, suggestions
 from .auth import LEVELS, login_required
 from .db import get_db
 
@@ -20,7 +20,14 @@ bp = Blueprint("main", __name__)
 GOALS = {"exam": "Préparer un examen", "a_jour": "Être à jour dans le cours"}
 COMFORT = {1: "Très difficile", 2: "Difficile", 3: "Moyen", 4: "À l'aise", 5: "Très à l'aise"}
 JOURS_COURTS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
-EVENT_KINDS = {"cours": "Cours en classe", "revision": "Révision que je prévois", "autre": "Autre occupation"}
+EVENT_KINDS = {"cours": "Cours en classe", "examen": "Examen ou partiel", "revision": "Révision que je prévois",
+               "autre": "Autre occupation"}
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre",
+        "novembre", "décembre"]
+
+
+def _date_fr(d: date) -> str:
+    return f"{d.day} {MOIS[d.month - 1]} {d.year}"
 
 
 # ---------------------------------------------------------------- helpers
@@ -90,8 +97,31 @@ def _profile_sig(user) -> str:
     return f"{user['level']}|{user['school']}"
 
 
-def _subject_form():
-    f = request.form
+def agenda_events(uid: int, past_days: int = 60) -> list[dict]:
+    """Événements de l'agenda (récents et à venir) avec le nom de la matière rattachée."""
+    since = (date.today() - timedelta(days=past_days)).isoformat()
+    return [dict(r) for r in get_db().execute(
+        "SELECT e.*, s.name AS subject_name FROM events e LEFT JOIN subjects s ON s.id = e.subject_id "
+        "WHERE e.user_id = ? AND e.end >= ? ORDER BY e.start", (uid, since))]
+
+
+def apply_exam_date(subject, exam_day: date) -> str | None:
+    """Reporte une date d'examen lue dans l'agenda sur la matière, si elle n'en a pas déjà une."""
+    if exam_day <= date.today():
+        return None
+    if subject["exam_date"]:
+        if subject["exam_date"] != exam_day.isoformat():
+            return (f"Ton agenda indique un examen de « {subject['name']} » le {_date_fr(exam_day)}, "
+                    f"mais la matière a déjà une autre date : vérifie sur sa page.")
+        return None
+    get_db().execute("UPDATE subjects SET goal = 'exam', exam_date = ? WHERE id = ?",
+                     (exam_day.isoformat(), subject["id"]))
+    get_db().commit()
+    return f"Date d'examen de « {subject['name']} » lue dans ton agenda : {_date_fr(exam_day)}."
+
+
+def _subject_form(f=None):
+    f = request.form if f is None else f
     errors = []
     name = f.get("name", "").strip()
     goal = f.get("goal", "exam")
@@ -329,12 +359,22 @@ def preferences():
 @login_required
 def subject_new():
     if request.method == "POST":
-        data, errors = _subject_form()
+        form = request.form.to_dict()
+        exam_note = None
+        # Objectif examen sans date saisie : on cherche l'épreuve dans l'emploi du temps.
+        if form.get("goal") == "exam" and not form.get("exam_date") and form.get("name", "").strip():
+            found, ev = suggestions.detect_exam_date(form["name"], agenda_events(g.user["id"]))
+            if found:
+                form["exam_date"] = found.isoformat()
+                exam_note = f"Date d'examen lue dans ton agenda (« {ev['title']} ») : {_date_fr(found)}."
+        data, errors = _subject_form(form)
         if errors:
             for e in errors:
                 flash(e, "error")
-            return render_template("subjects/form.html", s=request.form, goals=GOALS, comfort=COMFORT, new=True,
-                                   force_new=request.form.get("force_new"))
+            return render_template("subjects/form.html", s=form, goals=GOALS, comfort=COMFORT, new=True,
+                                   force_new=form.get("force_new"))
+        if exam_note:
+            flash(exam_note, "info")
         db = get_db()
         files = request.files.getlist("documents")
 
@@ -360,6 +400,17 @@ def subject_new():
 
         sid = create_subject(data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"],
                              topics=data["topics"] or [])
+        # les cours et épreuves de l'agenda au nom proche sont rattachés à la nouvelle matière
+        linked = 0
+        for e in agenda_events(g.user["id"]):
+            if e["subject_id"] is None and not (e["kind"] == "autre" and e["source"] == "manuel") and \
+                    matching.similarity(data["name"], suggestions.course_name(e["title"])) >= matching.THRESHOLD:
+                db.execute("UPDATE events SET subject_id = ?, kind = ? WHERE id = ?",
+                           (sid, "examen" if suggestions.is_exam(e["title"]) else "cours", e["id"]))
+                linked += 1
+        if linked:
+            db.commit()
+            flash(f"{linked} créneau(x) de ton agenda rattaché(s) à « {data['name']} ».", "info")
         doc_topics, messages = _save_documents(sid, files)
         topics = data["topics"] or extractor.clean_topics(doc_topics, limit=40)
         source = "saisis" if data["topics"] else "extraits des documents"
@@ -373,8 +424,23 @@ def subject_new():
         regenerate_and_report(g.user["id"], f"Matière créée avec {len(topics)} chapitres {source}.")
         return redirect(url_for("main.subject_detail", subject_id=sid))
     prefill = {"name": request.args.get("nom", "")}
+    initial = suggestions.suggest("", agenda_events(g.user["id"]), user_subjects(g.user["id"]))
     return render_template("subjects/form.html", s=prefill, goals=GOALS, comfort=COMFORT, new=True,
-                           force_new=request.args.get("nouvelle"))
+                           force_new=request.args.get("nouvelle"), agenda_suggestions=initial)
+
+
+@bp.route("/api/suggestions/matieres")
+@login_required
+def api_subject_suggestions():
+    """Matières suggérées d'après l'agenda, classées par similarité cosinus d'embeddings."""
+    q = request.args.get("q", "")[:100]
+    return jsonify(suggestions.suggest(q, agenda_events(g.user["id"]), user_subjects(g.user["id"])))
+
+
+@bp.route("/api/ecoles")
+def api_schools():
+    """Autocomplétion des établissements de France (accessible aussi à l'inscription)."""
+    return jsonify(schools.search(request.args.get("q", "")[:80], request.args.get("niveau")))
 
 
 @bp.route("/matieres/<int:subject_id>")
@@ -389,6 +455,10 @@ def subject_detail(subject_id):
     else:
         hint = None
     res = db.execute("SELECT * FROM resources WHERE subject_id = ? ORDER BY id", (subject_id,)).fetchall()
+    agenda_exam, agenda_exam_event = suggestions.detect_exam_date(
+        s["name"], [e for e in agenda_events(g.user["id"]) if e["subject_id"] in (None, subject_id)])
+    if agenda_exam and s["exam_date"] == agenda_exam.isoformat():
+        agenda_exam = None  # déjà la bonne date : rien à signaler
     stats = db.execute(
         "SELECT COUNT(*) AS n, COALESCE(SUM(done), 0) AS done,"
         " COALESCE(SUM((julianday(end) - julianday(start)) * 1440), 0) AS minutes,"
@@ -397,8 +467,11 @@ def subject_detail(subject_id):
     return render_template(
         "subjects/detail.html", s=s, topics=subject_topics(s), goals=GOALS, comfort=COMFORT, now=now,
         kinds=planner.KIND_LABELS, stats=stats, hint=hint, today=date.today(),
+        agenda_exam=agenda_exam, agenda_exam_event=agenda_exam_event,
         classes=db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
-                           "ORDER BY start LIMIT 6", (subject_id, g.user["id"], now)).fetchall(),
+                           "AND kind != 'examen' ORDER BY start LIMIT 6", (subject_id, g.user["id"], now)).fetchall(),
+        exams=db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
+                         "AND kind = 'examen' ORDER BY start", (subject_id, g.user["id"], now)).fetchall(),
         upcoming=db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end >= ? ORDER BY start LIMIT 8",
                             (subject_id, now)).fetchall(),
         history=db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end < ? ORDER BY start DESC LIMIT 40",
@@ -605,7 +678,8 @@ def calendar_import():
         flash("Choisis un fichier .ics (export de Google Agenda, Outlook, ENT...).", "error")
         return redirect(url_for("main.calendar"))
     text = f.read().decode("utf-8", errors="ignore")
-    events, skipped = calendar_ics.parse_ics(text, datetime.combine(date.today(), time()))
+    events, skipped = calendar_ics.parse_ics(text, datetime.combine(date.today(), time()),
+                                             keep_allday=suggestions.is_exam)
     db = get_db()
     uid = g.user["id"]
     if request.form.get("replace"):
@@ -614,13 +688,16 @@ def calendar_import():
     subjects = list(user_subjects(uid))
     cache: dict[str, tuple] = {}
     created, linked, new_ids = [], 0, []
+    exams: dict[int, date] = {}
     rows = []
     for e in events:
-        key = matching.normalize(e["title"])
+        exam = suggestions.is_exam(e["title"])
+        name = suggestions.course_name(e["title"]) if exam else e["title"]
+        key = matching.normalize(name)
         if key not in cache:
-            match, _ = matching.best_match(e["title"], subjects)
+            match, _ = matching.best_match(name, subjects)
             if match is None and create and key:
-                sid = create_subject(matching.clean_title(e["title"]), topics=list(planner.DEFAULT_TOPICS))
+                sid = create_subject(suggestions.course_name(e["title"]), topics=list(planner.DEFAULT_TOPICS))
                 match = own_subject(sid)
                 subjects.append(match)
                 created.append(match["name"])
@@ -628,8 +705,10 @@ def calendar_import():
             cache[key] = match
         match = cache[key]
         linked += match is not None
-        rows.append((uid, e["title"][:200], _iso(e["start"]), _iso(e["end"]),
-                     match["id"] if match else None, "cours" if match else "autre"))
+        if exam and match is not None and e["start"].date() > date.today():
+            exams[match["id"]] = min(exams.get(match["id"], e["start"].date()), e["start"].date())
+        kind = "examen" if exam else ("cours" if match else "autre")
+        rows.append((uid, e["title"][:200], _iso(e["start"]), _iso(e["end"]), match["id"] if match else None, kind))
     db.executemany("INSERT INTO events (user_id, title, start, end, source, subject_id, kind) "
                    "VALUES (?, ?, ?, ?, 'ics', ?, ?)", rows)
     db.commit()
@@ -638,6 +717,10 @@ def calendar_import():
         msg += f" Nouvelles matières : {', '.join(created)}."
     if skipped:
         msg += f" {skipped} événement(s) « journée entière » ignoré(s)."
+    for sid, day in exams.items():
+        note = apply_exam_date(own_subject(sid), day)
+        if note:
+            flash(note, "info")
     refresh_resources_async(uid, new_ids)
     regenerate_and_report(uid, msg)
     return redirect(url_for("main.calendar"))
@@ -674,16 +757,22 @@ def event_add():
     if not title and not (f.get("subject") or "").isdigit():
         flash("Donne un nom au cours ou choisis une matière.", "error")
         return redirect(url_for("main.calendar"))
-    subject, status, score = resolve_subject(title, f.get("subject") or "auto")
-    title = title or subject["name"]
+    # pour un examen, on rapproche le nom de la matière sans les mots « partiel », « DS »…
+    lookup = suggestions.course_name(title) if kind == "examen" and title else title
+    subject, status, score = resolve_subject(lookup, f.get("subject") or "auto")
+    title = title or (f"Examen de {subject['name']}" if kind == "examen" else subject["name"])
     msg = _association_message(title, subject, status, score)
     if status == "created":
         refresh_resources_async(uid, [subject["id"]])
-    if kind == "cours":
+    if kind in ("cours", "examen"):
         db.executemany("INSERT INTO events (user_id, title, start, end, source, kind, subject_id) "
-                       "VALUES (?, ?, ?, ?, 'manuel', 'cours', ?)",
-                       [(uid, title, _iso(a), _iso(b), subject["id"]) for a, b in slots])
-        label = f"{weeks} cours ajouté(s)."
+                       "VALUES (?, ?, ?, ?, 'manuel', ?, ?)",
+                       [(uid, title, _iso(a), _iso(b), kind, subject["id"]) for a, b in slots])
+        label = f"{weeks} cours ajouté(s)." if kind == "cours" else "Examen ajouté à ton agenda."
+        if kind == "examen":
+            db.commit()
+            note = apply_exam_date(own_subject(subject["id"]), slots[0][0].date())
+            msg = " ".join(x for x in (msg, note) if x)
     else:  # créneau de révision choisi par l'utilisateur : une séance fixe, jamais déplacée
         db.executemany("INSERT INTO sessions (user_id, subject_id, start, end, topic, kind, activity, manual) "
                        "VALUES (?, ?, ?, ?, ?, 'review', ?, 1)",
@@ -705,8 +794,9 @@ def event_link(event_id):
     choice = request.form.get("subject", "")
     sid = own_subject(int(choice))["id"] if choice.isdigit() else None
     # on rattache aussi les autres occurrences du même cours (même intitulé)
+    kind = ("examen" if suggestions.is_exam(ev["title"]) else "cours") if sid else "autre"
     get_db().execute("UPDATE events SET subject_id = ?, kind = ? WHERE user_id = ? AND title = ?",
-                     (sid, "cours" if sid else "autre", g.user["id"], ev["title"]))
+                     (sid, kind, g.user["id"], ev["title"]))
     get_db().commit()
     flash("Rattachement mis à jour pour toutes les occurrences de ce cours.", "success")
     return redirect(url_for("main.calendar"))

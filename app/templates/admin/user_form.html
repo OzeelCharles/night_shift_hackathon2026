@@ -14,7 +14,9 @@
     <select name="level">
       {% for key, label in levels.items() %}<option value="{{ key }}" {% if (u.level or 'autre') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select></label>
-  <label>École ou université <input name="school" maxlength="120" value="{{ u.school or '' }}"></label>
+  <label>École ou université <input name="school" maxlength="120" list="schools" autocomplete="off"
+         data-schools-url="{{ url_for('main.api_schools') }}" value="{{ u.school or '' }}"></label>
+  <datalist id="schools"></datalist>
   <label>Rôle
     <select name="role">
       <option value="user" {% if u.role != 'admin' %}selected{% endif %}>Utilisateur</option>

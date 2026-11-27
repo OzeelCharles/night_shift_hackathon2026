@@ -79,8 +79,13 @@ def _expand(start: datetime, rule: str, exdates: set[datetime], until_window: da
     return out
 
 
-def parse_ics(text: str, window_start: datetime, window_days: int = 180) -> tuple[list[dict], int]:
-    """Retourne (événements [{title,start,end}], nombre d'événements journée entière ignorés)."""
+def parse_ics(text: str, window_start: datetime, window_days: int = 180,
+              keep_allday=None) -> tuple[list[dict], int]:
+    """Retourne (événements [{title,start,end}], nombre d'événements journée entière ignorés).
+
+    keep_allday(titre) -> bool : garde certains événements « journée entière » (ex. un partiel
+    noté sur toute la journée), placés de 8 h à 18 h pour bloquer les révisions ce jour-là.
+    """
     window_end = window_start + timedelta(days=window_days)
     events, skipped = [], 0
     cur: dict | None = None
@@ -91,6 +96,10 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180) -> tupl
         if line == "END:VEVENT":
             if cur is not None:
                 start, end = cur.get("start"), cur.get("end")
+                if isinstance(start, date) and not isinstance(start, datetime) and keep_allday \
+                        and keep_allday(cur.get("title", "")):
+                    start = datetime.combine(start, datetime.min.time()).replace(hour=8)
+                    end = start.replace(hour=18)
                 if start is None or not isinstance(start, datetime):
                     skipped += start is not None
                 else:

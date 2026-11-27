@@ -35,6 +35,20 @@
 </div>
 {% endif %}
 
+{% if agenda_exam %}
+<div class="notice notice-action">
+  <p>Ton agenda contient « {{ agenda_exam_event.title }} » le <strong>{{ agenda_exam|datefr }}</strong>{% if s.exam_date %}, mais cette matière a pour date d'examen le {{ s.exam_date|datefr }}{% else %} : cette matière n'a pas encore de date d'examen{% endif %}.</p>
+  <form method="post" action="{{ url_for('main.subject_program', subject_id=s.id) }}" data-busy="Construction du programme…">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="goal" value="exam">
+    <input type="hidden" name="exam_date" value="{{ agenda_exam.isoformat() }}">
+    <input type="hidden" name="comfort" value="{{ s.comfort }}">
+    <input type="hidden" name="weekly_hours" value="{{ s.weekly_hours }}">
+    <button class="btn btn-sm">Préparer l'examen du {{ agenda_exam|datefr }}</button>
+  </form>
+</div>
+{% endif %}
+
 <nav class="anchors" aria-label="Sections de la page">
   <a href="#horaires">Horaires</a><a href="#programme">Programme</a><a href="#supports">Supports ({{ docs|length }})</a>
   <a href="#mes-ressources">Mes ressources ({{ saved|length }})</a><a href="#videos">Vidéos</a><a href="#proposees">Ressources proposées</a>
@@ -42,6 +56,14 @@
 
 <div class="grid2" id="horaires">
   <section class="card">
+    {% if exams %}
+    <h2>Épreuves à venir</h2>
+    <ul class="timeline timeline-exam">
+      {% for x in exams %}
+      <li><span class="when">{{ x.start|jour }}, {{ x.start|hm }} à {{ x.end|hm }}</span><span>{{ x.title }}</span></li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     <h2>Prochains cours</h2>
     {% if classes %}
     <ul class="timeline">

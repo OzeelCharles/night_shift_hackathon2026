@@ -47,6 +47,29 @@ python -m unittest discover -s tests -t .
 
 Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 
+## Agenda intelligent
+
+- **Rapprochement des noms** (`app/matching.py`) : « TD Proba B204 » est rattaché à la matière « Probabilités »
+  par similarité cosinus sur les mots (racines, abréviations), seuil 0,75 calibré sur des cas réels.
+- **Suggestions de matières** (`app/embeddings.py`, `app/suggestions.py`) : à la création d'une matière, les cours
+  de l'agenda sans matière sont proposés, puis classés pendant la saisie par similarité cosinus entre embeddings.
+  Les embeddings sont des vecteurs de 512 dimensions obtenus par hachage de traits (racines, débuts de mots,
+  n-grammes de caractères), sans modèle à télécharger ; `embed()` est le seul point à remplacer pour brancher
+  un modèle sémantique.
+- **Dates d'examen** : un événement « Partiel de probabilités », « DS de maths », « Examen final - Droit »… fixe la date
+  d'examen de la matière correspondante (y compris les épreuves notées « journée entière » dans le .ics).
+
+## Établissements de France
+
+L'autocomplétion de l'école ou de l'université (inscription, profil, admin) cherche parmi environ 18 000 collèges,
+lycées et établissements du supérieur, dans `app/data/ecoles_france.json`. Ce fichier est construit à partir des
+données publiques de l'Éducation nationale et de l'Enseignement supérieur (annuaire de l'éducation, Parcoursup,
+Mon Master…). Pour le mettre à jour :
+
+```powershell
+python scripts/build_schools.py
+```
+
 ## Structure
 
 ```
@@ -54,12 +77,18 @@ app/
   planner.py       moteur de planification (pur Python, testé)
   extractor.py     extraction du texte et des chapitres des documents
   calendar_ics.py  lecture/écriture iCalendar (récurrences comprises)
-  resources.py     recherche de ressources (Wikipédia, web, plateformes)
-  auth.py          inscription, connexion, rôles
+  matching.py      rapprochement des noms de cours (similarité cosinus)
+  embeddings.py    embeddings d'intitulés et classement par similarité cosinus
+  suggestions.py   suggestions de matières depuis l'agenda, lecture des dates d'examen
+  schools.py       autocomplétion des établissements de France
+  resources.py     recherche de ressources (Wikipédia, web, vidéos, plateformes) selon le niveau
+  auth.py          inscription, connexion, profil, rôles
   admin.py         espace administrateur (CRUD)
   routes.py        pages de l'application
-  db.py            schéma SQLite
+  db.py            schéma SQLite et migrations
+  data/            liste des établissements de France
   templates/, static/
+scripts/build_schools.py
 run.py
 tests/
 ```

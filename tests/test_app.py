@@ -244,6 +244,66 @@ class AppTests(unittest.TestCase):
         self.client.post(f"/agenda/{eid}/matiere", data={"subject": ""})
         self.assertIsNone(self.q("SELECT subject_id FROM events WHERE id = ?", eid)[0]["subject_id"])
 
+    # ---------------------------------------------------------------- suggestions & examens
+    def test_subject_suggestions_from_agenda(self):
+        self.register()
+        exam_day = (date.today() + timedelta(days=15)).isoformat()
+        # cours importés sans matière (cas typique d'un emploi du temps)
+        d = (date.today() + timedelta(days=2)).strftime("%Y%m%d")
+        x = exam_day.replace("-", "")
+        ics = ("BEGIN:VCALENDAR\r\n"
+               f"BEGIN:VEVENT\r\nSUMMARY:CM Probabilités - Amphi B\r\nDTSTART:{d}T100000\r\nDTEND:{d}T120000\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\nEND:VEVENT\r\n"
+               f"BEGIN:VEVENT\r\nSUMMARY:TD Droit des contrats\r\nDTSTART:{d}T140000\r\nDTEND:{d}T160000\r\nEND:VEVENT\r\n"
+               f"BEGIN:VEVENT\r\nSUMMARY:Partiel de probabilités\r\nDTSTART;VALUE=DATE:{x}\r\nEND:VEVENT\r\n"
+               "END:VCALENDAR\r\n").encode()
+        self.client.post("/agenda/import", data={"ics": (io.BytesIO(ics), "edt.ics")}, content_type="multipart/form-data")
+        exam_ev = self.q("SELECT * FROM events WHERE title LIKE 'Partiel%'")
+        self.assertEqual(len(exam_ev), 1, "un partiel « journée entière » est gardé")
+        self.assertEqual(exam_ev[0]["kind"], "examen")
+        # sans saisie : les cours de l'agenda sont proposés
+        initial = self.client.get("/api/suggestions/matieres").get_json()
+        names = [s["name"] for s in initial]
+        self.assertEqual(names[0], "Probabilités", "le cours le plus fréquent d'abord")
+        self.assertIn("Droit des contrats", names)
+        proba = initial[0]
+        self.assertEqual(proba["exam_date"], exam_day, "date d'examen lue dans l'emploi du temps")
+        self.assertEqual(proba["count"], 3)
+        # en tapant : classement par similarité cosinus d'embeddings
+        typed = self.client.get("/api/suggestions/matieres?q=dro").get_json()
+        self.assertEqual(typed[0]["name"], "Droit des contrats")
+        self.assertGreater(typed[0]["score"], 0.25)
+        self.assertIn("Probabilités", self.client.get("/matieres/nouvelle").get_data(as_text=True))
+        # création avec objectif examen sans date : la date est lue dans l'agenda
+        self.client.post("/matieres/nouvelle", data={"name": "Probabilités", "goal": "exam", "exam_date": "",
+                                                     "comfort": "3", "topics": "A"})
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual((s["goal"], s["exam_date"]), ("exam", exam_day))
+        linked = self.q("SELECT COUNT(*) AS n FROM events WHERE subject_id = ?", s["id"])[0]["n"]
+        self.assertEqual(linked, 4, "3 cours + le partiel rattachés à la nouvelle matière")
+        after = self.client.get("/api/suggestions/matieres?q=proba").get_json()
+        self.assertEqual(after[0]["existing"]["id"], s["id"], "signale la matière déjà créée")
+        self.assertNotIn("Probabilités", [x["name"] for x in self.client.get("/api/suggestions/matieres").get_json()])
+
+    def test_exam_slot_sets_subject_exam_date(self):
+        self.register()
+        self.new_subject("Droit des contrats")
+        day = (date.today() + timedelta(days=12)).isoformat()
+        self.add_slot("Partiel droit des contrats", kind="examen", day=day, start="09:00", end="12:00")
+        s = self.q("SELECT goal, exam_date FROM subjects WHERE id = 1")[0]
+        self.assertEqual((s["goal"], s["exam_date"]), ("exam", day))
+        page = self.client.get("/matieres/1").get_data(as_text=True)
+        self.assertIn("Épreuves à venir", page)
+        # une autre date dans l'agenda : la page propose de l'utiliser, sans écraser
+        other = (date.today() + timedelta(days=20)).isoformat()
+        self.client.post("/matieres/1/programme", data={"goal": "exam", "exam_date": other, "comfort": "3"})
+        page = self.client.get("/matieres/1").get_data(as_text=True)
+        self.assertIn("Préparer l'examen du", page)
+
+    def test_schools_api_is_public(self):
+        r = self.client.get("/api/ecoles?q=ensai")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()[0]["value"], "ENSAI")
+
     # ---------------------------------------------------------------- ressources
     def test_keep_and_remove_resources(self):
         self.register(level="master", school="ENSAI")

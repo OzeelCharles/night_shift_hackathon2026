@@ -73,7 +73,7 @@
       {% set r = b.row %}
       {% if b.type == 'event' %}
         {% if r.subject_id %}
-        <a class="blk busy is-course hl-{{ r.subject_id % 6 }} {% if b.short %}is-short{% endif %}" style="top:{{ b.top }}%;height:{{ b.height }}%"
+        <a class="blk busy is-course hl-{{ r.subject_id % 6 }} {% if b.short %}is-short{% endif %} {% if r.kind == 'examen' %}is-exam{% endif %}" style="top:{{ b.top }}%;height:{{ b.height }}%"
            href="{{ url_for('main.subject_detail', subject_id=r.subject_id) }}" title="Cours de {{ r.subject_name }} : {{ r.title }} ({{ r.start|hm }}–{{ r.end|hm }})">
           <span class="t">{{ r.start|hm }}–{{ r.end|hm }}</span> <strong>{{ r.title }}</strong>
         </a>
