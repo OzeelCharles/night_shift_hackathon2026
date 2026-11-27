@@ -63,13 +63,8 @@ CREATE INDEX IF NOT EXISTS idx_rev_quizzes_subject ON rev_quizzes(subject_id, su
 """
 
 
-def init_schema() -> None:
-    db = get_db()
-    db.executescript(SCHEMA)
-    columns = {r["name"] for r in db.execute("PRAGMA table_info(rev_notebooks)")}
-    for column in ("url", "source"):  # tables créées avant l'ajout des notebooks trouvés en ligne
-        if column not in columns:
-            db.execute(f"ALTER TABLE rev_notebooks ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+# Colonnes ajoutées après la création des tables (notebooks trouvés en ligne)
+MIGRATIONS = {"rev_notebooks": {"url": "TEXT NOT NULL DEFAULT ''", "source": "TEXT NOT NULL DEFAULT ''"}}
 
 
 # ---------------------------------------------------------------- difficulté

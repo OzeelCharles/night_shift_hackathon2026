@@ -18,6 +18,8 @@ import random
 
 from flask import current_app
 
+from backend.dao import groq
+
 MAX_PDF_BYTES = 24 * 1024 * 1024  # la requête est limitée à 32 Mo, base64 compris
 SYSTEM = (
     "Tu es un professeur exigeant qui prépare des révisions à partir des supports de cours fournis. "
@@ -37,7 +39,6 @@ class AIError(Exception):
     """Génération impossible (pas de clé, réseau, refus, réponse inexploitable)."""
 
 
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-120b"
 # Offre gratuite de Groq : 8 000 jetons par minute, entrée et sortie comprises (≈ 3 caractères par jeton).
 GROQ_MAX_CHARS = 9_000  # extrait du cours envoyé, réparti entre les supports
@@ -57,27 +58,15 @@ def available() -> bool:
     return bool(api_key())
 
 
-def _read_key(config_name: str, filename: str) -> str:
-    key = current_app.config.get(config_name) or os.environ.get(config_name, "")
-    path = os.path.join(current_app.instance_path, filename)
-    if not key and os.path.isfile(path):
-        with open(path, encoding="utf-8") as f:
-            key = f.read().strip()
-    return key
-
-
 def api_key() -> str:
     """Clé de l'API, dans l'ordre : variable d'environnement ANTHROPIC_API_KEY, puis fichier
     instance/anthropic_api_key (le dossier instance/ est ignoré par git, comme la clé secrète du site)."""
-    return _read_key("ANTHROPIC_API_KEY", "anthropic_api_key")
+    return groq.read_key("ANTHROPIC_API_KEY", "anthropic_api_key")
 
 
 def groq_key() -> str:
     """GROQ_API_KEY (variable ou instance/groq_api_key), ou une clé « gsk_ » rangée à la place de celle de Claude."""
-    key = _read_key("GROQ_API_KEY", "groq_api_key")
-    if not key and api_key().startswith("gsk_"):
-        key = api_key()
-    return key
+    return groq.api_key()
 
 
 def provider() -> str:
@@ -122,28 +111,8 @@ def _ask(course: list[dict], task: str, schema: dict) -> dict:
     return _ask_claude(course, task, schema)
 
 
-def _system_certs_session():
-    """Session requests qui vérifie les certificats avec le magasin du système plutôt que certifi :
-    un antivirus qui inspecte le TLS (Norton, Kaspersky…) n'ajoute sa racine qu'au magasin du système."""
-    import ssl
-
-    import requests
-    from requests.adapters import HTTPAdapter
-
-    class _Adapter(HTTPAdapter):
-        def init_poolmanager(self, *args, **kwargs):
-            kwargs["ssl_context"] = ssl.create_default_context()
-            return super().init_poolmanager(*args, **kwargs)
-
-    session = requests.Session()
-    session.mount("https://", _Adapter())
-    return session
-
-
 def _ask_groq(course: list[dict], task: str, schema: dict) -> dict:
     """Mode JSON de Groq : le schéma est donné dans la consigne, la réponse est un objet JSON."""
-    import requests
-
     docs = [b for b in course if b["source"]["type"] == "text"]
     share = current_app.config.get("REVISION_GROQ_MAX_CHARS", GROQ_MAX_CHARS) // max(len(docs), 1)
     text = "\n\n".join(f"=== Support : {b['title']} (extrait) ===\n{' '.join(b['source']['data'].split())[:share]}"
@@ -154,27 +123,13 @@ def _ask_groq(course: list[dict], task: str, schema: dict) -> dict:
               "Réponds uniquement par un objet JSON conforme à ce schéma JSON (toutes les clés sont obligatoires) :\n"
               f"{json.dumps(schema, ensure_ascii=False)}")
     try:
-        r = _system_certs_session().post(GROQ_URL, timeout=120, headers={"Authorization": f"Bearer {groq_key()}"}, json={
-            "model": current_app.config.get("REVISION_GROQ_MODEL", GROQ_MODEL),
-            "temperature": 0.4,
-            "max_tokens": current_app.config.get("REVISION_GROQ_MAX_TOKENS", GROQ_MAX_TOKENS),
-            "response_format": {"type": "json_object"},
-            "messages": [{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}],
-        })
-    except requests.RequestException as e:
-        raise AIError("Groq ne répond pas (connexion impossible).") from e
-    if r.status_code in (413, 429):
-        current_app.logger.warning("Atelier de révision : quota Groq (%s)", r.text[:300])
-        raise AIError("Quota de Groq atteint : réessaie dans une minute ou demande moins d'éléments.")
-    if r.status_code == 400 and "json_validate_failed" in r.text:
-        raise AIError("Groq a renvoyé un JSON invalide (réponse sans doute trop longue) : réessaie.")
-    if r.status_code != 200:
-        current_app.logger.warning("Atelier de révision : erreur Groq %s (%s)", r.status_code, r.text[:300])
-        raise AIError(f"Groq a renvoyé une erreur ({r.status_code}).")
-    try:
-        out = json.loads(r.json()["choices"][0]["message"]["content"])
-    except (ValueError, KeyError, IndexError) as e:
-        raise AIError("Réponse de Groq illisible.") from e
+        out = groq.chat([{"role": "system", "content": SYSTEM}, {"role": "user", "content": prompt}],
+                        model=current_app.config.get("REVISION_GROQ_MODEL", GROQ_MODEL), temperature=0.4,
+                        max_tokens=current_app.config.get("REVISION_GROQ_MAX_TOKENS", GROQ_MAX_TOKENS), as_json=True)
+    except groq.GroqError as e:
+        raise AIError(str(e)) from e
+    if not isinstance(out, dict):
+        raise AIError("Réponse de Groq illisible.")
     missing = [k for k in schema["required"] if k not in out]
     if missing:
         raise AIError(f"Réponse de Groq incomplète (manque : {', '.join(missing)}).")

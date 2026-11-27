@@ -45,9 +45,31 @@ class ProfilePageTests(unittest.TestCase):
         with self.app.app_context():
             return dict(get_db().execute("SELECT * FROM users WHERE email = 'e@test.fr'").fetchone())
 
+    def test_onboarding_window_once_after_signup(self):
+        first = self.client.get("/preferences").get_data(as_text=True)
+        self.assertIn('<dialog class="modal" id="onboarding"', first, "fenêtre ouverte juste après l'inscription")
+        self.assertIn('action="/profil/infos"', first)
+        self.assertNotIn('id="onboarding"', self.client.get("/preferences").get_data(as_text=True), "une seule fois")
+        r = self.client.post("/profil/infos", data={"full_name": "Léa Martin", "home_city": "Rennes",
+                                                    "driving_license": "en_cours", "next": "/preferences"})
+        self.assertTrue(r.headers["Location"].endswith("/preferences"), "retour à la page d'où vient la fenêtre")
+        u = self.user()
+        self.assertEqual((u["full_name"], u["home_city"], u["driving_license"], u["level"], u["school"]),
+                         ("Léa Martin", "Rennes", "en_cours", "licence", "ENSAI"), "le reste du compte est intact")
+
+    def test_onboarding_errors_open_the_full_profile(self):
+        page = self.client.post("/profil/infos", data={"phone": "abc", "home_city": "Brest"}).get_data(as_text=True)
+        self.assertIn("Numéro de téléphone invalide.", page)
+        self.assertIn('value="Brest"', page, "la saisie est conservée")
+        self.assertIn('value="ENSAI"', page, "le formulaire complet est prérempli avec le compte")
+        self.assertEqual(self.user()["home_city"], "")
+        self.assertEqual(self.client.post("/profil/infos", data={"next": "https://ailleurs.example"}).headers["Location"],
+                         "/tableau-de-bord", "pas de redirection vers un autre site")
+
     def test_save_and_show_details(self):
         page = self.client.get("/profil").get_data(as_text=True)
-        self.assertIn('class="madlib"', page, "le compte se remplit en phrases à trous")
+        self.assertIn('<label>Ville où tu habites <input name="home_city"', page, "formulaire classique")
+        self.assertNotIn('class="madlib"', page)
         self.client.post("/profil", data={"username": "Léa", "level": "licence", "school": "ENSAI",
                                           "full_name": "Léa Martin", "birth_date": "2004-03-01",
                                           "home_city": "Rennes", "study_city": "Bruz", "driving_license": "oui",

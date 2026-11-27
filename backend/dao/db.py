@@ -193,12 +193,26 @@ MIGRATIONS = {
 }
 
 
-def migrate(db: sqlite3.Connection):
-    for table, columns in MIGRATIONS.items():
+def add_columns(db: sqlite3.Connection, migrations: dict[str, dict[str, str]]) -> None:
+    """Ajoute les colonnes manquantes ({table: {colonne: déclaration}}) sans toucher aux données."""
+    for table, columns in migrations.items():
         existing = {r["name"] for r in db.execute(f"PRAGMA table_info({table})")}
         for name, decl in columns.items():
             if name not in existing:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
+
+
+def install(schema: str = "", migrations: dict[str, dict[str, str]] | None = None) -> None:
+    """Tables d'une fonctionnalité enfichable (CREATE … IF NOT EXISTS) puis ses colonnes ajoutées depuis."""
+    db = get_db()
+    if schema:
+        db.executescript(schema)
+    add_columns(db, migrations or {})
+    db.commit()
+
+
+def migrate(db: sqlite3.Connection):
+    add_columns(db, MIGRATIONS)
     db.execute("CREATE INDEX IF NOT EXISTS idx_events_subject ON events(subject_id)")
     if db.execute("PRAGMA user_version").fetchone()[0] < 1:
         # Dates d'examen enregistrées avant l'existence de exam_source : on les considère comme

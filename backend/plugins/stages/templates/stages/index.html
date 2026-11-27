@@ -10,6 +10,10 @@
   .stg-me { font-family: var(--font-display); font-size: clamp(1.2rem, 1rem + .8vw, 1.55rem); line-height: 1.45; max-width: 44ch; margin-bottom: .5em; }
   .stg-paste { display: flex; gap: 10px; flex-wrap: wrap; }
   .stg-paste input { flex: 1 1 280px; }
+  .stg-profile { margin: var(--s-5) 0 var(--s-7); padding: var(--s-5); border-radius: var(--r-tile); background: var(--paper); }
+  .stg-profile h3 { margin-top: 0; }
+  .sheet .stg-profile input, .sheet .stg-profile textarea, .sheet .stg-profile .btn-ghost { background-color: var(--surface); }
+  .stg-profile .suggest { margin-top: -8px; }
 </style>
 
 <div class="page-head">
@@ -115,24 +119,28 @@
   </p>
   <p class="small muted">Repris de <a href="{{ url_for('auth.profile') }}">ton compte</a>{% if missing %} ; il y manque {{ missing|join(", ") }} : la lettre les laissera [entre crochets]{% endif %}. {% if ai %}Groq rédige dans les codes de ton domaine, sans rien inventer.{% else %}Sans clé Groq sur ce serveur, tu obtiens une lettre type remplie avec ton profil.{% endif %}</p>
 
-  <form method="post" action="{{ url_for('stages.profile') }}" id="profil" class="madlib-block">
+  <form method="post" action="{{ url_for('stages.profile') }}" id="profil" class="stg-profile">
     {{ csrf_field() }}
-    <p class="madlib">
-      Je suis disponible
-      <input class="blank" name="duration" maxlength="200" placeholder="2 mois" value="{{ profile.duration }}" aria-label="Durée du stage">
-      à partir de <input class="blank" name="start" maxlength="200" placeholder="juin 2027" value="{{ profile.start }}" aria-label="Date de début">.
-      On dit de moi que je suis <input class="blank" name="qualities" maxlength="500" placeholder="rigoureux·se, à l'écoute" value="{{ profile.qualities }}" aria-label="Qualités" data-min="20">.
-    </p>
-    <label class="soft">Ce que je sais faire
-      <textarea class="blank-area" id="stg-skills" name="skills" rows="2" maxlength="1500" placeholder="Clique sur les suggestions ou écris librement">{{ profile.skills }}</textarea></label>
-    {% if skills %}
-    <div class="suggest" aria-label="Suggestions de compétences">
-      {% for sk in skills %}<button type="button" class="pill-add" data-append-to="stg-skills" aria-pressed="false">{{ sk }}</button>{% endfor %}
+    <h3>Ton profil candidat</h3>
+    <p class="small muted">Rempli une fois, il sert à toutes tes lettres. Laisse vide ce que tu n'as pas : la lettre le marquera [entre crochets].</p>
+    <div class="form-grid">
+      <label>Métier visé <input name="goal" maxlength="120" placeholder="juriste d'affaires, data scientist, infirmier·e…" value="{{ profile.goal }}"></label>
+      <label>Qualités <input name="qualities" maxlength="500" placeholder="rigueur, curiosité, sens de l'écoute" value="{{ profile.qualities }}"></label>
+      <label>Début du stage <input name="start" maxlength="200" placeholder="juin 2027" value="{{ profile.start }}"></label>
+      <label>Durée <input name="duration" maxlength="200" placeholder="2 mois, 6 mois…" value="{{ profile.duration }}"></label>
+      <label class="full">Compétences
+        <textarea id="stg-skills" name="skills" rows="2" maxlength="1500" placeholder="Clique sur les suggestions ou écris librement">{{ profile.skills }}</textarea></label>
+      {% if skills %}
+      <div class="suggest full" aria-label="Suggestions de compétences">
+        {% for sk in skills %}<button type="button" class="pill-add" data-append-to="stg-skills" aria-pressed="false">{{ sk }}</button>{% endfor %}
+      </div>
+      {% endif %}
+      <label class="full">Expériences <span class="hint">Stages, jobs, engagement associatif : où, et ce que tu y as fait.</span>
+        <textarea name="experiences" rows="3" maxlength="2500">{{ profile.experiences }}</textarea></label>
+      <label class="full">Projets marquants <span class="hint">De cours, personnels ou associatifs, et celui en cours s'il y en a un.</span>
+        <textarea name="projects" rows="3" maxlength="2500">{{ profile.projects }}</textarea></label>
     </div>
-    {% endif %}
-    <label class="soft">Ce que j'ai déjà fait
-      <textarea class="blank-area" name="experiences" rows="3" maxlength="2500" placeholder="Stages, jobs d'été, projets, associations, sport…">{{ profile.experiences }}</textarea></label>
-    <button class="btn btn-ghost">Enregistrer</button>
+    <button class="btn btn-ghost">Enregistrer mon profil candidat</button>
   </form>
 
   <form method="post" action="{{ url_for('stages.generate') }}" class="madlib madlib-form letter-ask" data-busy="Rédaction de la lettre…">

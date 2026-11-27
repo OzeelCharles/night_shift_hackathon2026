@@ -7,6 +7,8 @@
     <p class="lead">Tes cours et occupations bloquent ces créneaux : aucune révision n'y sera placée. Un cours dont le nom ressemble à une de tes matières y est rattaché tout seul.</p>
   </div>
 </div>
+{# Panneaux ajoutés par des fonctionnalités enfichables (Feature.panels["agenda"]), ex. les restos U de Campus #}
+{% for panel in panels.get("agenda", []) %}{% include panel %}{% endfor %}
 <div class="add-slot">
   <form method="post" action="{{ url_for('agenda.add') }}" class="sheet" data-busy="Ajout et mise à jour du planning…">
     {{ csrf_field() }}

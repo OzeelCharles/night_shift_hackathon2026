@@ -21,6 +21,10 @@ def page():
     return render_template_string("<p>Page de démo pour {{ g.user.username }}</p>")
 
 
+def hello(name):
+    return f"Bonjour {name}"
+
+
 def on_subject_created(user_id, subject_ids, **_):
     created.append((user_id, subject_ids))
     return ["La démo a vu passer une nouvelle matière."]
@@ -31,5 +35,9 @@ feature = Feature(
     blueprints=[bp],
     nav=[NavItem("demo.page", "Démo", order=35)],
     subscriptions=[(events.SUBJECT_CREATED, on_subject_created)],
-    subject_panels=["demo_panel.html"],
+    panels={"subject": ["demo_panel.html"]},
+    # tables et fonctions de gabarit déclarées, sans code d'initialisation
+    schema="CREATE TABLE IF NOT EXISTS demo_notes (id INTEGER PRIMARY KEY, note TEXT NOT NULL DEFAULT '');",
+    migrations={"demo_notes": {"added_later": "TEXT NOT NULL DEFAULT ''"}},
+    template_globals={"demo_hello": hello},
 )

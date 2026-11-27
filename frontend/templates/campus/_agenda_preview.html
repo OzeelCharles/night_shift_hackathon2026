@@ -1,0 +1,24 @@
+{# Contenu du panneau « Restos U aujourd'hui » de l'agenda (fragment HTML, sans mise en page) #}
+{% if need_city %}
+<p class="muted">Indique la ville de ton école dans <a href="{{ url_for('auth.profile') }}">ton compte</a> pour voir les restos U proches.</p>
+{% elif error %}
+<p class="muted">{{ error }}</p>
+{% elif not restaurants %}
+<p class="muted">Aucun resto U ouvert aujourd'hui autour de {{ place }}.</p>
+{% else %}
+<p class="small muted">Autour de {{ place }}.</p>
+<ul class="wall crous-wall">
+  {% for r in restaurants %}
+  <li class="tile">
+    <h3><a class="plain-link" href="{{ url_for('campus.resto', code=r.code) }}">{{ r.nom }}</a></h3>
+    <p class="small"><span class="tag">{{ r.state.text }}</span> à {{ ('%.1f' | format(r.distance_km)) | replace('.', ',') }} km</p>
+    {% if r.gauge.level %}<p class="small">Affluence : <strong>{{ levels[r.gauge.level][0] }}</strong>{% if not r.gauge.live %} (estimation){% endif %}</p>{% endif %}
+    {% if loop.first and menu and menu.meals %}
+      {% set meal = 'midi' if menu.meals.midi else 'soir' %}
+      {% set main = menu.meals[meal][0] %}
+      <p class="small"><strong>{{ 'Ce midi' if meal == 'midi' else 'Ce soir' }}{% if main.category %}, {{ main.category | lower }}{% endif %} :</strong> {{ main.dishes | join(', ') }}</p>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endif %}

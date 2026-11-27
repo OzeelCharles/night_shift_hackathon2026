@@ -114,16 +114,21 @@ une minute entre deux générations.
   (source « photo », rattachés aux matières comme un import .ics, sans doublon si on renvoie la même photo) ;
 - *page d'une matière › Ajouter depuis des photos* : chaque photo de notes, de polycopié ou du tableau est recopiée
   en Markdown (formules en LaTeX) et rangée comme support de cours : chapitres détectés, atelier de révision.
-Code : `backend/dao/vision.py` (appel à Groq), `backend/business/timetable_photo.py` (créneaux tirés de la réponse).
+Code : `backend/dao/vision.py` (photo réduite puis envoyée), `backend/business/timetable_photo.py` (créneaux tirés
+de la réponse). Tous les appels à Groq (photos, lettres, révision) passent par un seul module, `backend/dao/groq.py` :
+lecture de la clé, connexion, quotas et erreurs au même endroit.
 
 **Recherche de stage** (plugin `backend/plugins/stages/`, espace « Stages » de la barre du haut, tables `stg_*`) :
 - postes recherchés → recherches préremplies sur Indeed, LinkedIn, Glassdoor, Welcome to the Jungle, HelloWork,
   JobTeaser et Google. Ces sites interdisent l'aspiration de leurs résultats : on ouvre leur propre recherche ;
 - offres suivies avec statut de candidature ; une offre est lue à partir de son lien quand la page publie ses
   données schema.org `JobPosting` (sinon on recopie l'intitulé et le texte) ;
-- lettres de motivation rédigées par Groq (`openai/gpt-oss-120b`, modifiable par `STAGES_MODEL`) d'après un profil
-  candidat valable pour toute filière (domaine, formation, compétences, expériences), avec ton et langue au choix ;
-  sans clé, une lettre type remplie avec le profil. Lettres modifiables, copiables et téléchargeables.
+- lettres de motivation rédigées par Groq (`openai/gpt-oss-120b`, modifiable par `STAGES_MODEL`) d'après le compte
+  (nom, villes, formation, langues, permis) et un profil candidat (métier visé, compétences, expériences, projets),
+  avec ton et langue au choix ; sans clé, une lettre type remplie avec les mêmes informations. Les deux suivent la
+  même trame (`TRAME` dans `letters.py`), tirée de vraies lettres de stage : accroche, intérêt pour l'entreprise,
+  formation, projets, langues et personnalité, clôture. Seuls la structure et le registre en sont repris ; ce qui
+  manque est laissé [entre crochets]. Lettres modifiables, copiables et téléchargeables.
 
 **Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
@@ -136,6 +141,8 @@ Espace **Campus** de la barre du haut, deux onglets :
 - **Bibliothèque** : l'affluence de la BU de l'établissement indiqué dans le profil.
 - **Restos U** : les restaurants et cafétérias Crous autour de l'école (ville déduite de l'établissement, modifiable),
   avec leur état du jour, leur affluence et le **menu du jour**.
+- Dans **Encadrement › Mon agenda**, un panneau « Restos U aujourd'hui » (fourni par Campus) montre les restos
+  ouverts près de l'école et le menu du plus proche ; il se charge après la page et disparaît avec Campus.
 
 **D'où viennent les chiffres.** Il n'existe aucune source publique d'affluence en temps réel : l'API d'Affluences est
 réservée aux établissements partenaires et les Crous n'en publient pas. Rivezli ne scrape donc rien et n'invente rien :
@@ -202,8 +209,8 @@ Une fonctionnalité est un module qui expose une variable `feature`. Exemple com
 
 ```python
 from flask import Blueprint
-from app.core import events
-from app.core.features import Feature, NavItem
+from backend.core import events
+from backend.core.features import Feature, NavItem
 
 bp = Blueprint("stats", __name__, template_folder="templates")
 
@@ -218,9 +225,18 @@ feature = Feature(
     blueprints=[bp],                                         # ses pages
     nav=[NavItem("stats.page", "Statistiques", order=35)],   # son entrée de menu (admin=True : réservée aux admins)
     subscriptions=[(events.SUBJECT_CREATED, on_subject_created)],  # ses réactions aux événements
-    subject_panels=["stats_panel.html"],                     # un panneau en bas de chaque page matière
+    schema="CREATE TABLE IF NOT EXISTS stats_vues (…);",      # ses tables, créées au démarrage
+    migrations={"stats_vues": {"source": "TEXT NOT NULL DEFAULT ''"}},  # colonnes ajoutées depuis
+    template_globals={"stats_resume": resume},               # fonctions appelées par ses gabarits
+    panels={"subject": ["stats_panel.html"],                 # un panneau en bas de chaque page matière
+            "agenda": ["stats_agenda.html"]},                # et un dans Encadrement › Mon agenda
 )
 ```
+
+Tout se déclare : pas de code d'initialisation à écrire (`setup(app)` reste possible pour un besoin particulier).
+Un panneau qui dépend d'un service extérieur peut se charger après la page : un élément
+`<div data-fragment-url="…">` est rempli avec le HTML renvoyé par cette adresse (c'est ainsi que Campus affiche
+les restos U du jour dans l'agenda, sans le ralentir).
 
 Pour l'activer sans toucher au cœur : variable d'environnement `EXTRA_FEATURES=mon_paquet.stats`
 (plusieurs modules séparés par des virgules), ou clé `EXTRA_FEATURES` passée à `create_app`.

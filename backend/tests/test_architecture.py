@@ -53,6 +53,19 @@ class PluginTests(_Base):
         self.assertIn("Panneau de démo", detail)
         self.assertIn("Matière : Probabilités", detail)
 
+    def test_declared_tables_globals_and_panels(self):
+        from backend.tests import fake_feature
+        with self.app.app_context():
+            from backend.dao.db import get_db
+            columns = {r["name"] for r in get_db().execute("PRAGMA table_info(demo_notes)")}
+        self.assertEqual(columns, {"id", "note", "added_later"}, "table créée puis colonne ajoutée par migration")
+        self.assertIs(self.app.jinja_env.globals["demo_hello"], fake_feature.hello)
+        self.assertIn("demo_panel.html", self.app.jinja_env.globals["panels"]["subject"])
+        # relancer l'application sur la même base ne recrée rien et ne perd rien
+        again = create_app({"TESTING": True, "ENABLE_WEB": False, "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
+                            "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up"), "EXTRA_FEATURES": self.extra_features})
+        self.assertIn("demo", [f.name for f in again.extensions["features"]])
+
     def test_plugins_do_not_leak_between_apps(self):
         other = create_app({"TESTING": True, "ENABLE_WEB": False,
                             "DATABASE": os.path.join(self.tmp.name, "o.sqlite"),

@@ -58,6 +58,15 @@ def update_profile(user, form) -> tuple[Report, list[str]]:
     return Report().success(" ".join(["Profil enregistré."] + extra)), []
 
 
+def update_details(user, form) -> tuple[Report, list[str]]:
+    """Informations complémentaires seules (fenêtre qui suit l'inscription) : toutes facultatives."""
+    details, errors = clean_details(form, date.today())
+    if errors:
+        return Report(), errors
+    dao.update(user["id"], **details)
+    return Report().success("C'est noté : ces informations préremplissent maintenant tes lettres de motivation."), []
+
+
 def ensure_admin() -> None:
     """Crée un compte administrateur au premier lancement s'il n'en existe aucun."""
     if dao.any_admin():

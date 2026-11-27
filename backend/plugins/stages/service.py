@@ -87,7 +87,7 @@ def page(user) -> dict:
 
 
 def save_profile(user, form) -> Report:
-    limits = {"skills": 1500, "experiences": 2500, "qualities": 500}
+    limits = {"skills": 1500, "experiences": 2500, "projects": 2500, "qualities": 500, "goal": 120}
     store.save_profile(user["id"], {k: _clean(form.get(k), limits.get(k, 200)) for k in store.PROFILE_FIELDS})
     return Report().success("C'est noté : tes prochaines lettres s'en serviront.")
 
@@ -114,9 +114,9 @@ def _fetch(url: str) -> dict | None:
         return None
     import requests
 
-    from backend.dao import vision, web
+    from backend.dao import web
     try:
-        r = vision.session().get(url, headers=web.BROWSER, timeout=10)
+        r = web.secure_session().get(url, headers=web.BROWSER, timeout=10)
     except requests.RequestException:
         return None
     return sources.parse_offer(r.text) if r.status_code == 200 else None
