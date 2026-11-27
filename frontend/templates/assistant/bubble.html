@@ -6,6 +6,7 @@
      data-send-url="{{ url_for('assistant.send') }}"
      data-new-url="{{ url_for('assistant.new') }}"
      data-stream-url="{{ url_for('assistant.send_stream') }}"
+     data-actions-url="{{ url_for('assistant.apply_action', action_id=0)[:-1] }}"
      data-csrf="{{ csrf_token() }}"
      data-subject="{{ subject_id }}">
   <button class="assistant-fab" type="button" aria-expanded="false" aria-controls="assistant-panel">
@@ -63,7 +64,7 @@
         <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
       </button>
     </form>
-    <p class="assistant-privacy">Pour te répondre, ta question, tes pièces jointes et les données utiles (planning, notes) sont envoyées à <span class="assistant-provider">ton fournisseur d'IA</span>. Photos et PDF ne sont pas conservés. L'historique n'est visible que par toi et s'efface quand tu te déconnectes ou fermes le navigateur.</p>
+    <p class="assistant-privacy">Pour te répondre, ta question, tes pièces jointes et les données utiles (planning, notes) sont envoyées à <span class="assistant-provider">ton fournisseur d'IA</span>. Photos et PDF ne sont pas conservés. L'historique n'est visible que par toi et s'efface à la déconnexion, à la fermeture de l'application ou après 2 h d'inactivité.</p>
   </section>
 </div>
 <script>
@@ -284,7 +285,58 @@
     box.append(ol);
     return box;
   }
-  function add(role, text, charts, extraClass, attachment, imageUrl, sources) {
+  // ------------------------------------------------ proposition à valider (ex. rattraper une séance ratée)
+  function actionCard(a) {
+    const card = document.createElement('div'); card.className = 'msg-action';
+    const title = document.createElement('strong'); title.textContent = a.title; card.append(title);
+    (a.notes || []).forEach(n => { const p = document.createElement('p'); p.className = 'action-note'; p.textContent = n; card.append(p); });
+    const chosen = (a.options || []).find(o => o.key === a.choice);
+    if (a.status && a.status !== 'pending') {
+      const p = document.createElement('p'); p.className = 'action-state';
+      p.textContent = a.status === 'done' ? `✓ Fait : ${chosen ? chosen.label : 'option appliquée'}`
+                    : a.status === 'cancelled' ? 'Rien n’a été changé.' : 'Proposition expirée : redemande-moi si besoin.';
+      card.append(p);
+      return card;
+    }
+    const error = document.createElement('p'); error.className = 'action-error'; error.hidden = true;
+    const buttons = [];
+    (a.options || []).forEach((o, i) => {
+      const box = document.createElement('div'); box.className = 'action-option';
+      const body = document.createElement('div');
+      const label = document.createElement('strong'); label.textContent = o.label; body.append(label);
+      const ul = document.createElement('ul');
+      o.details.forEach(d => { const li = document.createElement('li'); li.textContent = d; ul.append(li); });
+      body.append(ul);
+      if (o.warning) { const w = document.createElement('p'); w.className = 'action-warning'; w.textContent = o.warning; body.append(w); }
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = i === 0 ? 'btn btn-sm' : 'btn btn-ghost btn-sm'; b.textContent = 'Choisir';
+      b.addEventListener('click', () => decide(card, a, o.key, buttons, error));
+      buttons.push(b);
+      box.append(body, b); card.append(box);
+    });
+    const none = document.createElement('button');
+    none.type = 'button'; none.className = 'btn-link action-cancel'; none.textContent = 'Ne rien changer';
+    none.addEventListener('click', () => decide(card, a, null, buttons, error));
+    buttons.push(none);
+    card.append(none, error);
+    return card;
+  }
+  async function decide(card, a, choice, buttons, error) {
+    buttons.forEach(b => { b.disabled = true; });
+    error.hidden = true;
+    const url = root.dataset.actionsUrl + a.id + (choice ? '' : '/annuler');
+    try {
+      const data = await call(url, choice ? { choice } : {});
+      if (!data.message) throw new Error(data.error || 'Action impossible.');
+      card.replaceWith(actionCard({ ...a, status: choice ? 'done' : 'cancelled', choice }));
+      add('assistant', data.message.content, [], '');
+    } catch (e) {
+      error.textContent = e.message; error.hidden = false;
+      buttons.forEach(b => { b.disabled = false; });
+    }
+  }
+
+  function add(role, text, charts, extraClass, attachment, imageUrl, sources, actions) {
     const div = document.createElement('div');
     div.className = `msg msg-${role}` + (extraClass ? ' ' + extraClass : '');
     if (attachment) div.append(attachmentTag(attachment, imageUrl));
@@ -295,6 +347,7 @@
     div.append(body);
     (charts || []).forEach(c => div.append(chart(c)));
     if (sources && sources.length) div.append(sourcesList(sources));
+    (actions || []).forEach(a => div.append(actionCard(a)));
     log.append(div);
     welcome.hidden = true;
     log.scrollTop = log.scrollHeight;
@@ -303,7 +356,7 @@
   function render(data) {
     if (data.provider) root.querySelector('.assistant-provider').textContent = data.provider;
     log.replaceChildren();
-    data.messages.forEach(m => add(m.role, m.content, m.charts, '', m.attachment, null, m.sources));
+    data.messages.forEach(m => add(m.role, m.content, m.charts, '', m.attachment, null, m.sources, m.actions));
     if (data.notice) add('assistant', data.notice, [], 'msg-notice');
     welcome.hidden = data.messages.length > 0;
     log.scrollTop = log.scrollHeight;
@@ -374,7 +427,8 @@
         note.textContent = 'Nouveau document : la conversation précédente a été effacée.';
         log.insertBefore(note, userMsg);
       }
-      add('assistant', done.message.content, done.message.charts, '', null, null, done.message.sources);
+      add('assistant', done.message.content, done.message.charts, '', null, null, done.message.sources,
+          done.message.actions);
     } else retry(error || 'Réponse interrompue : réessaie.', text, sending);
     busy = false; sendBtn.disabled = false; input.focus();
   }

@@ -25,8 +25,16 @@ from flask import current_app
 
 from backend.business.assistant import parse_arguments
 
-from .vision import _session
-from .vision import api_key as groq_key
+from . import groq, web
+
+
+def groq_key() -> str:
+    """Clé Groq (client commun de l'application, dao/groq.py)."""
+    return groq.api_key()
+
+
+def _session():
+    return web.secure_session()
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL = "openai/gpt-oss-120b"

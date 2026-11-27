@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import contextmanager
 
 from flask import current_app, g
 
@@ -96,6 +97,15 @@ CREATE TABLE IF NOT EXISTS grades (
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_grades_user ON grades(user_id);
+-- Campus : signalements d'affluence (bibliothèque, restaurants Crous). place_key : « bu:<établissement> » ou « crous:<code> ».
+CREATE TABLE IF NOT EXISTS occupancy_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    place_key TEXT NOT NULL,
+    level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 4),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_occupancy_place ON occupancy_reports(place_key, created_at);
 
 -- Assistant : conversations privées (une seule est « en cours » : la plus récente), effacées à la fin de la
 -- session de connexion (déconnexion, ou navigateur fermé puis nouvelle connexion)
@@ -144,6 +154,16 @@ CREATE TABLE IF NOT EXISTS doc_index (               -- supports déjà indexés
     model TEXT NOT NULL,
     chunks INTEGER NOT NULL,
     indexed_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+-- Assistant : modifications proposées (report de séances…), appliquées seulement quand l'étudiant les valide
+CREATE TABLE IF NOT EXISTS chat_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,                          -- reschedule
+    payload TEXT NOT NULL,                       -- options proposées (JSON)
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending | done | cancelled
+    choice TEXT NOT NULL DEFAULT '',             -- option retenue
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_chat_conv_user ON chat_conversations(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_msg_conv ON chat_messages(conversation_id, id);
@@ -198,6 +218,19 @@ def execute(sql: str, *args) -> int:
 
 def execute_many(sql: str, rows) -> None:
     get_db().executemany(sql, list(rows))
+
+
+@contextmanager
+def rolled_back():
+    """Simulation : tout ce qui est écrit dans le bloc est annulé à la sortie (point de sauvegarde SQLite).
+    Sert à calculer les conséquences d'une modification avant que l'utilisateur ne la valide."""
+    db = get_db()
+    db.execute("SAVEPOINT simulation")
+    try:
+        yield
+    finally:
+        db.execute("ROLLBACK TO simulation")
+        db.execute("RELEASE simulation")
 
 
 def commit() -> None:

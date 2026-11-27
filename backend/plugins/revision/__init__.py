@@ -18,7 +18,9 @@ feature = Feature(
     blueprints=[bp],
     # onglet de la barre du haut, à côté d'« Encadrement » : l'atelier est un espace à part entière
     nav=[NavItem("revision.index", "Réviser", order=2, section="site", opens="revision")],
-    subject_panels=["revision/panel.html"],
+    panels={"subject": ["revision/panel.html"]},   # en bas de la page de chaque matière
     tools=TOOLS,  # l'assistant peut montrer la courbe des scores de QCM
-    setup=setup,
+    schema=store.SCHEMA,
+    migrations=store.MIGRATIONS,
+    template_globals={"revision_summary": service.panel_summary},   # utilisé par le panneau
 )

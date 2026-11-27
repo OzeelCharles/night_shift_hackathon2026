@@ -176,7 +176,16 @@ sans clé, la bulle explique comment la configurer.
 - Code : `backend/business/assistant.py` (consignes, fenêtre d'historique, graphiques), `backend/services/assistant_service.py`
   (boucle d'outils), `backend/services/assistant_tools.py`, `backend/dao/llm.py`, `backend/dao/chat.py`,
   `backend/controllers/assistant.py`, `frontend/templates/assistant/bubble.html`.
-- À venir : modification du planning après confirmation (« j'ai raté ma séance »), forums.
+- **« J'ai raté ma séance »** (outils `seances_a_rattraper`, `preparer_rattrapage`) : l'assistant calcule de
+  vraies options, chacune simulée par le planificateur puis annulée (point de sauvegarde SQLite,
+  `dao.db.rolled_back`) : **replacer** seulement les séances ratées ; si du travail reste sans créneau avant
+  l'examen, **réorganiser** tout le planning (examens proches d'abord, matières lointaines repoussées) et/ou
+  **1 h de plus par jour**, proposées seulement si elles font mieux. Il signale un examen trop proche pour
+  rattraper. **Rien n'est modifié** tant que l'étudiant n'a pas cliqué « Choisir » sous la réponse (ou « Ne rien
+  changer ») ; une proposition ne s'applique qu'une fois et seulement par son auteur. Une séance ratée aujourd'hui
+  est replacée à partir de demain. Code : `backend/business/rescheduling.py`, `backend/services/reschedule_service.py`,
+  `backend/dao/actions.py` (table `chat_actions`).
+- À venir : forums.
 
 ### Recherche dans les supports de cours (RAG)
 

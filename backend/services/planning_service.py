@@ -1,5 +1,6 @@
 """Planning de révision : calcul, réparation après un changement d'agenda, vues, export."""
 from collections import defaultdict
+from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 
 from backend.business import agenda_analysis, calendar_ics, matching, planner
@@ -30,7 +31,8 @@ def _conflicts(start: datetime, end: datetime, busy, prefs, exam_day: date | Non
     return any(start < b.end + pad and b.start - pad < end for b in busy)
 
 
-def regenerate(user_id, only: set[int] | None = None, repair: bool = False):
+def regenerate(user_id, only: set[int] | None = None, repair: bool = False,
+               not_before: datetime | None = None, daily_max: int | None = None):
     """Recalcule le planning à partir de l'état actuel (préférences, agenda, matières).
 
     `only` : ne replanifie que ces matières ; les séances des autres restent en place et sont
@@ -40,9 +42,14 @@ def regenerate(user_id, only: set[int] | None = None, repair: bool = False):
     `repair` (après un changement d'emploi du temps) : les séances encore possibles restent à leur
     place ; seules celles qui chevauchent un nouveau cours, tombent un jour de repos ou après
     l'examen sont replacées, avec le travail qui manquerait.
+
+    `not_before` : rien n'est placé avant cette date (ex. demain, après une séance ratée aujourd'hui) ;
+    `daily_max` : temps maximum de travail par jour à utiliser à la place de celui des préférences.
     """
-    now = datetime.now()
+    now = max(datetime.now(), not_before) if not_before else datetime.now()
     prefs, prow = preference_service.load(user_id)
+    if daily_max:
+        prefs = replace(prefs, daily_max_minutes=daily_max)
     rows = subjects_dao.list_for_user(user_id)
     comfort = {r["id"]: r["comfort"] for r in rows}
     if only is not None:
@@ -97,10 +104,10 @@ def regenerate(user_id, only: set[int] | None = None, repair: bool = False):
 
 
 def update(user_id, reason: str = "", only: set[int] | None = None, repair: bool = False,
-           quiet: bool = False) -> Report:
+           quiet: bool = False, not_before: datetime | None = None) -> Report:
     """Recalcule (ou répare) le planning et explique le résultat (retour immédiat : loi de Doherty)."""
     report = Report()
-    result = regenerate(user_id, only, repair)
+    result = regenerate(user_id, only, repair, not_before=not_before)
     if result is None:
         return report.success(reason)
     planned = sum(int((s.end - s.start).total_seconds() // 60) for s in result.sessions)

@@ -198,7 +198,7 @@ class AssistantAppTests(unittest.TestCase):
         self.login_as("lea@test.fr")
         reading = "Montrer que $X_t = \\phi X_{t-1} + \\varepsilon_t$ est stationnaire si $|\\phi| < 1$.\nMatière probable : Séries temporelles"
         fake = FakeGroq("On utilise la racine du polynôme $1 - \\phi z$…", "Ensuite on calcule la variance.")
-        with mock.patch("backend.dao.vision.api_key", return_value="gsk_test"), \
+        with mock.patch("backend.dao.groq.api_key", return_value="gsk_test"), \
                 mock.patch("backend.dao.vision.ask", return_value=reading) as ask:
             r = self.send_file(fake, "exo.jpg", b"\xff\xd8\xff photo")
         self.assertEqual(r.status_code, 200, r.get_json())
