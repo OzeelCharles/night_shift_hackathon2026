@@ -1,4 +1,5 @@
 import sqlite3
+from contextlib import contextmanager
 
 from flask import current_app, g
 
@@ -105,6 +106,67 @@ CREATE TABLE IF NOT EXISTS occupancy_reports (
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_occupancy_place ON occupancy_reports(place_key, created_at);
+
+-- Assistant : conversations privées (une seule est « en cours » : la plus récente), effacées à la fin de la
+-- session de connexion (déconnexion, ou navigateur fermé puis nouvelle connexion)
+CREATE TABLE IF NOT EXISTS chat_conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    session_key TEXT NOT NULL DEFAULT '',        -- session de connexion qui a créé la conversation
+    title TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',            -- résumé des messages les plus anciens
+    summarized_upto INTEGER NOT NULL DEFAULT 0,  -- id du dernier message inclus dans le résumé
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id INTEGER NOT NULL REFERENCES chat_conversations(id) ON DELETE CASCADE,
+    role TEXT NOT NULL,                          -- user | assistant
+    content TEXT NOT NULL,
+    meta TEXT NOT NULL DEFAULT '{}',             -- graphiques affichés avec la réponse (JSON)
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+-- RAG : passages des supports de cours, avec leur embedding, et index plein texte (BM25)
+CREATE TABLE IF NOT EXISTS doc_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    document_id INTEGER NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    subject_id INTEGER NOT NULL REFERENCES subjects(id) ON DELETE CASCADE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,                   -- ordre du passage dans le support
+    page INTEGER,                                -- page (PDF) ou diapositive (PPTX), sinon NULL
+    heading TEXT NOT NULL DEFAULT '',            -- section où se trouve le passage
+    text TEXT NOT NULL,
+    vector BLOB NOT NULL                         -- embedding (float32)
+);
+CREATE INDEX IF NOT EXISTS idx_chunks_scope ON doc_chunks(user_id, subject_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_doc ON doc_chunks(document_id, position);
+CREATE VIRTUAL TABLE IF NOT EXISTS doc_chunks_fts USING fts5(
+    text, heading, content='doc_chunks', content_rowid='id', tokenize='unicode61 remove_diacritics 2');
+CREATE TRIGGER IF NOT EXISTS doc_chunks_ai AFTER INSERT ON doc_chunks BEGIN
+    INSERT INTO doc_chunks_fts(rowid, text, heading) VALUES (new.id, new.text, new.heading);
+END;
+CREATE TRIGGER IF NOT EXISTS doc_chunks_ad AFTER DELETE ON doc_chunks BEGIN
+    INSERT INTO doc_chunks_fts(doc_chunks_fts, rowid, text, heading) VALUES ('delete', old.id, old.text, old.heading);
+END;
+CREATE TABLE IF NOT EXISTS doc_index (               -- supports déjà indexés, et avec quel modèle
+    document_id INTEGER PRIMARY KEY REFERENCES documents(id) ON DELETE CASCADE,
+    model TEXT NOT NULL,
+    chunks INTEGER NOT NULL,
+    indexed_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+-- Assistant : modifications proposées (report de séances…), appliquées seulement quand l'étudiant les valide
+CREATE TABLE IF NOT EXISTS chat_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL,                          -- reschedule
+    payload TEXT NOT NULL,                       -- options proposées (JSON)
+    status TEXT NOT NULL DEFAULT 'pending',      -- pending | done | cancelled
+    choice TEXT NOT NULL DEFAULT '',             -- option retenue
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_chat_conv_user ON chat_conversations(user_id, updated_at);
+CREATE INDEX IF NOT EXISTS idx_chat_msg_conv ON chat_messages(conversation_id, id);
 """
 
 
@@ -158,6 +220,19 @@ def execute_many(sql: str, rows) -> None:
     get_db().executemany(sql, list(rows))
 
 
+@contextmanager
+def rolled_back():
+    """Simulation : tout ce qui est écrit dans le bloc est annulé à la sortie (point de sauvegarde SQLite).
+    Sert à calculer les conséquences d'une modification avant que l'utilisateur ne la valide."""
+    db = get_db()
+    db.execute("SAVEPOINT simulation")
+    try:
+        yield
+    finally:
+        db.execute("ROLLBACK TO simulation")
+        db.execute("RELEASE simulation")
+
+
 def commit() -> None:
     """Validation anticipée (avant de lancer un traitement en arrière-plan qui lit la base)."""
     get_db().commit()
@@ -190,6 +265,7 @@ MIGRATIONS = {
     "preferences": {"bedtime": "TEXT NOT NULL DEFAULT '23:00'", "wake_time": "TEXT NOT NULL DEFAULT '07:00'"},
     "resources": {"kind": "TEXT NOT NULL DEFAULT 'web'", "thumbnail": "TEXT NOT NULL DEFAULT ''",
                   "meta": "TEXT NOT NULL DEFAULT ''", "saved": "INTEGER NOT NULL DEFAULT 0"},
+    "chat_conversations": {"session_key": "TEXT NOT NULL DEFAULT ''"},
 }
 
 

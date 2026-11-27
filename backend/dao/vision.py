@@ -1,7 +1,9 @@
 """Lecture de photos par le modèle de vision de Groq : emploi du temps (agenda), notes de cours (supports).
 
-La photo est réduite si besoin (Groq refuse les images de plus de 4 Mo une fois en base64), puis envoyée
-avec la consigne par groq.chat(). Toute erreur remonte en VisionError (c'est une GroqError).
+Sert à lire une photo d'emploi du temps (agenda) ou de notes de cours (supports). La clé n'est jamais
+dans le code ni dans git : GROQ_API_KEY dans le fichier .env (voir .env.example) ; restent acceptés,
+pour les installations existantes, les fichiers instance/groq_api_key et instance/anthropic_api_key (clé « gsk_… »).
+Toute erreur remonte en VisionError.
 """
 from __future__ import annotations
 
@@ -14,6 +16,7 @@ from . import groq
 
 MODEL = "qwen/qwen3.8-27b"  # seul modèle de Groq qui lit les images (modifiable par VISION_MODEL)
 MAX_IMAGE_BYTES = 3 * 1024 * 1024
+IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/heic", "image/heif"}  # photos acceptées
 
 VisionError = groq.GroqError
 
@@ -45,8 +48,15 @@ def _shrink(data: bytes) -> tuple[bytes, str]:
     return out.getvalue(), "image/jpeg"
 
 
+def shrink(data: bytes) -> tuple[bytes, str]:
+    """Photo prête à envoyer à un modèle : (JPEG d'au plus ~3 Mo et 2 000 px, type MIME)."""
+    return _shrink(data)
+
+
 def ask(image: bytes, prompt: str, as_json: bool = True, max_tokens: int = 4000):
     """Envoie la photo et la consigne ; renvoie l'objet JSON (as_json) ou le texte de la réponse."""
+    if not groq.api_key():
+        raise VisionError("Aucune clé Groq : colle-la après GROQ_API_KEY= dans le fichier .env.")
     data, mime = _shrink(image)
     image_url = f"data:{mime};base64,{base64.b64encode(data).decode()}"
     return groq.chat([{"role": "user", "content": [{"type": "text", "text": prompt},

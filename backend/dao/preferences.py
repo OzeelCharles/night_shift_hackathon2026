@@ -18,6 +18,11 @@ def save(user_id, values: dict) -> None:
             *[values[c] for c in FIELDS], user_id)
 
 
+def set_daily_max(user_id, minutes: int) -> None:
+    get(user_id)  # crée la ligne au besoin
+    execute("UPDATE preferences SET daily_max_minutes = ? WHERE user_id = ?", minutes, user_id)
+
+
 def save_sleep(user_id, bedtime: str, wake_time: str) -> None:
     get(user_id)  # crée la ligne au besoin
     execute("UPDATE preferences SET bedtime = ?, wake_time = ? WHERE user_id = ?", bedtime, wake_time, user_id)

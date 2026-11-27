@@ -101,7 +101,7 @@ def remove_files(paths) -> None:
 
 def save_documents(user_id, subject_id, files) -> tuple[list[str], list[str]]:
     """Enregistre et analyse les fichiers. Retourne (chapitres trouvés, messages)."""
-    topics, messages = [], []
+    topics, messages, added = [], [], False
     for f in files:
         if not f or not f.filename:
             continue
@@ -115,8 +115,11 @@ def save_documents(user_id, subject_id, files) -> tuple[list[str], list[str]]:
             found = [k.capitalize() for k in extractor.keywords(text, 6)]
         topics += found
         documents_dao.create(subject_id, f.filename[:200], path, text[:5000], len(found))
+        added = True
         messages.append(f"« {f.filename} » : {len(found)} chapitre(s) détecté(s)."
                         if text else f"« {f.filename} » : texte illisible (document scanné ?).")
+    if added:
+        events.emit(events.DOCUMENTS_ADDED, user_id=user_id, subject_id=subject_id)  # ex. indexation pour l'assistant
     return topics, messages
 
 
@@ -141,7 +144,7 @@ def _note_name(filename: str, n: int) -> str:
 
 def save_photos(user_id, subject_id, files) -> tuple[list[str], list[str]]:
     """Fait lire chaque photo par Groq et l'enregistre comme support en Markdown. Retourne (chapitres, messages)."""
-    topics, messages = [], []
+    topics, messages, added = [], [], False
     for n, f in enumerate([f for f in files if f and f.filename], 1):
         if not (f.mimetype or "").startswith("image/"):
             messages.append(f"« {f.filename} » : ce n'est pas une photo.")
@@ -163,7 +166,10 @@ def save_photos(user_id, subject_id, files) -> tuple[list[str], list[str]]:
             found = [k.capitalize() for k in extractor.keywords(extracted, 6)]
         topics += found
         documents_dao.create(subject_id, name[:200], path, (extracted or text)[:5000], len(found))
+        added = True
         messages.append(f"« {f.filename} » lue par Groq : {len(found)} chapitre(s) détecté(s).")
+    if added:
+        events.emit(events.DOCUMENTS_ADDED, user_id=user_id, subject_id=subject_id)
     return topics, messages
 
 

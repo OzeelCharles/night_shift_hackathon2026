@@ -11,7 +11,8 @@ import os
 
 from flask import Flask, render_template
 
-FRONTEND = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FRONTEND = os.path.join(ROOT, "frontend")
 
 from . import config
 from .business import accounts, agenda_analysis, exams, planner, subjects
@@ -21,6 +22,8 @@ from .dao import db
 
 
 def create_app(test_config=None):
+    if not (test_config or {}).get("TESTING"):  # les tests ne dépendent pas des clés de la machine
+        config.load_env(os.path.join(ROOT, ".env"))  # clés d'API des modèles de langage (voir .env.example)
     app = Flask(__name__, instance_relative_config=True,
                 template_folder=os.path.join(FRONTEND, "templates"), static_folder=os.path.join(FRONTEND, "static"))
     os.makedirs(app.instance_path, exist_ok=True)

@@ -159,6 +159,26 @@ def _txt(path: Path):
 READERS = {"pdf": _pdf, "pptx": _pptx, "docx": _docx, "odt": _odf, "odp": _odf, "txt": _txt, "md": _txt}
 
 
+def extract_pages(path: str | Path, max_pages: int = 400) -> list[tuple[int | None, str]]:
+    """Texte page par page (PDF) ou diapositive par diapositive (PPTX), pour citer la page d'une réponse.
+
+    Autres formats : un seul bloc, sans numéro de page. Ne lève pas d'exception sur un fichier illisible."""
+    path = Path(path)
+    ext = path.suffix.lower().lstrip(".")
+    try:
+        if ext == "pdf":
+            from pypdf import PdfReader
+            return [(i, p.extract_text() or "") for i, p in enumerate(PdfReader(str(path)).pages[:max_pages], 1)]
+        if ext == "pptx":
+            from pptx import Presentation
+            return [(i, "\n".join(s.text_frame.text for s in slide.shapes if s.has_text_frame))
+                    for i, slide in enumerate(Presentation(str(path)).slides, 1)][:max_pages]
+    except Exception:
+        return []
+    text, _ = extract(path)
+    return [(None, text)] if text.strip() else []
+
+
 def extract(path: str | Path) -> tuple[str, list[str]]:
     """Retourne (texte, chapitres détectés). Ne lève pas d'exception sur un fichier illisible."""
     path = Path(path)

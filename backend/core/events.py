@@ -14,6 +14,8 @@ SUBJECT_CREATED = "subject.created"   # (user_id, subject_id)
 SUBJECT_DELETED = "subject.deleted"   # (user_id, subject_id)
 AGENDA_CHANGED = "agenda.changed"     # (user_id)
 PLAN_UPDATED = "plan.updated"         # (user_id)
+USER_LOGGED_OUT = "user.logged_out"   # (user_id) : fin de la session de connexion
+DOCUMENTS_ADDED = "documents.added"   # (user_id, subject_id) : supports de cours déposés
 
 
 def _registry(app) -> dict:
