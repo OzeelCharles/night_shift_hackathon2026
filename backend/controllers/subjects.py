@@ -81,6 +81,13 @@ def upload(subject_id):
     return _detail(subject_id, "#supports")
 
 
+@bp.route("/matieres/<int:subject_id>/documents/photo", methods=("POST",))
+@login_required
+def upload_photos(subject_id):
+    flash_report(subject_service.upload_photos(g.user, subject_id, request.files.getlist("photos")))
+    return _detail(subject_id, "#supports")
+
+
 @bp.route("/documents/<int:doc_id>")
 @login_required
 def document_open(doc_id):

@@ -37,4 +37,4 @@ def remove(intake_id):
     return redirect(url_for("caffeine.index"))
 
 
-feature = Feature("cafeine", blueprints=[bp], nav=[NavItem("caffeine.index", "Caféine", order=37)])
+feature = Feature("cafeine", blueprints=[bp], nav=[NavItem("caffeine.index", "Caféine", order=3, section="site", opens="cafeine")])

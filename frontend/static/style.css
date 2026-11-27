@@ -472,6 +472,7 @@ details[open] > :not(summary) { animation: fade-up var(--dur) var(--ease-out); }
 .topics { padding-left: 24px; columns: 2; column-gap: var(--s-6); }
 .topics li { break-inside: avoid; margin-bottom: 4px; }
 .upload { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.photo-import { display: grid; gap: 10px; justify-items: start; margin-bottom: var(--s-5); }
 table { width: 100%; border-collapse: collapse; font-size: .95rem; }
 th, td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { font-size: .8rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }

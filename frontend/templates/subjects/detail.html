@@ -226,6 +226,14 @@
     <input type="file" name="documents" multiple required accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md">
     <button class="btn btn-ghost">Ajouter des supports</button>
   </form>
+  {% if photo_enabled %}
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('subjects.upload_photos', subject_id=s.id) }}" class="upload" data-busy="Lecture des photos par Groq…">
+    {{ csrf_field() }}
+    <input type="file" name="photos" multiple required accept="image/*" capture="environment" aria-label="Photos de cours">
+    <button class="btn btn-ghost">Ajouter depuis des photos</button>
+  </form>
+  <p class="muted small">Photos de notes, de polycopié ou du tableau : Groq les recopie en texte (formules comprises) et chaque photo devient un support, utilisé pour détecter les chapitres et par l'atelier de révision.</p>
+  {% endif %}
 </section>
 
 <section class="card" id="mes-ressources">

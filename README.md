@@ -109,6 +109,13 @@ Groq (`openai/gpt-oss-120b`, modifiable par `REVISION_GROQ_MODEL`). Groq ne lit 
 texte des supports, limité à ~9 000 caractères pour tenir dans le quota gratuit (8 000 jetons par minute) ; compter
 une minute entre deux générations.
 
+**Lecture de photos** (même clé Groq, modèle `qwen/qwen3.8-27b`, modifiable par `VISION_MODEL`) :
+- *Mon agenda › Ajouter depuis une photo* : une photo d'emploi du temps ou de liste d'examens devient des créneaux
+  (source « photo », rattachés aux matières comme un import .ics, sans doublon si on renvoie la même photo) ;
+- *page d'une matière › Ajouter depuis des photos* : chaque photo de notes, de polycopié ou du tableau est recopiée
+  en Markdown (formules en LaTeX) et rangée comme support de cours : chapitres détectés, atelier de révision.
+Code : `backend/dao/vision.py` (appel à Groq), `backend/business/timetable_photo.py` (créneaux tirés de la réponse).
+
 **Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
 `FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.

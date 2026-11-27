@@ -5,12 +5,13 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 from backend.business import agenda_analysis as analysis
-from backend.business import calendar_ics, matching
+from backend.business import calendar_ics, matching, timetable_photo
 from backend.business.planner import DEFAULT_TOPICS
 from backend.business.text import bounded_int, iso, parse_date, parse_time
 from backend.core import events
 from backend.dao import agenda as dao
 from backend.dao import sessions as sessions_dao
+from backend.dao import vision
 
 from . import exam_service, planning_service, subject_service
 from .common import owned
@@ -20,7 +21,7 @@ from .report import Report
 def page(user_id) -> dict:
     now = iso(datetime.now())
     return {"events": dao.upcoming(user_id, now), "revisions": sessions_dao.manual_upcoming(user_id, now),
-            "subjects": subject_service.list_for(user_id)}
+            "subjects": subject_service.list_for(user_id), "photo_enabled": photo_enabled()}
 
 
 def _after_change(user_id, reason: str, promote=frozenset(), quiet: bool = False) -> Report:
@@ -121,6 +122,52 @@ def import_ics(user, text: str, sync_mode: bool, create_missing: bool) -> Report
     if not changes:
         return report.info(*exam_service.sync(uid, promote)).success(msg + " Ton planning ne bouge pas.")
     return report + _after_change(uid, msg, promote)
+
+
+# ---------------------------------------------------------------- import d'une photo
+def photo_enabled() -> bool:
+    return vision.available()
+
+
+def import_photo(user, image: bytes, weeks: int, create_missing: bool) -> Report:
+    """Lit une photo d'emploi du temps avec Groq et ajoute ses créneaux (sans doublon avec l'agenda)."""
+    uid = user["id"]
+    if not vision.available():
+        return Report().error("La lecture de photos n'est pas disponible : il manque une clé Groq sur ce serveur.")
+    try:
+        answer = vision.ask(image, timetable_photo.PROMPT)
+    except vision.VisionError as e:
+        return Report().error(f"Photo non lue : {e}")
+    found, skipped = timetable_photo.slots(answer.get("events") if isinstance(answer, dict) else None,
+                                           date.today(), weeks)
+    if not found:
+        return Report().warning("Aucun créneau lisible sur cette photo. Essaie une photo plus nette, bien cadrée.")
+    existing = {(r["title"], r["start"]) for r in dao.upcoming(uid, date.today().isoformat(), limit=5000)}
+    link = _Linker(uid, create_missing)
+    added = 0
+    promote: set[int] = set()
+    for e in found:
+        title = e["title"] if not e["exam"] or analysis.is_exam(e["title"]) else f"Examen {e['title']}"[:200]
+        start, end = iso(e["start"]), iso(e["end"])
+        if (title, start) in existing:
+            continue
+        sid, kind = link(title)
+        dao.create(uid, title, start, end, "photo", kind, sid, uid=analysis.fallback_key(title, start))
+        existing.add((title, start))
+        added += 1
+        if kind == "examen" and sid:
+            promote.add(sid)
+    report = Report()
+    if link.created_ids:
+        report.info(*events.emit(events.SUBJECT_CREATED, user_id=uid, subject_ids=link.created_ids))
+    if not added:
+        return report.info("Tous les créneaux de cette photo sont déjà dans ton agenda.")
+    msg = f"Photo lue par Groq : {added} créneau(x) ajouté(s)."
+    if link.created:
+        msg += f" Nouvelles matières : {', '.join(link.created)}."
+    if skipped:
+        msg += f" {skipped} élément(s) illisible(s) ignoré(s)."
+    return report + _after_change(uid, msg + " Vérifie-les ci-dessous.", promote)
 
 
 # ---------------------------------------------------------------- créneaux ajoutés à la main

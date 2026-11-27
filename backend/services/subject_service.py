@@ -20,6 +20,7 @@ from backend.dao import agenda as agenda_dao
 from backend.dao import documents as documents_dao
 from backend.dao import sessions as sessions_dao
 from backend.dao import subjects as dao
+from backend.dao import vision
 
 from . import exam_service, planning_service, resource_service
 from .common import owned
@@ -119,9 +120,69 @@ def save_documents(user_id, subject_id, files) -> tuple[list[str], list[str]]:
     return topics, messages
 
 
+NOTES_PROMPT = (
+    "Cette photo montre une page de cours (notes manuscrites, polycopié, diapositive ou tableau). "
+    "Recopie fidèlement tout son contenu en Markdown, en français, sans rien inventer ni résumer :\n"
+    "- les titres de chapitre ou de partie en lignes « # Titre » (sous-parties « ## ») ;\n"
+    "- les formules en LaTeX ($…$ en ligne, $$…$$ isolées) ;\n"
+    "- les schémas décrits en une phrase entre crochets.\n"
+    "Réponds uniquement par la transcription. Si la photo ne contient aucun texte lisible, réponds « ILLISIBLE »."
+)
+
+
+def photo_enabled() -> bool:
+    return vision.available()
+
+
+def _note_name(filename: str, n: int) -> str:
+    stem = os.path.splitext(os.path.basename(filename or ""))[0].strip() or f"photo {n}"
+    return f"{stem} (photo).md"
+
+
+def save_photos(user_id, subject_id, files) -> tuple[list[str], list[str]]:
+    """Fait lire chaque photo par Groq et l'enregistre comme support en Markdown. Retourne (chapitres, messages)."""
+    topics, messages = [], []
+    for n, f in enumerate([f for f in files if f and f.filename], 1):
+        if not (f.mimetype or "").startswith("image/"):
+            messages.append(f"« {f.filename} » : ce n'est pas une photo.")
+            continue
+        try:
+            text = vision.ask(f.read(), NOTES_PROMPT, as_json=False)
+        except vision.VisionError as e:
+            messages.append(f"« {f.filename} » : photo non lue ({e})")
+            continue
+        if len(text) < 20 or text.upper().startswith("ILLISIBLE"):
+            messages.append(f"« {f.filename} » : aucun texte lisible sur la photo.")
+            continue
+        name = _note_name(f.filename, n)
+        path = os.path.join(_upload_folder(user_id), f"{uuid.uuid4().hex}_{secure_filename(name) or 'photo.md'}")
+        with open(path, "w", encoding="utf-8") as out:
+            out.write(text + "\n")
+        extracted, found = extractor.extract(path)
+        if not found and extracted:
+            found = [k.capitalize() for k in extractor.keywords(extracted, 6)]
+        topics += found
+        documents_dao.create(subject_id, name[:200], path, (extracted or text)[:5000], len(found))
+        messages.append(f"« {f.filename} » lue par Groq : {len(found)} chapitre(s) détecté(s).")
+    return topics, messages
+
+
+def upload_photos(user, subject_id, files) -> Report:
+    s = get(subject_id, user["id"])
+    if not vision.available():
+        return Report().error("La lecture de photos n'est pas disponible : il manque une clé Groq sur ce serveur.")
+    found, messages = save_photos(user["id"], subject_id, files)
+    return _merge_found(user, s, found, messages)
+
+
 def upload(user, subject_id, files) -> Report:
     s = get(subject_id, user["id"])
     found, messages = save_documents(user["id"], subject_id, files)
+    return _merge_found(user, s, found, messages)
+
+
+def _merge_found(user, s, found, messages) -> Report:
+    subject_id = s["id"]
     current = rules.topics_of(s)
     merged = rules.merge_topics(current, extractor.clean_topics(found, 40))
     added = len(merged) - len([t for t in current if t not in DEFAULT_TOPICS])
@@ -312,4 +373,5 @@ def detail(user, subject_id) -> dict:
         "exam_phase": exams.phase(s["exam_date"]), "days_left": exams.days_left(s["exam_date"]),
         "default_exam_events": agenda_dao.default_exam_ids(uid),
         "web_enabled": resource_service.web_enabled(),
+        "photo_enabled": photo_enabled(),
     }
