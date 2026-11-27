@@ -67,6 +67,31 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 - **Ressources d'examen** : à moins de 21 jours de l'examen, annales et sujets corrigés (de l'établissement d'abord)
   et vidéos de révision sont ajoutés automatiquement.
 
+## Atelier de révision (fonctionnalité enfichable)
+
+Menu **Réviser** (et un panneau en bas de la page de chaque matière). À partir des supports d'une matière :
+
+- **Niveau de difficulté demandé** pour chaque matière avant toute révision (Facile, Moyen, Difficile ; proposition
+  d'après l'aisance déclarée), réglable aussi **chapitre par chapitre**.
+- **Fiches de révision** par chapitre : définitions, théorèmes et propriétés, formules, l'essentiel, mots-clés.
+  En difficile, les définitions deviennent des cartes à retourner (rappel actif). Imprimables.
+- **QCM notés sur 20**, sur toute la matière ou un chapitre : notion à retrouver, texte à trous, vrai/faux, chapitre.
+  Le niveau change le nombre de questions (8, 10, 15), de choix (3, 4, 5), la proximité des distracteurs et ajoute
+  −0,25 par erreur en difficile. Correction détaillée après la copie.
+- **Carnet de notes** : courbe de la note au fil des essais, moyenne, meilleure note, progression, réussite par
+  chapitre (« À retravailler » sous 50 %), historique avec accès aux corrections. Après 3 notes ≥ 16/20 (ou ≤ 8/20),
+  l'atelier propose de changer de niveau.
+- **Exercices** : énoncés « Exercice n » (et leur corrigé) repérés dans tes supports, puis dans des PDF d'exercices
+  corrigés trouvés en ligne (adaptés au chapitre, à la difficulté et à ton niveau d'études), classés par chapitre
+  avec une difficulté estimée.
+
+Sans support déposé, le texte de l'article Wikipédia de la matière sert de cours. Tout fonctionne sans clé d'API ni
+modèle à télécharger : la génération repose sur des règles de traitement du texte (`generator.py`).
+
+**Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
+tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
+`FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.
+
 ## Établissements de France
 
 L'autocomplétion de l'école ou de l'université (inscription, profil, admin) cherche parmi environ 18 000 collèges,

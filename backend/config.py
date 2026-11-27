@@ -13,6 +13,7 @@ FEATURES = [
     "backend.controllers.resources",
     "backend.controllers.api",
     "backend.controllers.admin",
+    "backend.plugins.revision",  # atelier de révision : fiches, QCM notés, carnet de notes, exercices
 ]
 
 

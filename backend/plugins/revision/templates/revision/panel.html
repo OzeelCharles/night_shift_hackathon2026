@@ -1,0 +1,18 @@
+{# Panneau ajouté en bas de la page d'une matière (Feature.subject_panels). Variable disponible : s #}
+{% set rv = revision_summary(s.id) %}
+{% if rv is not none %}
+<section class="card" id="reviser">
+  <div class="page-head">
+    <div>
+      <h2>Réviser {{ s.name }}</h2>
+      <p class="small muted">
+        {% if rv.difficulty %}Difficulté choisie : <strong>{{ {'facile': 'Facile', 'moyen': 'Moyen', 'difficile': 'Difficile'}[rv.difficulty] }}</strong>.
+        {% if rv.n %}{{ rv.n }} QCM rendu(s), dernière note {{ rv.last|nombre }}/20.{% endif %}
+        {% if rv.n_ex %}{{ rv.n_ex }} exercice(s) disponibles.{% endif %}
+        {% else %}Fiches de révision, QCM notés et exercices tirés de tes supports. Commence par choisir ton niveau de difficulté.{% endif %}
+      </p>
+    </div>
+    <a class="btn" href="{{ url_for('revision.hub', subject_id=s.id) }}">{{ "Fiches, QCM et exercices" if rv.difficulty else "Choisir mon niveau" }}</a>
+  </div>
+</section>
+{% endif %}

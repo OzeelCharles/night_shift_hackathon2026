@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Réviser{% endblock %}
+{% block content %}
+{% include "revision/_style.html" %}
+<div class="page-head">
+  <div>
+    <h1>Réviser</h1>
+    <p class="lead">Fiches de révision, QCM notés et exercices, fabriqués à partir de tes supports de cours. Tes notes sont gardées pour suivre tes progrès.</p>
+  </div>
+</div>
+{% if rows %}
+<section class="card">
+  <table>
+    <thead><tr><th>Matière</th><th>Difficulté</th><th>Essais</th><th>Dernière note</th><th>Meilleure</th><th>Évolution</th><th></th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+      <td><a href="{{ url_for('revision.hub', subject_id=r.s.id) }}"><strong>{{ r.s.name }}</strong></a></td>
+      <td>{% if r.difficulty %}<span class="tag">{{ difficulties[r.difficulty] }}</span>{% else %}<span class="tag tag-hot">À choisir</span>{% endif %}</td>
+      <td>{{ r.n }}</td>
+      <td>{{ (r.last|nombre ~ "/20") if r.last is not none else "–" }}</td>
+      <td>{{ (r.best|nombre ~ "/20") if r.best is not none else "–" }}</td>
+      <td>{% if r.spark %}<svg class="rv-spark" viewBox="0 0 120 32" role="img" aria-label="Évolution des notes de {{ r.s.name }}"><polyline points="{{ r.spark }}"/></svg>{% else %}<span class="muted small">2 essais minimum</span>{% endif %}</td>
+      <td><a class="btn btn-sm {% if r.difficulty %}btn-ghost{% endif %}" href="{{ url_for('revision.hub', subject_id=r.s.id) }}">{{ "Réviser" if r.difficulty else "Choisir mon niveau" }}</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<div class="empty-state">
+  <p>Ajoute d'abord une matière et ses supports de cours : l'atelier en tirera fiches, QCM et exercices.</p>
+  <a class="btn" href="{{ url_for('subjects.new') }}">Ajouter une matière</a>
+</div>
+{% endif %}
+{% endblock %}
