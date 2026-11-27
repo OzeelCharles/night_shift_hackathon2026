@@ -1,0 +1,51 @@
+{# Éléments communs : jauge d'affluence, signalement, graphique horaire. #}
+{% macro affluence(gx) %}
+<div class="cp-gauge cp-l{{ gx.level or 0 }}">
+  {% if gx.live %}
+    <div><strong class="cp-big">{{ gx.live.label }}</strong> <span class="tag">signalé par des étudiants</span></div>
+    <div class="progress" role="img" aria-label="Remplissage d'environ {{ gx.live.pct }} %"><span style="width: {{ gx.live.pct }}%"></span></div>
+    <p class="small muted">≈ {{ gx.live.pct }} % · {{ gx.live.count }} signalement{{ 's' if gx.live.count > 1 }},
+      le plus récent il y a {{ gx.live.age }} min{% if not gx.live.reliable %} · peu de signalements : à prendre avec prudence{% endif %}.</p>
+  {% elif gx.typical %}
+    <div><strong class="cp-big">{{ gx.typical_label }}</strong> <span class="tag">estimation</span></div>
+    <div class="progress" role="img" aria-label="Fréquentation habituelle estimée à environ {{ gx.typical }} %"><span style="width: {{ gx.typical }}%"></span></div>
+    <p class="small muted">Fréquentation <strong>habituelle</strong> à cette heure (≈ {{ gx.typical }} %), pas une mesure :
+      personne n'a signalé ce lieu ces dernières minutes.</p>
+  {% else %}
+    <p class="muted">Habituellement fermé à cette heure.</p>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro report_form(place, back, levels) %}
+<form method="post" action="{{ url_for('campus.report') }}" class="cp-report">
+  {{ csrf_field() }}
+  <input type="hidden" name="place" value="{{ place }}">
+  <input type="hidden" name="back" value="{{ back }}">
+  <p><strong>Tu y es ? Dis aux autres comment c'est :</strong></p>
+  <div class="actions">
+    {% for k, v in levels.items() %}<button class="btn btn-ghost btn-sm" name="level" value="{{ k }}">{{ v[0] }}</button>{% endfor %}
+  </div>
+</form>
+{% endmacro %}
+
+{% macro hour_chart(chart, caption) %}
+{% if chart %}
+<figure class="cp-chart">
+  <figcaption class="small muted">{{ caption }}</figcaption>
+  <ol class="cp-bars">
+    {% for b in chart %}
+    <li class="{{ 'now' if b.now }} {{ '' if b.open else 'off' }}">
+      <span class="cp-bar" style="height: {{ [b.pct, 4]|max if b.open else 4 }}%"></span>
+      <span class="cp-h">{{ b.hour }}h</span>
+      <span class="visually-hidden">{{ b.hour }}h : {% if b.open %}environ {{ b.pct }} %{% else %}fermé{% endif %}{% if b.now %} (maintenant){% endif %}</span>
+    </li>
+    {% endfor %}
+  </ol>
+</figure>
+{% endif %}
+{% endmacro %}
+
+{% macro quiet_slots(hours) %}
+{% if hours %}<p>Créneaux généralement les plus calmes à venir : <strong>{{ hours | join('h, ') }}h</strong>.</p>{% endif %}
+{% endmacro %}

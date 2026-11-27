@@ -129,6 +129,27 @@ Code : `backend/dao/vision.py` (appel à Groq), `backend/business/timetable_phot
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
 `FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.
 
+## Campus : affluence de la BU et des restos U
+
+Espace **Campus** de la barre du haut, deux onglets :
+
+- **Bibliothèque** : l'affluence de la BU de l'établissement indiqué dans le profil.
+- **Restos U** : les restaurants et cafétérias Crous autour de l'école (ville déduite de l'établissement, modifiable),
+  avec leur état du jour, leur affluence et le **menu du jour**.
+
+**D'où viennent les chiffres.** Il n'existe aucune source publique d'affluence en temps réel : l'API d'Affluences est
+réservée aux établissements partenaires et les Crous n'en publient pas. Rivezli ne scrape donc rien et n'invente rien :
+- l'indicateur **« en direct »** vient des signalements des étudiants (Vide, Calme, Animé, Plein), valables 45 min,
+  pondérés par leur fraîcheur, avec une médiane pour qu'un signalement fantaisiste ne fasse pas basculer l'indicateur ;
+  un signalement par lieu et par utilisateur toutes les 10 min ; une BU = un établissement ;
+- **sans signalement récent**, la page affiche la fréquentation **habituelle** à cette heure, étiquetée « estimation »
+  (profils types dans `backend/business/campus.py`), et propose les créneaux les plus calmes.
+
+**Restaurants et menus** : API [CROUStillant](https://www.data.gouv.fr/dataservices/api-croustillant) (communautaire,
+sans clé, 200 requêtes/min, usage non commercial), mise en cache 6 h (restaurants) et 30 min (menus) ; en cas de panne,
+la dernière donnée connue est conservée. Ville géolocalisée par la Géoplateforme de l'IGN. Tout est coupé par
+`ENABLE_WEB = False`. Si la BU de l'école figure sur Affluences, la page y renvoie pour le comptage officiel.
+
 ## Établissements de France
 
 L'autocomplétion de l'école ou de l'université (inscription, profil, admin) cherche parmi environ 18 000 collèges,

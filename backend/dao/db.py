@@ -96,6 +96,15 @@ CREATE TABLE IF NOT EXISTS grades (
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_grades_user ON grades(user_id);
+-- Campus : signalements d'affluence (bibliothèque, restaurants Crous). place_key : « bu:<établissement> » ou « crous:<code> ».
+CREATE TABLE IF NOT EXISTS occupancy_reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    place_key TEXT NOT NULL,
+    level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 4),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_occupancy_place ON occupancy_reports(place_key, created_at);
 """
 
 

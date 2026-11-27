@@ -65,3 +65,15 @@ def search(index: list[tuple], query: str, level: str | None = None, limit: int 
         if len(out) >= limit:
             break
     return out
+
+
+def locate(index: list[tuple], value: str) -> str | None:
+    """Ville d'un établissement d'après la valeur enregistrée dans le profil (voir display_value)."""
+    wanted = _key(value)
+    if not wanted:
+        return None
+    for name, city, kind, sigle, *_rest in index:
+        if _key(display_value(name, city, kind, sigle)) == wanted or _key(name) == wanted:
+            return city or None
+    hits = search(index, value, limit=1)
+    return hits[0]["city"] or None if hits else None

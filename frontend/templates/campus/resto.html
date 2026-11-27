@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% set space = "campus" %}
+{% from "campus/_macros.html" import affluence, report_form, hour_chart, quiet_slots %}
+{% block title %}{{ r.nom }}{% endblock %}
+{% block content %}
+<p class="small"><a href="{{ url_for('campus.restos') }}">← Restos U</a></p>
+<div class="page-head"><div><h1>{{ r.nom }}</h1>
+  <p class="muted">{{ r.type.libelle }} · {{ r.adresse }}</p></div></div>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Affluence</h2>
+    <p><span class="tag {{ '' if r.state.open_today else 'tag-hot' }}">{{ r.state.text }}</span></p>
+    {{ affluence(r.gauge) }}
+    {% if r.state.open_today %}{{ report_form('crous:' ~ r.code, request.path, levels) }}{% endif %}
+  </section>
+  <section class="card">
+    <h2>Infos pratiques</h2>
+    {% if r.horaires %}<ul>{% for h in r.horaires %}<li>{{ h }}</li>{% endfor %}</ul>{% endif %}
+    {% if r.paiement %}<p class="small">Paiement : {{ r.paiement | join(', ') }}</p>{% endif %}
+    {% if r.ispmr %}<p class="small">♿ Accessible aux personnes à mobilité réduite.</p>{% endif %}
+    {% if r.telephone %}<p class="small">Tél. {{ r.telephone }}</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Menu du jour</h2>
+  {% if menu_error %}
+    <p class="muted">Le menu est momentanément indisponible. Réessaie dans un instant.</p>
+  {% elif menu %}
+    {% for meal, cats in menu.items() %}
+    <h3>{{ {'matin': 'Ce matin', 'midi': 'Ce midi', 'soir': 'Ce soir'}.get(meal, meal) }}</h3>
+    {% for c in cats %}
+    <p class="cp-cat"><strong>{{ c.category or 'Au menu' }}</strong><br>{{ c.dishes | join(' · ') }}</p>
+    {% endfor %}
+    {% endfor %}
+  {% else %}
+    <p class="muted">Pas de menu publié pour aujourd'hui{% if not r.state.open_today %} (le restaurant est fermé){% endif %}.</p>
+  {% endif %}
+  <p class="small muted">Menus : Crous, via <a href="https://www.data.gouv.fr/dataservices/api-croustillant" target="_blank" rel="noopener">CROUStillant</a>. Ils peuvent changer en cours de service.</p>
+</section>
+
+{% if chart %}
+<section class="card">
+  <h2>Quand y aller ?</h2>
+  {{ hour_chart(chart, "Fréquentation habituelle estimée (profil type d'un restaurant universitaire, pas une mesure). La barre bleue est l'heure actuelle.") }}
+  {{ quiet_slots(quiet) }}
+</section>
+{% endif %}
+{% endblock %}
