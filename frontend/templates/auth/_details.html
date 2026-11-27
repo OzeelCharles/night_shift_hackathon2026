@@ -1,0 +1,33 @@
+{# Informations complémentaires du compte, toutes facultatives : même formulaire dans la fenêtre qui suit
+   l'inscription et sur la page « Mon compte ». u : le compte (ou la saisie à réafficher). #}
+{% macro details_fields(u, prefix="") %}
+<div class="form-grid">
+  <label>Prénom et nom <input name="full_name" maxlength="80" autocomplete="name" value="{{ u.full_name or '' }}"></label>
+  <label>Date de naissance <input type="date" name="birth_date" value="{{ u.birth_date or '' }}"></label>
+  <label>Téléphone <input type="tel" name="phone" maxlength="30" autocomplete="tel" placeholder="06 12 34 56 78" value="{{ u.phone or '' }}"></label>
+  <label>Ville où tu habites <input name="home_city" maxlength="80" autocomplete="address-level2" value="{{ u.home_city or '' }}"></label>
+  <label>Ville de ton école <input id="{{ prefix }}study_city" name="study_city" maxlength="80" value="{{ u.study_city or '' }}"></label>
+  <label>Domaine d'études <input name="field" maxlength="80" list="{{ prefix }}study-fields" placeholder="Droit, Santé, Informatique…" value="{{ u.field or '' }}"></label>
+  <label>Formation <input name="program" maxlength="120" placeholder="L3 droit privé, BTS MCO, IFSI 2e année…" value="{{ u.program or '' }}"></label>
+  <label>Langues <input name="languages" maxlength="160" placeholder="anglais (B2), espagnol…" value="{{ u.languages or '' }}"></label>
+  <label class="full">LinkedIn ou portfolio <input name="website" maxlength="200" inputmode="url" placeholder="linkedin.com/in/…" value="{{ u.website or '' }}"></label>
+</div>
+<datalist id="{{ prefix }}study-fields">{% for f in study_fields %}<option value="{{ f }}">{% endfor %}</datalist>
+<fieldset class="ask">
+  <legend>Permis de conduire</legend>
+  <div class="pills">
+    {% for key, label in licenses.items() %}
+    <label><input type="radio" name="driving_license" value="{{ key }}" {% if u.driving_license == key %}checked{% endif %}><span>{{ label }}</span></label>
+    {% endfor %}
+  </div>
+</fieldset>
+<fieldset class="ask">
+  <legend>Cherches-tu un stage ?</legend>
+  <div class="pills">
+    {% for key, label in internship_choices.items() %}
+    <label><input type="radio" name="wants_internship" value="{{ key }}" {% if u.wants_internship == key %}checked{% endif %}><span>{{ label }}</span></label>
+    {% endfor %}
+  </div>
+  <p class="hint">Avec « Non », l'espace Stages disparaît du menu. Tu peux changer d'avis quand tu veux.</p>
+</fieldset>
+{% endmacro %}

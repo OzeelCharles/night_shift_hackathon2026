@@ -103,6 +103,15 @@ def menu_preview(code: int, now: datetime | None = None) -> dict:
     return {"meals": {meal: cats for meal, cats in menu.items() if meal in ("midi", "soir")}}
 
 
+def agenda_preview(user, now: datetime | None = None) -> dict:
+    """Aperçu pour l'agenda d'Encadrement : restos U ouverts aujourd'hui près de l'école, menu du plus proche."""
+    now = now or datetime.now()
+    page = restos_page(user, "", now)
+    open_today = [r for r in page["restaurants"] if r["state"]["open_today"]][:3]
+    menu = menu_preview(open_today[0]["code"], now) if open_today else None
+    return {**page, "restaurants": open_today, "menu": menu}
+
+
 # ---------------------------------------------------------------- signalement
 def report(user, form) -> Report:
     level = rules.parse_level(form.get("level"))

@@ -57,6 +57,23 @@
   </div>
   {% endif %}
 {% endwith %}
+{# Juste après l'inscription : fenêtre des informations complémentaires (une seule fois, facultative) #}
+{% if g.user and session.pop('onboarding', False) %}
+{% from "auth/_details.html" import details_fields %}
+<dialog class="modal" id="onboarding" aria-labelledby="onboarding-title">
+  <form method="post" action="{{ url_for('auth.details') }}">
+    {{ csrf_field() }}
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <h2 id="onboarding-title">Encore quelques informations ?</h2>
+    <p class="muted">Elles préremplissent tes lettres de motivation et tes recherches de stage. Tout est facultatif et se modifie ensuite dans « Mon compte ».</p>
+    {{ details_fields(g.user, prefix="ob-") }}
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="submit" formmethod="dialog" formnovalidate>Plus tard</button>
+      <button class="btn">Enregistrer</button>
+    </div>
+  </form>
+</dialog>
+{% endif %}
 <script>
   // Autocomplétion des établissements de France (liste locale de ~18 000 collèges, lycées et établissements du supérieur)
   document.querySelectorAll('input[data-schools-url]').forEach(input => {
@@ -95,6 +112,21 @@
       setTimeout(() => { btn.disabled = true; }, 0);
     });
   });
+
+  // Contenus chargés après la page (panneaux qui dépendent d'un service extérieur, ex. les restos U)
+  document.querySelectorAll('[data-fragment-url]').forEach(async box => {
+    try {
+      const r = await fetch(box.dataset.fragmentUrl);
+      if (!r.ok) throw new Error(r.status);
+      box.innerHTML = await r.text();
+    } catch (e) {
+      box.innerHTML = '<p class="muted small">Indisponible pour le moment.</p>';
+    }
+  });
+
+  // Fenêtre des informations complémentaires (après l'inscription)
+  const onboarding = document.getElementById('onboarding');
+  if (onboarding && onboarding.showModal) onboarding.showModal();
 
   // Menu sur petit écran
   const topbar = document.querySelector('.topbar');

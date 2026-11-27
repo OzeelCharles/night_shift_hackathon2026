@@ -79,7 +79,7 @@ class StagesRoutesTests(unittest.TestCase):
     def test_offer_read_from_link(self):
         self.app.config["ENABLE_WEB"] = True
         with mock.patch.object(service, "_fetch", wraps=service._fetch) as fetch, \
-                mock.patch("backend.dao.vision.session") as session:
+                mock.patch("backend.dao.web.secure_session") as session:
             session.return_value.get.return_value = mock.Mock(status_code=200, text=JOB_PAGE)
             self.client.post("/stages/offres", data={"url": "https://www.welcometothejungle.com/fr/jobs/1"})
             fetch.assert_called_once()
@@ -99,8 +99,9 @@ class StagesRoutesTests(unittest.TestCase):
         self.assertTrue(r.headers["Location"].endswith(f"/stages/lettres/{letter['id']}"))
         self.assertEqual(letter["author"], "modèle")
         for part in ("Licence 3 de droit privé", "Université Lyon 3", "Cabinet Martin", "rédaction juridique",
-                     "2 mois", "juin 2027", "[ce que tu veux apprendre]", "Je parle français, anglais (B2).",
-                     "permis B", "Lyon, le ", "Léa Martin\nLyon, 06 12 34 56 78, e@test.fr"):
+                     "à partir de juin 2027, pour une durée de 2 mois", "un stage en droit", "[métier visé]",
+                     "Je parle français, anglais (B2).", "permis B", "À Lyon, le ", "Objet : Stage - Assistant juridique",
+                     "Léa Martin\nLyon\n06 12 34 56 78, e@test.fr", "salutations distinguées.\n\nLéa Martin"):
             self.assertIn(part, letter["content"])
         self.client.post(f"/stages/lettres/{letter['id']}", data={"content": "Ma lettre retouchée."})
         dl = self.client.get(f"/stages/lettres/{letter['id']}/telecharger")

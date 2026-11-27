@@ -244,6 +244,22 @@ class PagesTests(unittest.TestCase):
             self.assertIn("momentanément indisponible", page.get_data(as_text=True))
             self.assertEqual(self.lea.get("/campus/restos/1/menu.json").get_json(), {"error": True})
 
+    def test_restos_of_the_day_in_the_agenda(self):
+        agenda = self.lea.get("/agenda").get_data(as_text=True)
+        self.assertIn("Restos U aujourd'hui", agenda, "panneau fourni par Campus dans Encadrement › Mon agenda")
+        self.assertIn('data-fragment-url="/campus/restos/apercu"', agenda, "contenu chargé après la page")
+        preview = self.lea.get("/campus/restos/apercu").get_data(as_text=True)
+        self.assertIn("Resto U&#39; Campus", preview)
+        self.assertNotIn("Resto lointain", preview)
+        self.assertIn("Ce midi, plats du jour :</strong> Lasagne de légumes, Sauté de dinde", preview)
+        self.assertNotIn("<html", preview, "fragment seul, sans mise en page")
+        with patch.object(campus_web, "restaurants", side_effect=campus_web.Unavailable("hors ligne")):
+            down = self.lea.get("/campus/restos/apercu")
+        self.assertEqual(down.status_code, 200)
+        self.assertIn("momentanément indisponibles", down.get_data(as_text=True))
+        with patch("backend.services.campus_service.datetime", type("Sun", (datetime,), {"now": classmethod(lambda c, tz=None: SUNDAY)})):
+            self.assertIn("Aucun resto U ouvert aujourd'hui", self.lea.get("/campus/restos/apercu").get_data(as_text=True))
+
     def test_menu_json(self):
         data = self.lea.get("/campus/restos/1/menu.json").get_json()
         self.assertEqual(data["meals"]["midi"][0]["dishes"], ["Lasagne de légumes", "Sauté de dinde"])

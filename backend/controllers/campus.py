@@ -28,6 +28,13 @@ def restos():
     return render_template("campus/restos.html", **service.restos_page(g.user, request.args.get("ville", "")))
 
 
+@bp.route("/restos/apercu")
+@login_required
+def agenda_preview():
+    """Fragment chargé par le panneau de l'agenda (après la page, pour ne pas la ralentir)."""
+    return render_template("campus/_agenda_preview.html", **service.agenda_preview(g.user))
+
+
 @bp.route("/restos/<int:code>")
 @login_required
 def resto(code):
@@ -51,4 +58,4 @@ feature = Feature("campus", blueprints=[bp], nav=[
     NavItem("campus.index", "Campus", order=4, section="site", opens="campus"),
     NavItem("campus.library", "Bibliothèque", order=10, section="campus"),
     NavItem("campus.restos", "Restos U", order=20, section="campus"),
-])
+], panels={"agenda": ["campus/agenda_panel.html"]})  # les restos U du jour dans Encadrement › Mon agenda

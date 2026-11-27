@@ -4,31 +4,28 @@
 {% block content %}
 <div class="solo">
   <h1>Créer un compte</h1>
-  <p class="lead">Trois phrases, et c'est parti. Le reste se complète plus tard, quand tu en as besoin.</p>
+  <p class="lead">Ton niveau et ton école servent à te proposer des ressources adaptées. Juste après, une fenêtre te proposera de compléter ton profil, si tu veux.</p>
   <form method="post" class="sheet">
     {{ csrf_field() }}
-    <p class="madlib">
-      Je m'appelle <input class="blank" name="username" required minlength="2" maxlength="40" autocomplete="nickname" placeholder="ton prénom" value="{{ request.form.username }}" aria-label="Nom d'utilisateur">
-      et mon e-mail est <input class="blank" type="email" name="email" required autocomplete="email" placeholder="toi@exemple.fr" value="{{ request.form.email }}" aria-label="E-mail" data-min="14">.
-    </p>
-    <p class="madlib">
-      Je suis en
-      <select class="blank" name="level" required aria-label="Niveau d'études">
-        <option value="" disabled {% if not request.form.level %}selected{% endif %}>niveau</option>
-        {% for key, label in levels.items() %}
-        <option value="{{ key }}" {% if request.form.level == key %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      à <input class="blank" name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
-               data-schools-url="{{ url_for('api.schools') }}" placeholder="ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}" aria-label="École ou université" data-min="18">.
-    </p>
-    <datalist id="schools"></datalist>
-    <div class="pair">
-      <label>Mot de passe <span class="hint">8 caractères minimum</span>
-        <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
-      <label>Encore une fois
-        <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
+    <div class="form-grid">
+      <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" autocomplete="nickname" value="{{ request.form.username }}"></label>
+      <label>E-mail <input type="email" name="email" required autocomplete="email" value="{{ request.form.email }}"></label>
+      <label class="full">Niveau d'études
+        <select name="level" required>
+          <option value="" disabled {% if not request.form.level %}selected{% endif %}>Choisis ton niveau</option>
+          {% for key, label in levels.items() %}
+          <option value="{{ key }}" {% if request.form.level == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select></label>
+      <label class="full">École ou université
+        <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
+               data-schools-url="{{ url_for('api.schools') }}" placeholder="ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}">
+        <span class="hint">Tous les collèges, lycées, universités et écoles de France. Le tien n'y est pas ? Écris son nom.</span></label>
+      <label>Mot de passe <input type="password" name="password" required minlength="8" autocomplete="new-password">
+        <span class="hint">8 caractères minimum</span></label>
+      <label>Confirmation <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
     </div>
+    <datalist id="schools"></datalist>
     <button class="btn btn-lg btn-block">Créer mon compte</button>
   </form>
   <p class="muted small">Déjà inscrit·e ? <a href="{{ url_for('auth.login') }}">Se connecter</a></p>

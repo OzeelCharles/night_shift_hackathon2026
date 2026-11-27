@@ -2,21 +2,18 @@
 
 Le schéma du cœur n'est pas modifié : tout est supprimé en cascade avec l'utilisateur.
 """
-from backend.dao.db import execute, get_db, one, query
+from backend.dao.db import execute, one, query
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS stg_profile (           -- profil candidat, valable pour tout cursus
+CREATE TABLE IF NOT EXISTS stg_profile (           -- ce qui ne sert qu'aux candidatures (le reste vient du compte)
     user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-    full_name TEXT NOT NULL DEFAULT '',
-    field TEXT NOT NULL DEFAULT '',                -- domaine d'études : droit, informatique, soins infirmiers…
-    program TEXT NOT NULL DEFAULT '',              -- intitulé exact de la formation
+    goal TEXT NOT NULL DEFAULT '',                 -- métier visé : « juriste d'affaires », « data scientist »…
     skills TEXT NOT NULL DEFAULT '',
     experiences TEXT NOT NULL DEFAULT '',
+    projects TEXT NOT NULL DEFAULT '',             -- projets marquants (cours, perso, associatifs)
     qualities TEXT NOT NULL DEFAULT '',
-    location TEXT NOT NULL DEFAULT '',
     duration TEXT NOT NULL DEFAULT '',             -- « 2 mois », « 6 mois »…
-    start TEXT NOT NULL DEFAULT '',                -- « juin 2027 »…
-    contact TEXT NOT NULL DEFAULT ''               -- coordonnées en tête de lettre
+    start TEXT NOT NULL DEFAULT ''                 -- « juin 2027 »…
 );
 CREATE TABLE IF NOT EXISTS stg_wishes (            -- postes recherchés
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,13 +46,10 @@ CREATE TABLE IF NOT EXISTS stg_letters (           -- lettres de motivation gén
 );
 CREATE INDEX IF NOT EXISTS idx_stg_offers_user ON stg_offers(user_id, created_at);
 """
-# Ce qui ne sert qu'aux candidatures. Nom, villes, études, coordonnées, permis et langues viennent du compte
-# (les anciennes colonnes full_name, field, program, location et contact restent, inutilisées).
-PROFILE_FIELDS = ("skills", "experiences", "qualities", "duration", "start")
-
-
-def init_schema() -> None:
-    get_db().executescript(SCHEMA)
+# Colonnes ajoutées après la première version de la table (les bases déjà créées les reçoivent au démarrage)
+MIGRATIONS = {"stg_profile": {"goal": "TEXT NOT NULL DEFAULT ''", "projects": "TEXT NOT NULL DEFAULT ''"}}
+# Nom, villes, études, coordonnées, permis et langues viennent du compte, pas d'ici.
+PROFILE_FIELDS = ("goal", "skills", "experiences", "projects", "qualities", "duration", "start")
 
 
 # ---------------------------------------------------------------- profil

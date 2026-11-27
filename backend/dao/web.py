@@ -26,6 +26,23 @@ SKIP_SECTIONS = {
 }
 
 
+def secure_session() -> requests.Session:
+    """Session qui vérifie les certificats avec le magasin du système plutôt que certifi : un antivirus
+    qui inspecte le TLS (Norton, Kaspersky…) n'ajoute sa racine qu'au magasin du système."""
+    import ssl
+
+    from requests.adapters import HTTPAdapter
+
+    class _Adapter(HTTPAdapter):
+        def init_poolmanager(self, *args, **kwargs):
+            kwargs["ssl_context"] = ssl.create_default_context()
+            return super().init_poolmanager(*args, **kwargs)
+
+    session = requests.Session()
+    session.mount("https://", _Adapter())
+    return session
+
+
 def _strip_tags(s: str) -> str:
     return html.unescape(re.sub(r"<[^>]+>", "", s or "")).strip()
 
