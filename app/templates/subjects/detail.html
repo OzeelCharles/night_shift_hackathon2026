@@ -240,14 +240,14 @@
   {% if s.resources_status == 'error' %}
   <div class="notice notice-warn"><p>Une partie de la recherche sur internet a échoué. Réessaie plus tard avec « Actualiser ».</p></div>
   {% endif %}
-  {% if pending and not web %}<p class="loading">Recherche de cours, d'exercices corrigés et de pages de ton établissement…</p>{% endif %}
+  {% if pending and not web %}<p class="loading">Recherche de cours et d'exercices corrigés en PDF, et de documents de ton établissement…</p>{% endif %}
   {% if web %}
   <ul class="resources">
     {% for r in web %}
     <li class="res-row">
       <div class="grow">
         <a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
-        <span class="tag">{{ r.source }}</span>{% if r.meta %}<span class="tag tag-school">{{ r.meta }}</span>{% endif %}
+        {% if '.pdf' in r.url|lower %}<span class="tag tag-pdf">PDF</span>{% endif %}<span class="tag">{{ r.source }}</span>{% if r.meta %}<span class="tag tag-school">{{ r.meta }}</span>{% endif %}
         {% if r.snippet %}<div class="small muted">{{ r.snippet }}</div>{% endif %}
       </div>
       {{ keep_button(r) }}

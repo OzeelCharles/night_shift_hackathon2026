@@ -18,7 +18,7 @@
              {% if new %}autofocus autocomplete="off" aria-controls="suggest-box"{% endif %}></label>
     {% if new %}
     <div class="suggest-box" id="suggest-box" aria-live="polite"
-         data-url="{{ url_for('main.api_subject_suggestions') }}" data-initial='{{ agenda_suggestions|tojson }}'
+         data-url="{{ url_for('main.api_subject_suggestions') }}" data-initial='{{ (agenda_suggestions or [])|tojson }}'
          data-subject-url="{{ url_for('main.subject_detail', subject_id=0) }}"></div>
     {% endif %}
   </div>

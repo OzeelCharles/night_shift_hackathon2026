@@ -333,3 +333,12 @@ form[data-kind="autre"] .kind-school { display: none; }
 .timeline-exam li { border-left-color: var(--margin); }
 .timeline-exam li:first-child { border-left-color: var(--margin); }
 .blk.busy.is-exam { border-left-color: var(--margin); background: color-mix(in srgb, var(--margin) 10%, var(--surface)); }
+
+/* ---------- Agenda : aperçu du rattachement, jours sans cours ---------- */
+.link-preview { margin: -6px 0 16px; }
+.link-preview p { margin: 0 0 6px; }
+.link-status { padding: 8px 12px; border-radius: 8px; background: var(--ink-soft); }
+.link-status.is-linked { border-left: 4px solid var(--ok); }
+.link-status.is-new { border-left: 4px solid var(--warn); }
+.day-flag { width: 100%; font-size: .75rem; font-weight: 700; color: var(--ok); }
+.tag-pdf { background: color-mix(in srgb, var(--margin) 14%, transparent); color: var(--margin); }

@@ -299,6 +299,64 @@ class AppTests(unittest.TestCase):
         page = self.client.get("/matieres/1").get_data(as_text=True)
         self.assertIn("Préparer l'examen du", page)
 
+    def test_subject_form_error_is_not_a_server_error(self):
+        """Régression : objectif examen sans date ni épreuve dans l'agenda -> formulaire réaffiché, pas d'erreur 500."""
+        self.register()
+        self.add_slot("CM Probabilités", kind="autre")  # un agenda non vide
+        r = self.client.post("/matieres/nouvelle", data={"name": "Biologie", "goal": "exam", "exam_date": "",
+                                                         "comfort": "3", "topics": ""})
+        self.assertEqual(r.status_code, 200)
+        page = r.get_data(as_text=True)
+        self.assertIn("Indique la date de l&#39;examen.", page)
+        self.assertIn('value="Biologie"', page, "la saisie est conservée")
+        self.assertEqual(self.client.get("/matieres/nouvelle").status_code, 200)
+        self.assertEqual(len(self.q("SELECT * FROM subjects")), 0)
+
+    def test_agenda_live_link_preview(self):
+        self.register()
+        self.new_subject("Séries temporelles 1")
+        page = self.client.get("/agenda").get_data(as_text=True)
+        self.assertNotIn("Détecter automatiquement", page, "plus de menu de choix de matière : détection par défaut")
+        self.assertIn("data-link-url", page)
+        r = self.client.get("/api/agenda/rattachement?titre=" + "Séries temporelles 1 2ASTA03 - Marie-Lorraine CHAU").get_json()
+        self.assertEqual(r["match"]["name"], "Séries temporelles 1")
+        self.assertIsNone(r["new_name"])
+        r = self.client.get("/api/agenda/rattachement?titre=Partiel de traitement du signal&type=examen").get_json()
+        self.assertIsNone(r["match"])
+        self.assertEqual(r["new_name"], "Traitement du signal")
+        r = self.client.get("/api/agenda/rattachement?titre=séries&type=cours").get_json()
+        self.assertEqual(r["suggestions"][0]["name"], "Séries temporelles 1")
+        # l'enregistrement suit exactement l'aperçu : pas de doublon, la matière proche est utilisée
+        self.add_slot("Séries temporelles 1 2ASTA03 - Marie-Lorraine CHAU", kind="cours")
+        self.assertEqual(len(self.q("SELECT * FROM subjects")), 1)
+        self.add_slot("Traitement du signal 2ASTA20 - Cédric HERZET", kind="cours", start="14:00", end="16:00")
+        self.assertEqual(self.q("SELECT name FROM subjects ORDER BY id")[-1]["name"], "Traitement du signal")
+
+    def test_holidays_are_free_days_and_not_suggested(self):
+        self.register()
+        day = date.today() + timedelta(days=2)
+        while day.weekday() == 6:  # le dimanche est un jour de repos par défaut
+            day += timedelta(days=1)
+        d = day.strftime("%Y%m%d")
+        ics = ("BEGIN:VCALENDAR\r\n"
+               f"BEGIN:VEVENT\r\nSUMMARY:Vacances scolaires - Holidays  -\r\nDTSTART:{d}T080000\r\nDTEND:{d}T200000\r\nEND:VEVENT\r\n"
+               f"BEGIN:VEVENT\r\nSUMMARY:Présentation des filières de 3A M347 - Christophe\r\nDTSTART:{d}T133000\r\nDTEND:{d}T140000\r\nEND:VEVENT\r\n"
+               f"BEGIN:VEVENT\r\nSUMMARY:Séries temporelles 1 2ASTA03 - Marie\r\nDTSTART:{d}T140000\r\nDTEND:{d}T160000\r\nEND:VEVENT\r\n"
+               "END:VCALENDAR\r\n").encode()
+        self.client.post("/agenda/import", data={"ics": (io.BytesIO(ics), "edt.ics"), "create_missing": "on"},
+                         content_type="multipart/form-data")
+        names = [s["name"] for s in self.q("SELECT name FROM subjects")]
+        self.assertEqual(names, ["Séries temporelles 1"], "ni « Vacances » ni « Présentation » ne deviennent des matières")
+        sugg = [s["name"] for s in self.client.get("/api/suggestions/matieres").get_json()]
+        self.assertNotIn("Vacances scolaires", sugg)
+        # des révisions peuvent être placées pendant les vacances (mais pas sur le cours ni la présentation)
+        self.client.post("/matieres/1/programme", data={"goal": "a_jour", "weekly_hours": "10", "comfort": "3"})
+        on_day = [s for s in self._sessions() if s["start"][:10] == day.isoformat()]
+        self.assertTrue(on_day, "les vacances ne bloquent pas les révisions")
+        for s in on_day:
+            self.assertFalse(s["start"][11:16] < "16:15" and s["end"][11:16] > "13:15", "le cours reste bloqué")
+        self.assertIn("Vacances scolaires", self.client.get(f"/planning?semaine={day.isoformat()}").get_data(as_text=True))
+
     def test_schools_api_is_public(self):
         r = self.client.get("/api/ecoles?q=ensai")
         self.assertEqual(r.status_code, 200)

@@ -38,6 +38,36 @@ class MatchingTests(unittest.TestCase):
         self.assertEqual(clean_title("Analyse 1 | B204"), "Analyse 1")
 
 
+class RealTimetableTests(unittest.TestCase):
+    """Intitulés réels d'un emploi du temps ENSAI (codes de cours, enseignants, salles)."""
+
+    def test_course_codes_and_teachers_are_ignored(self):
+        self.assertEqual(clean_title("Séries temporelles 1 2ASTA03 - Marie-Lorraine CHAU"), "Séries temporelles 1")
+        self.assertEqual(clean_title("Régression linéaire et généralisée 2ASTA02 - Frédé"),
+                         "Régression linéaire et généralisée")
+        self.assertEqual(clean_title("Anglais 2AHUM01 -"), "Anglais")
+        self.assertGreaterEqual(similarity("Séries temporelles 1 2ASTA03 - Marie-Lorraine CHAU", "Séries temporelles 1"),
+                                THRESHOLD)
+        self.assertGreaterEqual(similarity("Econométrie et inférence causale 2AECO02 - Arouna", "Économétrie et inférence causale"),
+                                THRESHOLD)
+        self.assertLess(similarity("Séries temporelles 1 2ASTA03 -", "Séries temporelles 2"), THRESHOLD)
+        self.assertEqual(similarity("Présentation des filières de 3A M347 - Christophe", "Présentation des filières de 3A"), 1.0,
+                         "la salle M347 n'est pas un numéro de cours")
+
+    def test_non_course_events(self):
+        from app.suggestions import is_course, is_holiday
+        for t in ["Vacances scolaires - Holidays  -", "Férié - Bank holiday  -"]:
+            self.assertTrue(is_holiday(t), t)
+            self.assertFalse(is_course(t), t)
+        for t in ["Présentation des filières de 3A M347 - Christophe", "Career sessions   -",
+                  "Rencontre parrain de promotion 2A Ingénieurs  -"]:
+            self.assertFalse(is_course(t), t)
+        for t in ["Séries temporelles 1 2ASTA03 -", "Théorie de l'information", "Intégration numérique",
+                  "Anglais 2AHUM01 - Amany MESSOUS", "Ponts thermiques"]:
+            self.assertTrue(is_course(t), t)
+            self.assertFalse(is_holiday(t), t)
+
+
 class LevelRankingTests(unittest.TestCase):
     def test_level_score(self):
         self.assertGreater(level_score("Probabilités - cours de Master 1", "master"), 0)
@@ -55,6 +85,37 @@ class LevelRankingTests(unittest.TestCase):
         ranked = [i["title"] for i in rank_for_level(items, "licence")]
         self.assertEqual(ranked[0], "Probabilités L2 université")
         self.assertEqual(ranked[-1], "Probabilités 3e brevet")
+
+
+class ResourceOrderTests(unittest.TestCase):
+    def test_pdfs_come_before_wikipedia(self):
+        from unittest import mock
+        from app import resources
+
+        def fake_ddg(query, limit=5):
+            if "filetype:pdf" in query and "ENSAI" in query:
+                return [{"title": "PDF Poly proba M1 - Ensai", "url": "https://ensai.fr/poly.pdf", "snippet": "",
+                         "source": "ensai.fr", "kind": "web"}]
+            if "filetype:pdf" in query:
+                return [{"title": "Cours de probabilités", "url": "https://univ.fr/proba.pdf", "snippet": "",
+                         "source": "univ.fr", "kind": "web"}]
+            return [{"title": "Page de cours", "url": "https://site.fr/proba", "snippet": "", "source": "site.fr",
+                     "kind": "web"}]
+
+        wiki = [{"title": "Wikipédia : Probabilité", "url": "https://fr.wikipedia.org/wiki/Probabilit%C3%A9",
+                 "snippet": "", "source": "Wikipédia", "kind": "web"}]
+        with mock.patch.object(resources, "duckduckgo_search", side_effect=fake_ddg), \
+                mock.patch.object(resources, "wikipedia_search", return_value=wiki), \
+                mock.patch.object(resources, "youtube_search", return_value=[]):
+            found, errors = resources.find_resources("Probabilités", ["Lois"], level="master", school="ENSAI")
+        web = [r for r in found if r["kind"] == "web"]
+        self.assertEqual(errors, [])
+        self.assertEqual(web[0]["url"], "https://ensai.fr/poly.pdf", "le PDF de l'établissement d'abord")
+        self.assertEqual(web[0]["title"], "Poly proba M1 - Ensai", "préfixe « PDF » retiré du titre")
+        self.assertEqual(web[1]["url"], "https://univ.fr/proba.pdf")
+        self.assertEqual(web[-1]["source"], "Wikipédia", "Wikipédia en dernier")
+        self.assertLess([r["url"] for r in web].index("https://site.fr/proba"),
+                        [r["url"] for r in web].index(wiki[0]["url"]))
 
 
 class EmbeddingTests(unittest.TestCase):

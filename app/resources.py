@@ -12,6 +12,8 @@ from __future__ import annotations
 import html
 import json
 import re
+import threading
+import time
 from urllib.parse import parse_qs, quote_plus, urlparse
 
 import requests
@@ -116,14 +118,34 @@ def wikipedia_outline(subject: str, lang: str = "fr") -> list[str]:
 
 
 # ------------------------------------------------------------------ Web
-def duckduckgo_search(query: str, limit: int = 5) -> list[dict]:
-    r = requests.post("https://html.duckduckgo.com/html/", data={"q": query, "kl": "fr-fr"},
-                      headers=UA, timeout=TIMEOUT)
+_ddg_lock = threading.Lock()
+_ddg_last = [0.0]
+DDG_MIN_INTERVAL = 1.2  # secondes entre deux requêtes : enchaînées trop vite, elles reviennent vides
+
+
+def _ddg_fetch(query: str) -> str:
+    with _ddg_lock:
+        wait = _ddg_last[0] + DDG_MIN_INTERVAL - time.monotonic()
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            r = requests.post("https://html.duckduckgo.com/html/", data={"q": query, "kl": "fr-fr"},
+                              headers=UA, timeout=TIMEOUT)
+        finally:
+            _ddg_last[0] = time.monotonic()
     r.raise_for_status()
+    return r.text
+
+
+def duckduckgo_search(query: str, limit: int = 5) -> list[dict]:
+    text = _ddg_fetch(query)
+    if 'class="result__a"' not in text:  # réponse vide (limitation de débit) : un nouvel essai
+        time.sleep(2)
+        text = _ddg_fetch(query)
     out = []
     pattern = re.compile(r'class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>.*?'
                          r'class="result__snippet"[^>]*>(.*?)</a>', re.S)
-    for href, title, snippet in pattern.findall(r.text):
+    for href, title, snippet in pattern.findall(text):
         href = html.unescape(href)
         if "uddg=" in href:
             href = parse_qs(urlparse(href).query).get("uddg", [href])[0]
@@ -227,6 +249,11 @@ GENERIC_SCHOOL_WORDS = {"lycee", "lycée", "college", "collège", "universite", 
                         "superieure", "supérieure", "polytechnique", "sciences", "faculte", "faculté"}
 
 
+def is_pdf(r: dict) -> bool:
+    path = urlparse(r.get("url", "")).path.lower()
+    return path.endswith(".pdf") or "/pdf/" in path or r.get("title", "").upper().startswith("PDF ")
+
+
 def school_keyword(school: str) -> str:
     """Mot le plus distinctif du nom d'établissement : « Lycée Chateaubriand » -> « chateaubriand »,
     « Université de Rennes » -> « rennes », « ENSAI » -> « ensai »."""
@@ -240,37 +267,46 @@ def find_resources(subject: str, topics: list[str], extra_keywords: list[str] | 
     errors: list[str] = []
     lvl = LEVEL_QUERY.get(level, "")
 
-    # 1. Wikipédia : la matière et ses premiers chapitres
-    queries = [subject] + [f"{subject} {t}" for t in topics[:3]]
-    if extra_keywords:
-        queries.append(f"{subject} {' '.join(extra_keywords[:3])}")
-    for q in queries:
-        try:
-            results += wikipedia_search(q, limit=3 if q == subject else 2)
-        except requests.RequestException as e:
-            errors.append(f"Wikipédia indisponible ({e.__class__.__name__}).")
-            break
+    # 1. Documents PDF en priorité : polycopiés de l'établissement, puis cours et exercices
+    #    corrigés du bon niveau ; quelques pages web classiques en complément.
+    def q(*parts):
+        return " ".join(p for p in parts if p)
 
-    # 2. Web : établissement d'abord (polycopiés de ton école), puis cours/exercices du bon niveau
     web_queries = []
     if school:
-        web_queries.append((f"{subject} {school} cours pdf", f"Lié à {school}"))
-    web_queries += [(f"{subject} cours {lvl} pdf".replace("  ", " "), None),
-                    (f"{subject} exercices corrigés {lvl}".replace("  ", " "), None)]
+        web_queries.append((q(subject, school, "filetype:pdf"), True))
+    web_queries += [(q(subject, "cours", lvl, "filetype:pdf"), False),
+                    (q(subject, "exercices corrigés", lvl, "filetype:pdf"), False),
+                    (q(subject, "cours", lvl), False)]
+    school_key = school_keyword(school)
     web = []
-    for q, label in web_queries:
+    for query, from_school in web_queries:
         try:
-            found = duckduckgo_search(q, limit=4)
+            found = duckduckgo_search(query, limit=6)
         except requests.RequestException as e:
             errors.append(f"Recherche web indisponible ({e.__class__.__name__}).")
             break
-        if label:
-            school_key = school_keyword(school)
-            for r in found:
-                if school_key and (school_key in r["url"].lower() or school_key in r["title"].lower()):
-                    r["meta"] = label
+        for r in found:
+            r["pdf"] = is_pdf(r)
+            if r["title"].upper().startswith("PDF "):
+                r["title"] = r["title"][4:].strip()  # préfixe ajouté par le moteur de recherche
+            if from_school and school_key and (school_key in r["url"].lower() or school_key in r["title"].lower()):
+                r["meta"] = f"Lié à {school}"
         web += found
-    results += rank_for_level(web, level)
+    # ordre : établissement, puis PDF, puis pages web ; à rang égal, le plus adapté au niveau
+    web.sort(key=lambda r: (not r.get("meta"), not r["pdf"], -level_score(r["title"], level)))
+    results += web
+
+    # 2. Wikipédia ensuite, en complément (définitions, vue d'ensemble)
+    wiki_queries = [subject] + [q(subject, t) for t in topics[:1]]
+    if extra_keywords:
+        wiki_queries.append(q(subject, " ".join(extra_keywords[:2])))
+    for query in wiki_queries:
+        try:
+            results += wikipedia_search(query, limit=2)
+        except requests.RequestException as e:
+            errors.append(f"Wikipédia indisponible ({e.__class__.__name__}).")
+            break
 
     # 3. Vidéos : YouTube, sinon plan B via la recherche web
     videos: list[dict] = []
@@ -299,6 +335,7 @@ def find_resources(subject: str, topics: list[str], extra_keywords: list[str] | 
     for r in results:
         if r["url"] not in seen:
             seen.add(r["url"])
+            r.pop("pdf", None)
             r.setdefault("meta", "")
             r.setdefault("thumbnail", "")
             r.setdefault("snippet", "")

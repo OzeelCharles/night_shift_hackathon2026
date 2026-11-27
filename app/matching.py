@@ -37,20 +37,41 @@ NOISE = {
     "seance", "revision", "revisions", "controle", "partiel", "examen", "exam", "ds", "de", "des",
     "du", "la", "le", "les", "l", "d", "et", "en", "a", "au", "aux", "pour", "sur", "un", "une",
     "intro", "introduction", "chapitre", "chap", "magistral", "dirige", "diriges", "pratique", "pratiques",
+    "final", "finale", "finaux", "midterm", "rattrapage", "epreuve", "soutenance", "devoir", "surveille",
+    "cc", "ccf",
 }
 DISPLAY_NOISE = {"cm", "td", "tp", "amphi", "salle", "groupe", "gr", "grp", "cours", "séance", "seance"}
-ROOM = re.compile(r"^[a-z]{0,3}\d{2,4}[a-z]?$")  # B204, 112, s3a…
+ROOM = re.compile(r"^[a-z]{0,3}\d{2,4}[a-z]?$")  # B204, 112, M347…
+# Codes de cours des emplois du temps : 2ASTA02, 2AHUM05, INF101, MAT2001 (majuscules suivies de chiffres)
+COURSE_CODE = re.compile(r"\b\d*[A-Z]{2,6}\d{2,}[A-Z]?\b")
+# « Cours - Enseignant », « Cours | Salle » : on ne garde que la partie utile
+SEPARATORS = re.compile(r"\s+[-–|/]\s+")
+
+
+def _normalize_words(s: str) -> str:
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    words = []
+    for token in s.split():
+        if ROOM.match(token) and not token.isdigit():
+            continue  # numéro de salle (B204, M347), pas un numéro de cours
+        for w in re.findall(r"[a-z]+|\d+", token):
+            w = ABBREVIATIONS.get(w, w)
+            words.extend(t for t in w.split() if t not in NOISE and (len(t) > 1 or t.isdigit()))
+    return " ".join(words)
+
+
+def _main_segment(name: str) -> str:
+    """Premier segment de l'intitulé qui contient de vrais mots, sans les codes de cours.
+    « Séries temporelles 1 2ASTA03 - Marie-Lorraine CHAU » -> « Séries temporelles 1 »."""
+    name = COURSE_CODE.sub(" ", name or "")
+    for seg in SEPARATORS.split(name):
+        if _normalize_words(seg):
+            return seg
+    return name
 
 
 def normalize(name: str) -> str:
-    s = unicodedata.normalize("NFKD", name or "").encode("ascii", "ignore").decode().lower()
-    words = []
-    for w in re.findall(r"[a-z]+|\d+", s):
-        if ROOM.match(w) and not w.isdigit():
-            continue
-        w = ABBREVIATIONS.get(w, w)
-        words.extend(t for t in w.split() if t not in NOISE and (len(t) > 1 or t.isdigit()))
-    return " ".join(words)
+    return _normalize_words(_main_segment(name))
 
 
 def _numbers(norm: str) -> set[str]:
@@ -124,9 +145,14 @@ def best_match(name: str, candidates, key=lambda c: c["name"], threshold: float 
 
 def clean_title(title: str) -> str:
     """Nom de matière lisible à partir d'un intitulé d'agenda (« CM Probabilités - B204 » -> « Probabilités »)."""
-    parts = re.split(r"\s+[-–|/]\s+|\s*\(.*?\)\s*", title or "")
-    words = [w for w in (parts[0] if parts else title).split()
-             if w.lower().strip(".:") not in DISPLAY_NOISE and not ROOM.match(w.lower())]
+    def display_words(segment: str) -> list[str]:
+        return [w for w in segment.split()
+                if w.strip("-–:|.") and w.lower().strip(".:") not in DISPLAY_NOISE and not ROOM.match(w.lower())]
+
+    text = re.sub(r"\s*\(.*?\)\s*", " ", COURSE_CODE.sub(" ", title or ""))
+    parts = SEPARATORS.split(text)
+    segment = next((p for p in parts if display_words(p)), parts[0] if parts else text)
+    words = display_words(segment)
     while words and words[0].lower() in ("de", "du", "des", "d'", "la", "le", "les", "l'"):
         words = words[1:]  # « Cours de statistique » -> « statistique », pas « de statistique »
     out = " ".join(words).strip(" -–:")

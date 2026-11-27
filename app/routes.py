@@ -11,7 +11,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, g, jsonify, r
                    request, send_file, session, url_for)
 from werkzeug.utils import secure_filename
 
-from . import calendar_ics, extractor, matching, planner, resources, schools, suggestions
+from . import calendar_ics, embeddings, extractor, matching, planner, resources, schools, suggestions
 from .auth import LEVELS, login_required
 from .db import get_db
 
@@ -371,8 +371,13 @@ def subject_new():
         if errors:
             for e in errors:
                 flash(e, "error")
+            if "Indique la date de l'examen." in errors:
+                flash("Aucune épreuve à ce nom n'a été trouvée dans ton agenda : saisis la date, "
+                      "ou choisis « Être à jour dans le cours ».", "info")
             return render_template("subjects/form.html", s=form, goals=GOALS, comfort=COMFORT, new=True,
-                                   force_new=form.get("force_new"))
+                                   force_new=form.get("force_new"),
+                                   agenda_suggestions=suggestions.suggest(
+                                       "", agenda_events(g.user["id"]), user_subjects(g.user["id"])))
         if exam_note:
             flash(exam_note, "info")
         db = get_db()
@@ -435,6 +440,25 @@ def api_subject_suggestions():
     """Matières suggérées d'après l'agenda, classées par similarité cosinus d'embeddings."""
     q = request.args.get("q", "")[:100]
     return jsonify(suggestions.suggest(q, agenda_events(g.user["id"]), user_subjects(g.user["id"])))
+
+
+@bp.route("/api/agenda/rattachement")
+@login_required
+def api_slot_link():
+    """Aperçu en direct, pendant la saisie d'un créneau : à quelle matière sera-t-il rattaché ?"""
+    title = request.args.get("titre", "").strip()[:200]
+    kind = request.args.get("type", "cours")
+    subjects = user_subjects(g.user["id"])
+    if not title:
+        return jsonify({"match": None, "new_name": None, "suggestions": []})
+    lookup = suggestions.course_name(title) if kind == "examen" or suggestions.is_exam(title) else title
+    match, score = matching.best_match(lookup, subjects)
+    ranked = embeddings.rank(title, [s["name"] for s in subjects])[:5]
+    return jsonify({
+        "match": {"id": match["id"], "name": match["name"], "score": score} if match else None,
+        "new_name": None if match else (matching.clean_title(lookup) or title),
+        "suggestions": [{"name": n, "score": sc} for n, sc in ranked],
+    })
 
 
 @bp.route("/api/ecoles")
@@ -695,8 +719,9 @@ def calendar_import():
         name = suggestions.course_name(e["title"]) if exam else e["title"]
         key = matching.normalize(name)
         if key not in cache:
-            match, _ = matching.best_match(name, subjects)
-            if match is None and create and key:
+            match, _ = matching.best_match(name, subjects) if (exam or suggestions.is_course(e["title"])) \
+                else (None, 0.0)
+            if match is None and create and key and (exam or suggestions.is_course(e["title"])):
                 sid = create_subject(suggestions.course_name(e["title"]), topics=list(planner.DEFAULT_TOPICS))
                 match = own_subject(sid)
                 subjects.append(match)
@@ -755,7 +780,7 @@ def event_add():
         return redirect(url_for("main.calendar"))
 
     if not title and not (f.get("subject") or "").isdigit():
-        flash("Donne un nom au cours ou choisis une matière.", "error")
+        flash("Indique l'intitulé du cours : il sert à retrouver la matière.", "error")
         return redirect(url_for("main.calendar"))
     # pour un examen, on rapproche le nom de la matière sans les mots « partiel », « DS »…
     lookup = suggestions.course_name(title) if kind == "examen" and title else title
@@ -880,9 +905,12 @@ def plan():
     for i in range(7):
         d = monday + timedelta(days=i)
         ds = d.isoformat()
-        blocks = [block("event", e, d) for e in events if e["start"][:10] <= ds <= e["end"][:10]]
+        day_events = [e for e in events if e["start"][:10] <= ds <= e["end"][:10]]
+        holidays = sorted({matching.clean_title(e["title"]) for e in day_events if suggestions.is_holiday(e["title"])})
+        blocks = [block("event", e, d) for e in day_events if not suggestions.is_holiday(e["title"])]
         blocks += [block("session", s, d) for s in sessions if s["start"][:10] == ds]
         days.append({
+            "holidays": holidays,
             "date": d, "is_today": d == date.today(), "is_rest": d.weekday() in prefs.rest_days,
             "is_past": d < date.today(), "blocks": [b for b in blocks if b],
             "work_top": pct(prefs.day_start.hour * 60 + prefs.day_start.minute),
@@ -934,8 +962,10 @@ def regenerate(uid: int, only: set[int] | None = None):
     ids = [r["id"] for r in rows]
     db.execute(f"DELETE FROM sessions WHERE user_id = ? AND done = 0 AND manual = 0 AND start >= ? "
                f"AND subject_id IN ({','.join('?' * len(ids))})", (uid, _iso(now), *ids))
+    # Les vacances et jours fériés de l'emploi du temps sont des jours libres pour réviser.
     busy = [planner.Busy(datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"]))
-            for e in db.execute("SELECT start, end FROM events WHERE user_id = ? AND end >= ?", (uid, _iso(now)))]
+            for e in db.execute("SELECT title, start, end FROM events WHERE user_id = ? AND end >= ?", (uid, _iso(now)))
+            if not suggestions.is_holiday(e["title"])]
     busy += [planner.Busy(datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
              for s in db.execute("SELECT start, end FROM sessions WHERE user_id = ? AND start >= ?", (uid, _iso(now)))]
 

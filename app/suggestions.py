@@ -22,12 +22,31 @@ EXAM_WORDS = re.compile(
     re.IGNORECASE)
 
 
+# Jours sans cours : ce sont des jours libres pour réviser, pas des créneaux occupés.
+HOLIDAY_RE = re.compile(r"\b(vacances|holidays?|feries?|bank holiday|conges?|fermeture|pont)\b")
+# Événements d'école qui ne sont pas des cours (on ne les propose pas comme matières).
+NON_COURSE_RE = re.compile(
+    r"\b(presentations?|career|carrieres?|rencontres?|reunions?|forum|portes ouvertes|accueil|rentree|"
+    r"ceremonie|remise des diplomes|parrain|afterwork|gala|pause|dejeuner|permanence|"
+    r"reunion d'information|seminaire d'integration|journee d'integration)\b")
+
+
 def _plain(s: str) -> str:
     return unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
 
 
 def is_exam(title: str) -> bool:
     return bool(EXAM_RE.search(_plain(title)))
+
+
+def is_holiday(title: str) -> bool:
+    return bool(HOLIDAY_RE.search(_plain(title)))
+
+
+def is_course(title: str) -> bool:
+    """Vrai si l'intitulé peut être un cours (ni vacances, ni présentation, réunion…)."""
+    plain = _plain(title)
+    return not HOLIDAY_RE.search(plain) and not NON_COURSE_RE.search(plain)
 
 
 def course_name(title: str) -> str:
@@ -59,6 +78,8 @@ def agenda_courses(events, subjects) -> list[dict]:
     for e in events:
         if e.get("kind") == "autre" and e.get("source") == "manuel":
             continue  # occupation déclarée comme telle par l'utilisateur (sport, job…)
+        if not is_course(e["title"]) and not is_exam(e["title"]):
+            continue  # vacances, jours fériés, présentations, réunions…
         name = course_name(e["title"]) if is_exam(e["title"]) else matching.clean_title(e["title"])
         key = matching.normalize(name)
         if not key:

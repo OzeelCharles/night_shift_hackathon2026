@@ -55,6 +55,7 @@
     <span class="dname">{{ jours[d.date.weekday()] }}</span>
     <span class="dnum">{{ d.date.day }}</span>
     {% if d.minutes %}<span class="dmin">{{ d.minutes|duree }}</span>{% endif %}
+    {% for h in d.holidays %}<span class="day-flag" title="Jour sans cours : idéal pour réviser">{{ h }}</span>{% endfor %}
   </div>
   {% endfor %}
 

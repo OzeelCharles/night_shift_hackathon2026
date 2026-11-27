@@ -15,14 +15,14 @@
         {% endfor %}
       </div>
     </fieldset>
-    <label class="full">Intitulé
-      <input name="title" maxlength="200" placeholder="CM Probabilités, TD Droit, sport…">
-      <span class="hint kind-school">Tape le nom du cours tel qu'il apparaît dans ton emploi du temps : « TD Proba » sera rattaché à « Probabilités ». Sans matière proche, une nouvelle matière est créée. Pour un examen, sa date devient celle de la matière.</span></label>
-    <label class="full kind-school">Matière
-      <select name="subject">
-        <option value="auto">Détecter automatiquement d'après l'intitulé</option>
-        {% for s in subjects %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
-      </select></label>
+    <div class="full">
+      <label>Intitulé
+        <input name="title" maxlength="200" placeholder="CM Probabilités, TD Droit, partiel de maths, sport…"
+               autocomplete="off" aria-describedby="link-preview" data-link-url="{{ url_for('main.api_slot_link') }}"></label>
+      <div class="link-preview kind-school" id="link-preview" aria-live="polite">
+        <p class="small muted">Le créneau sera rattaché à la matière dont le nom est le plus proche. S'il n'y en a aucune, une nouvelle matière sera créée.</p>
+      </div>
+    </div>
     <label>Date <input type="date" name="date" required></label>
     <label>Répéter (semaines) <input type="number" name="repeat_weeks" value="1" min="1" max="52"></label>
     <label>Début <input type="time" name="start" required></label>
@@ -104,5 +104,61 @@
     const k = f.querySelector('input[name=kind]:checked');
     if (k) f.dataset.kind = k.value;
   });
+
+  // Aperçu du rattachement pendant la saisie de l'intitulé (similarité cosinus côté serveur)
+  (function () {
+    const input = document.querySelector('input[data-link-url]');
+    if (!input) return;
+    const box = document.getElementById('link-preview');
+    const form = input.form;
+    const initial = box.innerHTML;
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; };
+    let timer, last = '';
+
+    function render(data) {
+      box.replaceChildren();
+      const p = el('p', 'link-status');
+      if (data.match) {
+        p.classList.add('is-linked');
+        p.append('Sera rattaché à ta matière ', el('strong', null, '« ' + data.match.name + ' »'),
+                 el('span', 'score', ' (similarité ' + Math.round(data.match.score * 100) + ' %)'));
+      } else if (data.new_name) {
+        p.classList.add('is-new');
+        p.append('Aucune de tes matières ne correspond : la matière ', el('strong', null, '« ' + data.new_name + ' »'), ' sera créée.');
+      }
+      box.append(p);
+      const others = data.suggestions.filter(s => !data.match || s.name !== data.match.name);
+      if (others.length) {
+        box.append(el('p', 'small muted', data.match ? 'Ou bien une autre de tes matières :' : 'Tu voulais peut-être dire :'));
+        const list = el('ul', 'suggest-list');
+        for (const s of others) {
+          const b = el('button', 'suggest-item');
+          b.type = 'button';
+          b.append(el('strong', null, s.name), el('span', 'score', Math.round(s.score * 100) + ' %'));
+          b.addEventListener('click', () => { input.value = s.name; refresh(true); input.focus(); });
+          const li = el('li'); li.append(b); list.append(li);
+        }
+        box.append(list);
+      }
+    }
+
+    async function refresh(now) {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const q = input.value.trim();
+        const kind = form.dataset.kind || 'cours';
+        if (!q) { box.innerHTML = initial; last = ''; return; }
+        if (q + kind === last) return;
+        last = q + kind;
+        try {
+          const r = await fetch(input.dataset.linkUrl + '?titre=' + encodeURIComponent(q) + '&type=' + kind);
+          if (r.ok && input.value.trim() === q) render(await r.json());
+        } catch (e) { /* hors ligne : le rattachement se fera quand même à l'enregistrement */ }
+      }, now ? 0 : 150);
+    }
+
+    input.addEventListener('input', () => refresh(false));
+    form.querySelectorAll('input[name=kind]').forEach(r => r.addEventListener('change', () => { last = ''; refresh(true); }));
+  })();
 </script>
 {% endblock %}
