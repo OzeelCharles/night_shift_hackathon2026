@@ -22,6 +22,7 @@ def register():
         else:
             session.clear()
             session["user_id"] = uid
+            session["onboarding"] = True  # la page suivante ouvre la fenêtre des informations complémentaires
             flash("Bienvenue ! Règle tes horaires et ta méthode de travail, puis ajoute une matière.", "success")
             return redirect(url_for("main.preferences"))
     return render_template("auth/register.html")
@@ -58,10 +59,22 @@ def profile():
         report, errors = auth_service.update_profile(g.user, request.form)
         if errors:
             flash_errors(errors)
-            return render_template("auth/profile.html", u=request.form)
+            return render_template("auth/profile.html", u={**dict(g.user), **request.form.to_dict()})
         flash_report(report)
         return redirect(url_for("auth.profile"))
     return render_template("auth/profile.html", u=g.user)
+
+
+@bp.route("/profil/infos", methods=("POST",))
+@login_required
+def details():
+    """Fenêtre qui suit l'inscription : informations complémentaires (une erreur renvoie au profil complet)."""
+    report, errors = auth_service.update_details(g.user, request.form)
+    if errors:
+        flash_errors(errors)
+        return render_template("auth/profile.html", u={**dict(g.user), **request.form.to_dict()})
+    flash_report(report)
+    return redirect(safe_next(request.form.get("next"), url_for("main.dashboard")))
 
 
 feature = Feature("comptes", blueprints=[bp])

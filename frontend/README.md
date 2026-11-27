@@ -8,7 +8,9 @@ frontend/
     base.html            mise en page commune : barre du haut (les espaces de Rivezli : Encadrement…)
                          et, en dessous, la barre des onglets de l'espace courant (Aujourd'hui, Planning…)
     _topbar.html         morceaux des barres : logo, compte, liens de menu d'une barre
-    home.html            page de départ « / » : le nom « Rivezli », hors de tout espace (pas de seconde barre)
+    home.html            page de départ « / » : présentation de Rivezli aux étudiants (cartes des fonctionnalités
+                         activées, étapes, appel à créer un compte ou se connecter), hors de tout espace (pas de seconde
+                         barre). Les cartes viennent de SHOWCASE dans backend/controllers/main.py
     landing.html         présentation du planificateur, montrée à un visiteur qui ouvre « Encadrement » ;
                          un utilisateur connecté arrive directement sur l'onglet « Aujourd'hui »
     dashboard.html       « Aujourd'hui »

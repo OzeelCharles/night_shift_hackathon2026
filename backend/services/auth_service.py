@@ -1,11 +1,12 @@
 """Comptes : inscription, connexion, profil, compte administrateur initial."""
 import os
 import secrets
+from datetime import date
 
 from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from backend.business.accounts import LEVELS, validate_account, validate_profile, validate_username
+from backend.business.accounts import LEVELS, clean_details, validate_account, validate_profile, validate_username
 from backend.core import events
 from backend.dao import users as dao
 
@@ -45,15 +46,25 @@ def authenticate(email: str, password: str):
 def update_profile(user, form) -> tuple[Report, list[str]]:
     username = form.get("username", "").strip()
     level, school = form.get("level", ""), form.get("school", "").strip()
-    errors = validate_profile(level, school) + validate_username(username)
+    details, detail_errors = clean_details(form, date.today())
+    errors = validate_profile(level, school) + validate_username(username) + detail_errors
     if errors:
         return Report(), errors
-    dao.update(user["id"], username=username, level=level, school=school)
+    dao.update(user["id"], username=username, level=level, school=school, **details)
     extra = []
     if (level, school) != (user["level"], user["school"]):
         extra = events.emit(events.PROFILE_CHANGED, user_id=user["id"], level=level,
                             level_label=LEVELS[level], school=school)
     return Report().success(" ".join(["Profil enregistré."] + extra)), []
+
+
+def update_details(user, form) -> tuple[Report, list[str]]:
+    """Informations complémentaires seules (fenêtre qui suit l'inscription) : toutes facultatives."""
+    details, errors = clean_details(form, date.today())
+    if errors:
+        return Report(), errors
+    dao.update(user["id"], **details)
+    return Report().success("C'est noté : ces informations préremplissent maintenant tes lettres de motivation."), []
 
 
 def ensure_admin() -> None:

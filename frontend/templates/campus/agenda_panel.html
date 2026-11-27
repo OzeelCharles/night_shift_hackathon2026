@@ -1,0 +1,11 @@
+{# Panneau de Mon agenda (Feature.panels["agenda"] de Campus) : les restos U du jour.
+   Le contenu est chargé après la page (data-fragment-url) : l'agenda reste rapide, même si le Crous ne répond pas. #}
+<section class="sheet crous-panel" aria-labelledby="h-crous">
+  <div class="crous-head">
+    <h2 id="h-crous">Restos U aujourd'hui</h2>
+    <a href="{{ url_for('campus.restos') }}">Tout voir dans Campus</a>
+  </div>
+  <div data-fragment-url="{{ url_for('campus.agenda_preview') }}" aria-live="polite">
+    <p class="loading">Recherche des restaurants Crous autour de ton école…</p>
+  </div>
+</section>

@@ -1,28 +1,33 @@
 {% extends "base.html" %}
+{% set space = none %}
 {% block title %}Inscription{% endblock %}
 {% block content %}
-<div class="card narrow">
+<div class="solo">
   <h1>Créer un compte</h1>
-  <p class="muted">Ton niveau et ton établissement servent à te proposer des ressources adaptées. Tu pourras les changer à tout moment.</p>
-  <form method="post">
+  <p class="lead">Ton niveau et ton école servent à te proposer des ressources adaptées. Juste après, une fenêtre te proposera de compléter ton profil, si tu veux.</p>
+  <form method="post" class="sheet">
     {{ csrf_field() }}
-    <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" autocomplete="nickname" value="{{ request.form.username }}"></label>
-    <label>E-mail <input type="email" name="email" required autocomplete="email" value="{{ request.form.email }}"></label>
-    <label>Niveau d'études
-      <select name="level" required>
-        <option value="" disabled {% if not request.form.level %}selected{% endif %}>Choisis ton niveau</option>
-        {% for key, label in levels.items() %}
-        <option value="{{ key }}" {% if request.form.level == key %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select></label>
-    <label>École ou université
-      <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
-             data-schools-url="{{ url_for('api.schools') }}" placeholder="Tape quelques lettres : ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}">
-      <span class="hint">Tous les collèges, lycées, universités et écoles de France. Ton établissement n'y est pas ? Écris son nom.</span></label>
+    <div class="form-grid">
+      <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" autocomplete="nickname" value="{{ request.form.username }}"></label>
+      <label>E-mail <input type="email" name="email" required autocomplete="email" value="{{ request.form.email }}"></label>
+      <label class="full">Niveau d'études
+        <select name="level" required>
+          <option value="" disabled {% if not request.form.level %}selected{% endif %}>Choisis ton niveau</option>
+          {% for key, label in levels.items() %}
+          <option value="{{ key }}" {% if request.form.level == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select></label>
+      <label class="full">École ou université
+        <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
+               data-schools-url="{{ url_for('api.schools') }}" placeholder="ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}">
+        <span class="hint">Tous les collèges, lycées, universités et écoles de France. Le tien n'y est pas ? Écris son nom.</span></label>
+      <label>Mot de passe <input type="password" name="password" required minlength="8" autocomplete="new-password">
+        <span class="hint">8 caractères minimum</span></label>
+      <label>Confirmation <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
+    </div>
     <datalist id="schools"></datalist>
-    <label>Mot de passe (8 caractères min.) <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>
-    <label>Confirmation <input type="password" name="password2" required minlength="8" autocomplete="new-password"></label>
-    <button class="btn btn-block">Créer mon compte</button>
+    <button class="btn btn-lg btn-block">Créer mon compte</button>
   </form>
+  <p class="muted small">Déjà inscrit·e ? <a href="{{ url_for('auth.login') }}">Se connecter</a></p>
 </div>
 {% endblock %}

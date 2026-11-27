@@ -328,8 +328,8 @@
   {% if not web and not platforms and not pending %}<p class="muted">Aucune ressource proposée pour l'instant.</p>{% endif %}
 </section>
 
-{# Panneaux ajoutés par des fonctionnalités enfichables (Feature.subject_panels) #}
-{% for panel in subject_panels %}{% include panel %}{% endfor %}
+{# Panneaux ajoutés par des fonctionnalités enfichables (Feature.panels["subject"]) #}
+{% for panel in panels.get("subject", []) %}{% include panel %}{% endfor %}
 
 {% if history %}
 <details class="card">

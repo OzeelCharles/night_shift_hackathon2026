@@ -1,25 +1,43 @@
 {% extends "base.html" %}
-{% block title %}Mon profil{% endblock %}
+{% from "auth/_details.html" import details_fields %}
+{% set space = none %}
+{% block title %}Mon compte{% endblock %}
 {% block content %}
-<div class="card narrow">
-  <h1>Mon profil</h1>
-  <p class="muted">Changer de niveau ou d'établissement adapte aussitôt les ressources proposées pour toutes tes matières.</p>
-  <form method="post" data-busy="Enregistrement…">
-    {{ csrf_field() }}
-    <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" value="{{ u.username }}"></label>
-    <label>Niveau d'études
-      <select name="level" required>
-        {% for key, label in levels.items() %}
-        <option value="{{ key }}" {% if u.level == key %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select></label>
-    <label>École ou université
-      <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
-             data-schools-url="{{ url_for('api.schools') }}" value="{{ u.school }}">
-      <span class="hint">Tape quelques lettres pour chercher parmi tous les établissements de France.</span></label>
-    <datalist id="schools"></datalist>
-    {% if g.user.email %}<p class="small muted">Compte : {{ g.user.email }}</p>{% endif %}
-    <button class="btn btn-block">Enregistrer mon profil</button>
-  </form>
+<div class="page-head">
+  <div>
+    <h1>Mon compte</h1>
+    <p class="lead">Seuls ton niveau et ton école sont nécessaires. Le reste est facultatif et préremplit tes lettres de motivation.</p>
+  </div>
 </div>
+
+<form method="post" data-busy="Enregistrement…">
+  {{ csrf_field() }}
+  <section class="sheet" aria-labelledby="h-etudes">
+    <h2 id="h-etudes">Compte et études</h2>
+    <div class="form-grid">
+      <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" value="{{ u.username }}"></label>
+      <label>Niveau d'études
+        <select name="level" required>
+          {% for key, label in levels.items() %}
+          <option value="{{ key }}" {% if u.level == key %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select></label>
+      <label class="full">École ou université
+        <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
+               data-schools-url="{{ url_for('api.schools') }}" data-city-target="study_city" value="{{ u.school }}">
+        <span class="hint">Tape quelques lettres pour chercher parmi tous les établissements de France.{% if g.user.email %} Compte : {{ g.user.email }}.{% endif %}</span></label>
+    </div>
+    <datalist id="schools"></datalist>
+  </section>
+
+  <section class="sheet" aria-labelledby="h-infos">
+    <h2 id="h-infos">Informations complémentaires</h2>
+    {{ details_fields(u) }}
+  </section>
+
+  <div class="savebar">
+    <p class="small muted">Changer de niveau ou d'école adapte aussitôt les ressources proposées dans toutes tes matières.</p>
+    <button class="btn btn-lg">Enregistrer</button>
+  </div>
+</form>
 {% endblock %}

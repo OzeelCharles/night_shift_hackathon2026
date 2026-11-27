@@ -38,7 +38,8 @@ def create_app(test_config=None):
     # Libellés partagés par les gabarits
     app.jinja_env.globals.update(
         goals=subjects.GOALS, comfort=subjects.COMFORT, kinds=planner.KIND_LABELS, methods=planner.METHODS,
-        jours=JOURS_COURTS, event_kinds=agenda_analysis.EVENT_KINDS, levels=accounts.LEVELS,
+        jours=JOURS_COURTS, event_kinds=agenda_analysis.EVENT_KINDS, levels=accounts.LEVELS, licenses=accounts.LICENSE, internship_choices=accounts.INTERNSHIP,
+        study_fields=accounts.STUDY_FIELDS,
         exam_sources=exams.SOURCES, exam_soon_days=exams.EXAM_SOON_DAYS)
     features.load_features(app, app.config["FEATURES"] + app.config["EXTRA_FEATURES"])
 

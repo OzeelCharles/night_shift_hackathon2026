@@ -7,21 +7,11 @@ Le niveau de difficulté est demandé pour chaque matière (et réglable chapitr
 Activation : une ligne dans FEATURES (backend/config.py). Retrait : supprimer cette ligne.
 Tout est dans ce dossier ; les tables (préfixe rev_) sont créées au démarrage, sans toucher au cœur.
 """
-from flask import Flask
-
 from backend.core.features import Feature, NavItem
 
 from . import service, store
 from .assistant import TOOLS
 from .views import bp
-
-
-def setup(app: Flask) -> None:
-    with app.app_context():
-        store.init_schema()
-    # utilisé par le panneau ajouté en bas de la page de chaque matière
-    app.jinja_env.globals["revision_summary"] = service.panel_summary
-
 
 feature = Feature(
     "revision",

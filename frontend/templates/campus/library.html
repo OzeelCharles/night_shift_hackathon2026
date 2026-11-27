@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% set space = "campus" %}
+{% from "campus/_macros.html" import affluence, report_form, hour_chart, quiet_slots %}
+{% block title %}Bibliothèque{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Bibliothèque universitaire</h1>
+  <p class="muted">Combien de monde en ce moment ? Alimenté par les étudiants de ton école.</p></div></div>
+
+{% if not school %}
+<div class="empty-state">
+  <p>Indique ton école ou ton université pour voir l'affluence de sa bibliothèque.</p>
+  <a class="btn" href="{{ url_for('auth.profile') }}">Compléter mon profil</a>
+</div>
+{% else %}
+<section class="card">
+  <h2>BU de {{ school }}{% if city %} <span class="muted small">· {{ city }}</span>{% endif %}</h2>
+  {{ affluence(gauge) }}
+  {% if closed_today %}<p class="muted">Les bibliothèques sont en général fermées le dimanche : vérifie les horaires de la tienne.</p>{% endif %}
+  {{ report_form('bu', request.path, levels) }}
+</section>
+
+<section class="card">
+  <h2>Quand y aller ?</h2>
+  {{ hour_chart(chart, "Fréquentation habituelle d'aujourd'hui, estimée (profil type d'une BU, pas une mesure). La barre bleue est l'heure actuelle.") }}
+  {{ quiet_slots(quiet) }}
+  <p class="small muted">Les horaires réels varient selon les BU et les périodes d'examens. Si ta bibliothèque est équipée de
+    l'application <a href="https://affluences.com/" target="_blank" rel="noopener">Affluences</a>, son comptage officiel y est plus précis.</p>
+</section>
+
+<p class="small muted">Comment ça marche : chaque signalement compte {{ window }} min, les plus récents pèsent plus, et la médiane limite l'effet d'un signalement fantaisiste.
+  Un signalement par lieu toutes les {{ cooldown }} min.</p>
+{% endif %}
+{% endblock %}

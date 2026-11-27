@@ -32,6 +32,7 @@ class NavItem:
     # - sinon le nom d'un espace (« encadrement » par défaut) : ses onglets, dans la seconde barre.
     section: str = "encadrement"
     opens: str | None = None   # pour une entrée « site » : l'espace qu'elle ouvre (surligné quand on y est)
+    hidden_if: tuple[str, str] | None = None  # (colonne du compte, valeur) : entrée masquée si le compte a cette valeur
 
 
 @dataclass
@@ -47,6 +48,8 @@ class Feature:
 
 
 def load_features(app: Flask, module_paths: list[str]) -> list[Feature]:
+    from backend.dao.db import install
+
     loaded = []
     for path in module_paths:
         feature: Feature = importlib.import_module(path).feature
@@ -54,10 +57,18 @@ def load_features(app: Flask, module_paths: list[str]) -> list[Feature]:
             app.register_blueprint(bp)
         for event, handler in feature.subscriptions:
             events.subscribe(app, event, handler)
-        if feature.setup:
-            feature.setup(app)
+        app.jinja_env.globals.update(feature.template_globals)
+        with app.app_context():
+            if feature.schema or feature.migrations:
+                install(feature.schema, feature.migrations)
+            if feature.setup:
+                feature.setup(app)
         loaded.append(feature)
     app.extensions["features"] = loaded
+    panels: dict[str, list[str]] = {}
+    for f in loaded:
+        for slot, templates in f.panels.items():
+            panels.setdefault(slot, []).extend(templates)
     nav = sorted((item for f in loaded for item in f.nav), key=lambda i: i.order)
     panels = [p for f in loaded for p in f.subject_panels]
     app.extensions["tools"] = {t.name: t for f in loaded for t in f.tools}

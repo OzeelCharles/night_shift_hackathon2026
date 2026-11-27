@@ -1,45 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Mon agenda{% endblock %}
 {% block content %}
-<h1>Mon agenda</h1>
-<p class="muted">Tes cours et occupations bloquent ces créneaux : aucune révision n'y sera placée. Un cours dont le nom ressemble à une de tes matières y est rattaché automatiquement.</p>
-<div class="grid2">
-  <form method="post" action="{{ url_for('agenda.add') }}" class="card form-grid" data-busy="Ajout et mise à jour du planning…">
+<div class="page-head">
+  <div>
+    <h1>Mon agenda</h1>
+    <p class="lead">Tes cours et occupations bloquent ces créneaux : aucune révision n'y sera placée. Un cours dont le nom ressemble à une de tes matières y est rattaché tout seul.</p>
+  </div>
+</div>
+{# Panneaux ajoutés par des fonctionnalités enfichables (Feature.panels["agenda"]), ex. les restos U de Campus #}
+{% for panel in panels.get("agenda", []) %}{% include panel %}{% endfor %}
+<div class="add-slot">
+  <form method="post" action="{{ url_for('agenda.add') }}" class="sheet" data-busy="Ajout et mise à jour du planning…">
     {{ csrf_field() }}
-    <h2 class="full">Ajouter un créneau</h2>
-    <fieldset class="full">
-      <legend>C'est…</legend>
-      <div class="segmented segmented-full">
+    <h2>Ajouter un créneau</h2>
+    <fieldset class="ask">
+      <legend class="visually-hidden">C'est…</legend>
+      <div class="pills">
         {% for key, label in event_kinds.items() %}
-        <label><input type="radio" name="kind" value="{{ key }}" {% if loop.first %}checked{% endif %} onchange="this.form.dataset.kind=this.value"> {{ label }}</label>
+        <label><input type="radio" name="kind" value="{{ key }}" {% if loop.first %}checked{% endif %} onchange="this.form.dataset.kind=this.value"><span>{{ label }}</span></label>
         {% endfor %}
       </div>
     </fieldset>
-    <div class="full">
-      <label>Intitulé
-        <input name="title" maxlength="200" placeholder="CM Probabilités, TD Droit, partiel de maths, sport…"
-               autocomplete="off" aria-describedby="link-preview" data-link-url="{{ url_for('api.slot_link') }}"></label>
-      <div class="link-preview kind-school" id="link-preview" aria-live="polite">
-        <p class="small muted">Le créneau sera rattaché à la matière dont le nom est le plus proche. S'il n'y en a aucune, une nouvelle matière sera créée.</p>
-      </div>
+    <p class="madlib">
+      <input class="blank" name="title" maxlength="200" placeholder="CM Probabilités, partiel de maths, sport…" data-min="24"
+             autocomplete="off" aria-label="Intitulé" aria-describedby="link-preview" data-link-url="{{ url_for('api.slot_link') }}">
+      le <input class="blank" type="date" name="date" required aria-label="Date">,
+      de <input class="blank" type="time" name="start" required aria-label="Début">
+      à <input class="blank" type="time" name="end" required aria-label="Fin">,
+      pendant <input class="blank" type="number" name="repeat_weeks" value="1" min="1" max="52" aria-label="Nombre de semaines" data-min="2"> semaine(s).
+      <button class="btn">Ajouter</button>
+    </p>
+    <div class="link-preview kind-school" id="link-preview" aria-live="polite">
+      <p class="small muted">Le créneau sera rattaché à la matière dont le nom est le plus proche. S'il n'y en a aucune, une nouvelle matière sera créée.</p>
     </div>
-    <label>Date <input type="date" name="date" required></label>
-    <label>Répéter (semaines) <input type="number" name="repeat_weeks" value="1" min="1" max="52"></label>
-    <label>Début <input type="time" name="start" required></label>
-    <label>Fin <input type="time" name="end" required></label>
-    <div class="full"><button class="btn">Ajouter</button></div>
   </form>
+</div>
+<div class="grid2">
 
   <form method="post" enctype="multipart/form-data" action="{{ url_for('agenda.import_ics') }}" class="card" data-busy="Import et rattachement des cours…">
     {{ csrf_field() }}
-    <h2>Importer mon emploi du temps</h2>
+    <h2>Importer un fichier .ics</h2>
     <p class="muted small">Fichier .ics exporté de Google Agenda, Outlook, Apple Calendrier ou de l'ENT. Les cours récurrents sont pris en compte.</p>
     <input type="file" name="ics" accept=".ics" required>
     <label class="inline-check"><input type="checkbox" name="replace" checked> Remplacer le précédent import</label>
     <label class="inline-check"><input type="checkbox" name="create_missing"> Créer une matière pour chaque cours qui ne ressemble à aucune de mes matières</label>
     <button class="btn">Importer</button>
   </form>
-</div>
 
 <form method="post" enctype="multipart/form-data" action="{{ url_for('agenda.import_photo') }}" class="card photo-import" data-busy="Lecture de la photo par Groq…">
   {{ csrf_field() }}
@@ -54,6 +60,7 @@
   <p class="muted small">Indisponible : il faut une clé Groq (gsk_…) après <code>GROQ_API_KEY=</code> dans le fichier <code>.env</code>.</p>
   {% endif %}
 </form>
+</div>
 
 {% if revisions %}
 <section class="card">

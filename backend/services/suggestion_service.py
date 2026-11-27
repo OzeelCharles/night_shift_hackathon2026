@@ -38,3 +38,8 @@ def school_count() -> int:
 def schools(query: str, level: str | None = None) -> list[dict]:
     """Établissements de France correspondant à la saisie (recherche locale, rien ne sort du serveur)."""
     return school_search.search(_school_index(), query, level)
+
+
+def school_city(value: str) -> str | None:
+    """Ville d'un établissement d'après ce qui est enregistré dans le profil (None si inconnu)."""
+    return school_search.locate(_school_index(), value or "")
