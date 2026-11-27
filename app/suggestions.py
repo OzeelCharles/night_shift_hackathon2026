@@ -71,6 +71,24 @@ def detect_exam_date(name: str, events) -> tuple[date | None, dict | None]:
     return (best[0], best[1]) if best else (None, None)
 
 
+def last_course_date(name: str, events) -> date | None:
+    """Date du dernier cours à venir d'une matière (sert de date d'examen par défaut)."""
+    today = date.today()
+    last = None
+    for e in events:
+        if is_exam(e["title"]) or not is_course(e["title"]) or e.get("kind") == "examen":
+            continue
+        if e.get("kind") == "autre" and e.get("source") == "manuel":
+            continue
+        d = datetime.fromisoformat(e["start"]).date()
+        if d <= today:
+            continue
+        linked = name and e.get("subject_name") and matching.similarity(name, e["subject_name"]) >= matching.THRESHOLD
+        if linked or matching.similarity(name, e["title"]) >= matching.THRESHOLD:
+            last = d if last is None or d > last else last
+    return last
+
+
 def agenda_courses(events, subjects) -> list[dict]:
     """Regroupe les intitulés de l'agenda en matières candidates (non encore créées)."""
     groups: dict[str, dict] = {}

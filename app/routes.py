@@ -93,8 +93,22 @@ def _parse_topics(text: str) -> list[str]:
     return extractor.clean_topics(text.splitlines(), limit=60)
 
 
-def _profile_sig(user) -> str:
-    return f"{user['level']}|{user['school']}"
+def exam_days_left(subject) -> int | None:
+    if not subject["exam_date"]:
+        return None
+    return (date.fromisoformat(subject["exam_date"]) - date.today()).days
+
+
+def exam_phase(subject) -> str:
+    """« examen » quand l'épreuve approche (ressources d'annales ajoutées), sinon « cours »."""
+    days = exam_days_left(subject)
+    return "examen" if days is not None and 0 <= days <= EXAM_SOON_DAYS else "cours"
+
+
+def _resources_sig(user, subject) -> str:
+    """Ce dont dépendent les ressources proposées : profil et proximité de l'examen.
+    Quand cette signature change, les ressources sont recherchées à nouveau."""
+    return f"{user['level']}|{user['school']}|{exam_phase(subject)}"
 
 
 def agenda_events(uid: int, past_days: int = 60) -> list[dict]:
@@ -105,19 +119,106 @@ def agenda_events(uid: int, past_days: int = 60) -> list[dict]:
         "WHERE e.user_id = ? AND e.end >= ? ORDER BY e.start", (uid, since))]
 
 
-def apply_exam_date(subject, exam_day: date) -> str | None:
-    """Reporte une date d'examen lue dans l'agenda sur la matière, si elle n'en a pas déjà une."""
-    if exam_day <= date.today():
-        return None
-    if subject["exam_date"]:
-        if subject["exam_date"] != exam_day.isoformat():
-            return (f"Ton agenda indique un examen de « {subject['name']} » le {_date_fr(exam_day)}, "
-                    f"mais la matière a déjà une autre date : vérifie sur sa page.")
-        return None
-    get_db().execute("UPDATE subjects SET goal = 'exam', exam_date = ? WHERE id = ?",
-                     (exam_day.isoformat(), subject["id"]))
-    get_db().commit()
-    return f"Date d'examen de « {subject['name']} » lue dans ton agenda : {_date_fr(exam_day)}."
+# ---------------------------------------------------------------- dates d'examen
+EXAM_SOON_DAYS = 21  # en deçà, des ressources de préparation d'examen sont ajoutées
+EXAM_SOURCES = {"manuel": "date choisie par toi", "agenda": "épreuve de ton emploi du temps",
+                "derniere_seance": "par défaut, dernière séance de cours"}
+
+
+def agenda_exam_for(subject_id: int) -> tuple[str | None, str | None]:
+    """Date d'examen que donnerait l'emploi du temps : la prochaine épreuve rattachée, sinon
+    (par défaut) la dernière séance de cours à venir. Retourne (date ISO, source)."""
+    today = date.today().isoformat()
+    db = get_db()
+    exam = db.execute("SELECT MIN(substr(start, 1, 10)) FROM events WHERE subject_id = ? AND kind = 'examen' "
+                      "AND substr(start, 1, 10) > ?", (subject_id, today)).fetchone()[0]
+    if exam:
+        return exam, "agenda"
+    last = db.execute("SELECT MAX(substr(start, 1, 10)) FROM events WHERE subject_id = ? AND kind = 'cours' "
+                      "AND substr(start, 1, 10) > ?", (subject_id, today)).fetchone()[0]
+    return (last, "derniere_seance") if last else (None, None)
+
+
+def sync_exam_dates(uid: int, promote: set[int] | frozenset = frozenset()) -> list[str]:
+    """Recalcule la date d'examen de chaque matière « examen » et explique les changements.
+
+    Priorité : date choisie par l'utilisateur > prochaine épreuve de l'emploi du temps
+    > dernière séance de cours (par défaut). `promote` : matières qui viennent de recevoir
+    une épreuve et passent à l'objectif « examen » si elles étaient « être à jour ».
+    """
+    db = get_db()
+    today = date.today().isoformat()
+    messages = []
+    for s in user_subjects(uid):
+        agenda_date, agenda_src = agenda_exam_for(s["id"])
+        goal = s["goal"]
+        if goal != "exam" and s["id"] in promote and agenda_src == "agenda":
+            goal = "exam"
+        if goal != "exam":
+            continue
+        manual = s["exam_manual"] if s["exam_manual"] and s["exam_manual"] > today else None
+        if manual:
+            new, src = manual, "manuel"
+        elif agenda_date:
+            new, src = agenda_date, agenda_src
+        else:
+            continue  # rien de nouveau dans l'agenda : on garde la date actuelle
+        if (new, src, goal) == (s["exam_date"], s["exam_source"], s["goal"]):
+            continue
+        db.execute("UPDATE subjects SET goal = ?, exam_date = ?, exam_source = ? WHERE id = ?",
+                   (goal, new, src, s["id"]))
+        d = _date_fr(date.fromisoformat(new))
+        if src == "derniere_seance" and s["exam_source"] == "derniere_seance" and s["exam_date"]:
+            verb = "repoussé" if new > s["exam_date"] else "avancé"
+            messages.append(f"Examen de « {s['name']} » {verb} au {d} : c'est maintenant sa dernière séance de cours.")
+        elif src == "derniere_seance":
+            messages.append(f"Aucune épreuve de « {s['name']} » dans ton emploi du temps : l'examen est fixé "
+                            f"par défaut à sa dernière séance, le {d}.")
+        elif src == "agenda":
+            messages.append(f"Examen de « {s['name']} » lu dans ton emploi du temps : {d}.")
+    db.commit()
+    return messages
+
+
+def default_exam_event_ids(uid: int) -> set[int]:
+    """Séances de cours qui servent d'examen par défaut (la dernière de chaque matière concernée)."""
+    ids = set()
+    db = get_db()
+    for s in db.execute("SELECT id, exam_date FROM subjects WHERE user_id = ? AND goal = 'exam' "
+                        "AND exam_source = 'derniere_seance' AND exam_date IS NOT NULL", (uid,)):
+        # dernière séance du jour de l'examen (tous ses exemplaires, si l'export la répète par groupe)
+        ids |= {r["id"] for r in db.execute(
+            "SELECT id FROM events WHERE subject_id = ? AND kind = 'cours' AND start = ("
+            " SELECT MAX(start) FROM events WHERE subject_id = ? AND kind = 'cours' AND substr(start, 1, 10) = ?)",
+            (s["id"], s["id"], s["exam_date"]))}
+    return ids
+
+
+def dedupe_events(rows) -> list:
+    """Un seul exemplaire par cours répété (même intitulé, même heure) : le plus long."""
+    best: dict[tuple, object] = {}
+    for r in rows:
+        k = (r["title"], r["start"])
+        if k not in best or r["end"] > best[k]["end"]:
+            best[k] = r
+    return sorted(best.values(), key=lambda r: r["start"])
+
+
+def flash_all(messages, category="info"):
+    for m in messages:
+        flash(m, category)
+
+
+def resolve_exam_input(form: dict, current=None) -> tuple[str | None, str | None]:
+    """Date d'examen saisie dans un formulaire -> (date choisie par l'utilisateur, date retenue).
+
+    Une date laissée identique à la date actuelle ne devient pas une date « choisie » : ainsi
+    recalculer un programme ne fige pas la date par défaut issue de l'emploi du temps.
+    """
+    typed = (form.get("exam_date") or "").strip()
+    if current is not None and typed and typed == current["exam_date"]:
+        return current["exam_manual"], typed
+    return (typed or None), (typed or None)
 
 
 def _subject_form(f=None):
@@ -168,17 +269,22 @@ def _merge_topics(current: list[str], new: list[str]) -> list[str]:
     return (current + [t for t in new if t.lower() not in lower])[:60]
 
 
-def create_subject(name: str, goal="a_jour", exam_date=None, comfort=3, weekly_hours=2.0, topics=None) -> int:
+def create_subject(name: str, goal="exam", exam_date=None, comfort=3, weekly_hours=2.0, topics=None,
+                   exam_manual=None, exam_source="") -> int:
+    """Crée une matière. Par défaut (matière née de l'agenda) l'objectif est l'examen, dont la date
+    sera lue dans l'emploi du temps par sync_exam_dates (épreuve, sinon dernière séance)."""
     if topics is None:
         topics, _ = _initial_topics(name)
     cur = get_db().execute(
-        "INSERT INTO subjects (user_id, name, goal, exam_date, comfort, weekly_hours, topics) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (g.user["id"], name[:100], goal, exam_date, comfort, weekly_hours, json.dumps(topics, ensure_ascii=False)))
+        "INSERT INTO subjects (user_id, name, goal, exam_date, comfort, weekly_hours, topics, exam_manual, exam_source) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (g.user["id"], name[:100], goal, exam_date, comfort, weekly_hours, json.dumps(topics, ensure_ascii=False),
+         exam_manual, exam_source))
     get_db().commit()
     return cur.lastrowid
 
 
-def resolve_subject(title: str, explicit: str | None, create: bool = True, subjects=None):
+def resolve_subject(title: str, explicit: str | None, create: bool = True, subjects=None, goal: str = "exam"):
     """Associe un intitulé (cours, créneau) à une matière.
 
     explicit : id choisi par l'utilisateur, « auto » pour la détection, « aucune » pour ne rien associer.
@@ -195,7 +301,7 @@ def resolve_subject(title: str, explicit: str | None, create: bool = True, subje
     if not create:
         return None, "none", score
     name = matching.clean_title(title) or title
-    sid = create_subject(name)
+    sid = create_subject(name, goal=goal)
     return own_subject(sid), "created", score
 
 
@@ -240,8 +346,10 @@ def refresh_resources(subject, user) -> list[str]:
     excerpts = " ".join(r["excerpt"] for r in db.execute(
         "SELECT excerpt FROM documents WHERE subject_id = ?", (subject["id"],)))
     kw = extractor.keywords(excerpts, 5) if excerpts else None
-    found, errors = resources.find_resources(subject["name"], subject_topics(subject), kw,
-                                             level=user["level"], school=user["school"])
+    days = exam_days_left(subject)
+    found, errors = resources.find_resources(
+        subject["name"], subject_topics(subject), kw, level=user["level"], school=user["school"],
+        exam_days=days if exam_phase(subject) == "examen" else None)
     saved = {r["url"] for r in db.execute("SELECT url FROM resources WHERE subject_id = ? AND saved = 1",
                                           (subject["id"],))}
     db.execute("DELETE FROM resources WHERE subject_id = ? AND saved = 0", (subject["id"],))
@@ -251,7 +359,7 @@ def refresh_resources(subject, user) -> list[str]:
         [(subject["id"], r["title"][:300], r["url"], r["source"], r["snippet"], r["kind"], r["thumbnail"], r["meta"])
          for r in found if r["url"] not in saved])
     db.execute("UPDATE subjects SET resources_status = ?, resources_sig = ? WHERE id = ?",
-               ("error" if errors and len(found) <= 6 else "ok", _profile_sig(user), subject["id"]))
+               ("error" if errors and len(found) <= 6 else "ok", _resources_sig(user, subject), subject["id"]))
     db.commit()
     return errors
 
@@ -361,25 +469,32 @@ def subject_new():
     if request.method == "POST":
         form = request.form.to_dict()
         exam_note = None
-        # Objectif examen sans date saisie : on cherche l'épreuve dans l'emploi du temps.
-        if form.get("goal") == "exam" and not form.get("exam_date") and form.get("name", "").strip():
-            found, ev = suggestions.detect_exam_date(form["name"], agenda_events(g.user["id"]))
+        typed_exam = (form.get("exam_date") or "").strip() or None  # date choisie : prioritaire
+        exam_source = "manuel" if typed_exam else ""
+        # Objectif examen sans date saisie : l'épreuve de l'emploi du temps, sinon la dernière séance.
+        if form.get("goal") == "exam" and not typed_exam and form.get("name", "").strip():
+            events = agenda_events(g.user["id"])
+            found, ev = suggestions.detect_exam_date(form["name"], events)
             if found:
-                form["exam_date"] = found.isoformat()
-                exam_note = f"Date d'examen lue dans ton agenda (« {ev['title']} ») : {_date_fr(found)}."
+                form["exam_date"], exam_source = found.isoformat(), "agenda"
+                exam_note = f"Date d'examen lue dans ton emploi du temps (« {ev['title']} ») : {_date_fr(found)}."
+            else:
+                last = suggestions.last_course_date(form["name"], events)
+                if last:
+                    form["exam_date"], exam_source = last.isoformat(), "derniere_seance"
+                    exam_note = (f"Aucune épreuve dans ton emploi du temps : l'examen est fixé par défaut "
+                                 f"à la dernière séance de cours, le {_date_fr(last)}.")
         data, errors = _subject_form(form)
         if errors:
             for e in errors:
                 flash(e, "error")
             if "Indique la date de l'examen." in errors:
-                flash("Aucune épreuve à ce nom n'a été trouvée dans ton agenda : saisis la date, "
+                flash("Ni épreuve ni cours à ce nom dans ton emploi du temps : saisis la date, "
                       "ou choisis « Être à jour dans le cours ».", "info")
             return render_template("subjects/form.html", s=form, goals=GOALS, comfort=COMFORT, new=True,
                                    force_new=form.get("force_new"),
                                    agenda_suggestions=suggestions.suggest(
                                        "", agenda_events(g.user["id"]), user_subjects(g.user["id"])))
-        if exam_note:
-            flash(exam_note, "info")
         db = get_db()
         files = request.files.getlist("documents")
 
@@ -403,19 +518,30 @@ def subject_new():
                               f"(similarité {score:.0%}) : tout a été ajouté à cette matière.")
             return redirect(url_for("main.subject_detail", subject_id=match["id"]))
 
+        is_exam_goal = data["goal"] == "exam"
         sid = create_subject(data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"],
-                             topics=data["topics"] or [])
+                             topics=data["topics"] or [],
+                             exam_manual=typed_exam if is_exam_goal else None,
+                             exam_source=exam_source if is_exam_goal else "")
         # les cours et épreuves de l'agenda au nom proche sont rattachés à la nouvelle matière
         linked = 0
         for e in agenda_events(g.user["id"]):
+            exam_ev = suggestions.is_exam(e["title"])
             if e["subject_id"] is None and not (e["kind"] == "autre" and e["source"] == "manuel") and \
+                    (exam_ev or suggestions.is_course(e["title"])) and \
                     matching.similarity(data["name"], suggestions.course_name(e["title"])) >= matching.THRESHOLD:
                 db.execute("UPDATE events SET subject_id = ?, kind = ? WHERE id = ?",
-                           (sid, "examen" if suggestions.is_exam(e["title"]) else "cours", e["id"]))
+                           (sid, "examen" if exam_ev else "cours", e["id"]))
                 linked += 1
+        sync_messages = []
         if linked:
             db.commit()
             flash(f"{linked} créneau(x) de ton agenda rattaché(s) à « {data['name']} ».", "info")
+            sync_messages = sync_exam_dates(g.user["id"])
+        about_new = [m for m in sync_messages if f"« {data['name']} »" in m]
+        if exam_note and not about_new:
+            flash(exam_note, "info")
+        flash_all(sync_messages)
         doc_topics, messages = _save_documents(sid, files)
         topics = data["topics"] or extractor.clean_topics(doc_topics, limit=40)
         source = "saisis" if data["topics"] else "extraits des documents"
@@ -478,11 +604,22 @@ def subject_detail(subject_id):
         session.pop("merged_hint")
     else:
         hint = None
+    # Les ressources dépendent du profil et de la proximité de l'examen : si l'un des deux a changé
+    # depuis la dernière recherche, on relance la recherche en arrière-plan.
+    if current_app.config.get("ENABLE_WEB") and s["resources_status"] != "pending" \
+            and s["resources_sig"] != _resources_sig(g.user, s):
+        refresh_resources_async(g.user["id"], [subject_id])
+        s = own_subject(subject_id)
     res = db.execute("SELECT * FROM resources WHERE subject_id = ? ORDER BY id", (subject_id,)).fetchall()
-    agenda_exam, agenda_exam_event = suggestions.detect_exam_date(
-        s["name"], [e for e in agenda_events(g.user["id"]) if e["subject_id"] in (None, subject_id)])
-    if agenda_exam and s["exam_date"] == agenda_exam.isoformat():
-        agenda_exam = None  # déjà la bonne date : rien à signaler
+    # Date d'examen que propose l'emploi du temps, quand elle diffère de celle retenue
+    agenda_date, agenda_src = agenda_exam_for(subject_id)
+    agenda_exam = agenda_exam_event = None
+    if agenda_date and agenda_date != s["exam_date"] and (s["exam_source"] == "manuel" or s["goal"] != "exam"):
+        agenda_exam = date.fromisoformat(agenda_date)
+        agenda_exam_event = {"title": "dernière séance de cours" if agenda_src == "derniere_seance" else
+                             db.execute("SELECT title FROM events WHERE subject_id = ? AND kind = 'examen' AND "
+                                        "substr(start, 1, 10) = ?", (subject_id, agenda_date)).fetchone()[0],
+                             "source": agenda_src}
     stats = db.execute(
         "SELECT COUNT(*) AS n, COALESCE(SUM(done), 0) AS done,"
         " COALESCE(SUM((julianday(end) - julianday(start)) * 1440), 0) AS minutes,"
@@ -492,10 +629,10 @@ def subject_detail(subject_id):
         "subjects/detail.html", s=s, topics=subject_topics(s), goals=GOALS, comfort=COMFORT, now=now,
         kinds=planner.KIND_LABELS, stats=stats, hint=hint, today=date.today(),
         agenda_exam=agenda_exam, agenda_exam_event=agenda_exam_event,
-        classes=db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
-                           "AND kind != 'examen' ORDER BY start LIMIT 6", (subject_id, g.user["id"], now)).fetchall(),
-        exams=db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
-                         "AND kind = 'examen' ORDER BY start", (subject_id, g.user["id"], now)).fetchall(),
+        classes=dedupe_events(db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
+                                         "AND kind != 'examen' ORDER BY start", (subject_id, g.user["id"], now)))[:6],
+        exams=dedupe_events(db.execute("SELECT * FROM events WHERE subject_id = ? AND user_id = ? AND end >= ? "
+                                       "AND kind = 'examen' ORDER BY start", (subject_id, g.user["id"], now))),
         upcoming=db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end >= ? ORDER BY start LIMIT 8",
                             (subject_id, now)).fetchall(),
         history=db.execute("SELECT * FROM sessions WHERE subject_id = ? AND end < ? ORDER BY start DESC LIMIT 40",
@@ -506,8 +643,10 @@ def subject_detail(subject_id):
         videos=[r for r in res if not r["saved"] and r["kind"] == "video"],
         web=[r for r in res if not r["saved"] and r["kind"] == "web"],
         platforms=[r for r in res if not r["saved"] and r["kind"] == "platform"],
-        days_left=(date.fromisoformat(s["exam_date"]) - date.today()).days if s["exam_date"] else None,
-        profile_changed=bool(res) and s["resources_sig"] not in ("", _profile_sig(g.user)),
+        exam_res=[r for r in res if not r["saved"] and r["kind"] == "exam"],
+        exam_phase=exam_phase(s), exam_sources=EXAM_SOURCES, exam_soon_days=EXAM_SOON_DAYS,
+        default_exam_events=default_exam_event_ids(g.user["id"]),
+        days_left=exam_days_left(s),
         level_label=LEVELS.get(g.user["level"], ""), web_enabled=current_app.config.get("ENABLE_WEB"))
 
 
@@ -516,19 +655,30 @@ def subject_detail(subject_id):
 def subject_edit(subject_id):
     s = own_subject(subject_id)
     if request.method == "POST":
-        data, errors = _subject_form()
+        form = request.form.to_dict()
+        manual, typed = resolve_exam_input(form, s)
+        source = "manuel" if manual else s["exam_source"]
+        if form.get("goal") == "exam" and not typed:
+            derived, derived_src = agenda_exam_for(subject_id)  # épreuve, sinon dernière séance
+            if derived:
+                form["exam_date"], source = derived, derived_src
+        data, errors = _subject_form(form)
         if errors:
             for e in errors:
                 flash(e, "error")
-            return render_template("subjects/form.html", s=request.form, goals=GOALS, comfort=COMFORT, new=False,
+            return render_template("subjects/form.html", s=form, goals=GOALS, comfort=COMFORT, new=False,
                                    subject_id=subject_id)
         others = [o for o in user_subjects(g.user["id"]) if o["id"] != subject_id]
         twin, score = matching.best_match(data["name"], others)
+        is_exam_goal = data["goal"] == "exam"
         get_db().execute(
-            "UPDATE subjects SET name=?, goal=?, exam_date=?, comfort=?, weekly_hours=?, topics=? WHERE id=?",
+            "UPDATE subjects SET name=?, goal=?, exam_date=?, comfort=?, weekly_hours=?, topics=?, "
+            "exam_manual=?, exam_source=? WHERE id=?",
             (data["name"], data["goal"], data["exam_date"], data["comfort"], data["weekly_hours"],
-             json.dumps(data["topics"] or planner.DEFAULT_TOPICS, ensure_ascii=False), subject_id))
+             json.dumps(data["topics"] or planner.DEFAULT_TOPICS, ensure_ascii=False),
+             manual if is_exam_goal else None, source if is_exam_goal else "", subject_id))
         get_db().commit()
+        flash_all(sync_exam_dates(g.user["id"]))
         if twin is not None:
             flash(f"Attention : « {data['name']} » ressemble beaucoup à ta matière « {twin['name']} » "
                   f"(similarité {score:.0%}).", "warning")
@@ -706,49 +856,107 @@ def calendar_import():
                                              keep_allday=suggestions.is_exam)
     db = get_db()
     uid = g.user["id"]
-    if request.form.get("replace"):
-        db.execute("DELETE FROM events WHERE user_id = ? AND source = 'ics'", (uid,))
+    # « Mettre à jour » (recommandé) : les cours disparus du nouvel emploi du temps sont retirés.
+    # Sinon on ne fait qu'ajouter / corriger, sans rien supprimer.
+    sync_mode = bool(request.form.get("replace"))
     create = bool(request.form.get("create_missing"))
+
+    # Événements déjà importés (à venir), indexés par leur clé de synchronisation
+    existing: dict[str, list] = defaultdict(list)
+    for r in db.execute("SELECT * FROM events WHERE user_id = ? AND source = 'ics' AND end >= ?",
+                        (uid, date.today().isoformat())):
+        existing[r["uid"] or _fallback_key(r["title"], r["start"])].append(r)
+    # Rattachements déjà connus, y compris les corrections faites à la main : même intitulé, même matière
+    known = {r["title"]: (r["subject_id"], r["kind"]) for r in db.execute(
+        "SELECT title, subject_id, kind FROM events WHERE user_id = ? AND source = 'ics' AND subject_id IS NOT NULL "
+        "ORDER BY id", (uid,))}
     subjects = list(user_subjects(uid))
-    cache: dict[str, tuple] = {}
-    created, linked, new_ids = [], 0, []
-    exams: dict[int, date] = {}
-    rows = []
-    for e in events:
-        exam = suggestions.is_exam(e["title"])
-        name = suggestions.course_name(e["title"]) if exam else e["title"]
+    cache: dict[str, int | None] = {}
+    created, new_ids = [], []
+
+    def link(title: str) -> tuple[int | None, str]:
+        if title in known:
+            return known[title]
+        exam = suggestions.is_exam(title)
+        course_like = exam or suggestions.is_course(title)
+        name = suggestions.course_name(title) if exam else title
         key = matching.normalize(name)
         if key not in cache:
-            match, _ = matching.best_match(name, subjects) if (exam or suggestions.is_course(e["title"])) \
-                else (None, 0.0)
-            if match is None and create and key and (exam or suggestions.is_course(e["title"])):
-                sid = create_subject(suggestions.course_name(e["title"]), topics=list(planner.DEFAULT_TOPICS))
+            match, _ = matching.best_match(name, subjects) if course_like else (None, 0.0)
+            if match is None and create and key and course_like:
+                sid = create_subject(suggestions.course_name(title), topics=list(planner.DEFAULT_TOPICS))
                 match = own_subject(sid)
                 subjects.append(match)
                 created.append(match["name"])
                 new_ids.append(sid)
-            cache[key] = match
-        match = cache[key]
-        linked += match is not None
-        if exam and match is not None and e["start"].date() > date.today():
-            exams[match["id"]] = min(exams.get(match["id"], e["start"].date()), e["start"].date())
-        kind = "examen" if exam else ("cours" if match else "autre")
-        rows.append((uid, e["title"][:200], _iso(e["start"]), _iso(e["end"]), match["id"] if match else None, kind))
-    db.executemany("INSERT INTO events (user_id, title, start, end, source, subject_id, kind) "
-                   "VALUES (?, ?, ?, ?, 'ics', ?, ?)", rows)
+            cache[key] = match["id"] if match else None
+        sid = cache[key]
+        # une épreuve reste une épreuve même sans matière (elle sera rattachée à sa création)
+        return sid, "examen" if exam else ("cours" if sid else "autre")
+
+    # Certains exports (ENT d'école) répètent un même cours pour chaque groupe de TD : même intitulé,
+    # même heure. On n'en garde qu'un (le plus long) ; les doublons déjà importés seront retirés.
+    unique: dict[tuple, dict] = {}
+    for e in events:
+        k = (matching.normalize(e["title"]) or e["title"], e["start"])
+        if k not in unique or e["end"] > unique[k]["end"]:
+            unique[k] = e
+    duplicates = len(events) - len(unique)
+    events = sorted(unique.values(), key=lambda e: e["start"])
+
+    added = moved = unchanged = removed = 0
+    promote: set[int] = set()
+    for e in events:
+        key = e["key"] or _fallback_key(e["title"], _iso(e["start"]))
+        title, start, end = e["title"][:200], _iso(e["start"]), _iso(e["end"])
+        row = existing[key].pop(0) if existing.get(key) else None
+        if row is not None:
+            if (row["title"], row["start"], row["end"]) == (title, start, end):
+                unchanged += 1
+                continue
+            # cours déplacé ou renommé : on garde la ligne (et son rattachement, sauf si l'intitulé change)
+            sid, kind = (row["subject_id"], row["kind"]) if row["title"] == title else link(title)
+            db.execute("UPDATE events SET title = ?, start = ?, end = ?, subject_id = ?, kind = ? WHERE id = ?",
+                       (title, start, end, sid, kind, row["id"]))
+            moved += 1
+        else:
+            sid, kind = link(title)
+            db.execute("INSERT INTO events (user_id, title, start, end, source, subject_id, kind, uid) "
+                       "VALUES (?, ?, ?, ?, 'ics', ?, ?, ?)", (uid, title, start, end, sid, kind, key))
+            added += 1
+        if kind == "examen" and sid:
+            promote.add(sid)
+    if sync_mode:
+        for rows in existing.values():
+            for row in rows:
+                db.execute("DELETE FROM events WHERE id = ?", (row["id"],))
+                removed += 1
     db.commit()
-    msg = f"{len(events)} créneau(x) importé(s), dont {linked} rattaché(s) à une matière."
+
+    changes = added + moved + removed
+    if changes == 0:
+        msg = f"Emploi du temps déjà à jour : {unchanged} créneau(x), aucun changement."
+    else:
+        msg = (f"Emploi du temps mis à jour : {added} ajouté(s), {moved} déplacé(s) ou renommé(s), "
+               f"{removed} supprimé(s), {unchanged} inchangé(s).")
     if created:
         msg += f" Nouvelles matières : {', '.join(created)}."
+    if duplicates:
+        msg += f" {duplicates} doublon(s) (même cours répété pour plusieurs groupes) fusionné(s)."
     if skipped:
         msg += f" {skipped} événement(s) « journée entière » ignoré(s)."
-    for sid, day in exams.items():
-        note = apply_exam_date(own_subject(sid), day)
-        if note:
-            flash(note, "info")
+    flash_all(sync_exam_dates(uid, promote))
     refresh_resources_async(uid, new_ids)
-    regenerate_and_report(uid, msg)
+    if changes:
+        regenerate_and_report(uid, msg, repair=True)
+    else:
+        flash(msg + " Ton planning ne bouge pas.", "success")
     return redirect(url_for("main.calendar"))
+
+
+def _fallback_key(title: str, start_iso: str) -> str:
+    """Clé d'un événement sans UID : intitulé normalisé + horaire (un déplacement = suppression + ajout)."""
+    return f"~{matching.normalize(title)}|{start_iso}"
 
 
 @bp.route("/agenda/ajouter", methods=("POST",))
@@ -776,7 +984,7 @@ def event_add():
         db.executemany("INSERT INTO events (user_id, title, start, end, source, kind) VALUES (?, ?, ?, ?, 'manuel', 'autre')",
                        [(uid, title or "Occupé", _iso(a), _iso(b)) for a, b in slots])
         db.commit()
-        regenerate_and_report(uid, f"{weeks} créneau(x) occupé(s) ajouté(s).")
+        regenerate_and_report(uid, f"{weeks} créneau(x) occupé(s) ajouté(s).", repair=True)
         return redirect(url_for("main.calendar"))
 
     if not title and not (f.get("subject") or "").isdigit():
@@ -784,7 +992,8 @@ def event_add():
         return redirect(url_for("main.calendar"))
     # pour un examen, on rapproche le nom de la matière sans les mots « partiel », « DS »…
     lookup = suggestions.course_name(title) if kind == "examen" and title else title
-    subject, status, score = resolve_subject(lookup, f.get("subject") or "auto")
+    subject, status, score = resolve_subject(lookup, f.get("subject") or "auto",
+                                             goal="a_jour" if kind == "revision" else "exam")
     title = title or (f"Examen de {subject['name']}" if kind == "examen" else subject["name"])
     msg = _association_message(title, subject, status, score)
     if status == "created":
@@ -794,10 +1003,6 @@ def event_add():
                        "VALUES (?, ?, ?, ?, 'manuel', ?, ?)",
                        [(uid, title, _iso(a), _iso(b), kind, subject["id"]) for a, b in slots])
         label = f"{weeks} cours ajouté(s)." if kind == "cours" else "Examen ajouté à ton agenda."
-        if kind == "examen":
-            db.commit()
-            note = apply_exam_date(own_subject(subject["id"]), slots[0][0].date())
-            msg = " ".join(x for x in (msg, note) if x)
     else:  # créneau de révision choisi par l'utilisateur : une séance fixe, jamais déplacée
         db.executemany("INSERT INTO sessions (user_id, subject_id, start, end, topic, kind, activity, manual) "
                        "VALUES (?, ?, ?, ?, ?, 'review', ?, 1)",
@@ -806,7 +1011,9 @@ def event_add():
                          "Créneau de révision choisi par toi") for a, b in slots])
         label = f"{weeks} créneau(x) de révision ajouté(s)."
     db.commit()
-    regenerate_and_report(uid, " ".join(x for x in (msg, label) if x))
+    # un cours après la dernière séance repousse l'examen par défaut ; une épreuve fixe la date
+    flash_all(sync_exam_dates(uid, {subject["id"]} if kind == "examen" else frozenset()))
+    regenerate_and_report(uid, " ".join(x for x in (msg, label) if x), repair=True)
     return redirect(url_for("main.calendar"))
 
 
@@ -824,6 +1031,8 @@ def event_link(event_id):
                      (sid, kind, g.user["id"], ev["title"]))
     get_db().commit()
     flash("Rattachement mis à jour pour toutes les occurrences de ce cours.", "success")
+    flash_all(sync_exam_dates(g.user["id"], {sid} if sid and kind == "examen" else frozenset()))
+    regenerate_and_report(g.user["id"], "", repair=True, quiet=True)
     return redirect(url_for("main.calendar"))
 
 
@@ -832,7 +1041,8 @@ def event_link(event_id):
 def event_delete(event_id):
     get_db().execute("DELETE FROM events WHERE id = ? AND user_id = ?", (event_id, g.user["id"]))
     get_db().commit()
-    regenerate_and_report(g.user["id"], "Créneau supprimé.")
+    flash_all(sync_exam_dates(g.user["id"]))
+    regenerate_and_report(g.user["id"], "Créneau supprimé.", repair=True)
     return redirect(_safe_next(url_for("main.calendar")))
 
 
@@ -841,8 +1051,51 @@ def event_delete(event_id):
 def session_delete(session_id):
     get_db().execute("DELETE FROM sessions WHERE id = ? AND user_id = ? AND manual = 1", (session_id, g.user["id"]))
     get_db().commit()
-    regenerate_and_report(g.user["id"], "Créneau de révision supprimé.")
+    regenerate_and_report(g.user["id"], "Créneau de révision supprimé.", repair=True)
     return redirect(_safe_next(url_for("main.calendar")))
+
+
+@bp.route("/matieres/<int:subject_id>/examens", methods=("POST",))
+@login_required
+def exam_add(subject_id):
+    """Ajouter un examen à la main (en plus de ceux de l'emploi du temps)."""
+    s = own_subject(subject_id)
+    f = request.form
+    back = url_for("main.subject_detail", subject_id=subject_id) + "#examens"
+    try:
+        d = date.fromisoformat(f.get("date", ""))
+        start = datetime.combine(d, datetime.strptime(f.get("start") or "08:00", "%H:%M").time())
+        end = datetime.combine(d, datetime.strptime(f.get("end") or "10:00", "%H:%M").time())
+    except ValueError:
+        flash("Date ou heures de l'examen invalides.", "error")
+        return redirect(back)
+    if d <= date.today():
+        flash("L'examen doit être à une date à venir.", "error")
+        return redirect(back)
+    if end <= start:
+        flash("L'heure de fin doit être après l'heure de début.", "error")
+        return redirect(back)
+    title = (f.get("title") or "").strip()[:200] or f"Examen de {s['name']}"
+    get_db().execute("INSERT INTO events (user_id, title, start, end, source, kind, subject_id) "
+                     "VALUES (?, ?, ?, ?, 'manuel', 'examen', ?)",
+                     (g.user["id"], title, _iso(start), _iso(end), subject_id))
+    get_db().commit()
+    flash_all(sync_exam_dates(g.user["id"], {subject_id}))
+    regenerate_and_report(g.user["id"], f"Examen ajouté le {_date_fr(d)}.", repair=True)
+    return redirect(back)
+
+
+@bp.route("/matieres/<int:subject_id>/examen/auto", methods=("POST",))
+@login_required
+def exam_auto(subject_id):
+    """Abandonner la date choisie à la main : l'emploi du temps décide de nouveau."""
+    s = own_subject(subject_id)
+    get_db().execute("UPDATE subjects SET exam_manual = NULL, goal = 'exam' WHERE id = ?", (subject_id,))
+    get_db().commit()
+    messages = sync_exam_dates(g.user["id"])
+    flash_all(messages or [f"La date d'examen de « {s['name']} » suit maintenant ton emploi du temps."])
+    regenerate_and_report(g.user["id"], f"Programme de « {s['name']} » recalculé.", only={subject_id})
+    return redirect(url_for("main.subject_detail", subject_id=subject_id))
 
 
 @bp.route("/agenda/vider", methods=("POST",))
@@ -876,6 +1129,7 @@ def plan():
         "SELECT e.*, s.name AS subject_name FROM events e LEFT JOIN subjects s ON s.id = e.subject_id "
         "WHERE e.user_id = ? AND e.start < ? AND e.end > ? ORDER BY e.start",
         (uid, end.isoformat(), monday.isoformat())).fetchall()
+    events = dedupe_events(events)  # un cours répété pour chaque groupe ne s'affiche qu'une fois
 
     # Plage horaire affichée : tes heures de travail, élargies si un événement déborde.
     lo = prefs.day_start.hour
@@ -923,18 +1177,35 @@ def plan():
 
     return render_template("plan.html", days=days, monday=monday, prev=monday - timedelta(days=7),
                            next=end, today=date.today(), subjects=user_subjects(uid),
+                           default_exam_events=default_exam_event_ids(uid),
                            hours=list(range(lo, hi)), now_top=now_top, prefs=prefs,
                            week_minutes=sum(d["minutes"] for d in days),
                            kinds=planner.KIND_LABELS, methods=planner.METHODS, now=_iso(now),
                            jours=JOURS_COURTS)
 
 
-def regenerate(uid: int, only: set[int] | None = None):
+def _session_conflicts(start: datetime, end: datetime, busy, prefs, exam_day: date | None) -> bool:
+    """Une séance déjà planifiée est-elle devenue impossible (nouveau cours, examen avancé…) ?"""
+    if start.weekday() in prefs.rest_days:
+        return True
+    if start.time() < prefs.day_start or end.time() > prefs.day_end or start.date() != end.date():
+        return True
+    if exam_day and start.date() >= exam_day:
+        return True
+    pad = timedelta(minutes=prefs.buffer_minutes)
+    return any(start < b.end + pad and b.start - pad < end for b in busy)
+
+
+def regenerate(uid: int, only: set[int] | None = None, repair: bool = False):
     """Recalcule le planning à partir de l'état actuel (préférences, agenda, matières).
 
     `only` : ne replanifie que ces matières ; les séances des autres restent en place
     et sont traitées comme des créneaux occupés. Les créneaux de révision posés à la main
     par l'utilisateur (manual = 1) ne sont jamais déplacés. Retourne None s'il n'y a rien à planifier.
+
+    `repair` (après un changement d'emploi du temps) : les séances encore possibles restent à
+    leur place ; seules celles qui chevauchent un nouveau cours, tombent un jour de repos ou
+    après l'examen sont replacées, avec le travail qui manquerait.
     """
     db = get_db()
     now = datetime.now()
@@ -960,33 +1231,73 @@ def regenerate(uid: int, only: set[int] | None = None):
             done_study[d["subject_id"]][d["topic"]] = date.fromisoformat(d["last"])
 
     ids = [r["id"] for r in rows]
-    db.execute(f"DELETE FROM sessions WHERE user_id = ? AND done = 0 AND manual = 0 AND start >= ? "
-               f"AND subject_id IN ({','.join('?' * len(ids))})", (uid, _iso(now), *ids))
+    marks = ",".join("?" * len(ids))
     # Les vacances et jours fériés de l'emploi du temps sont des jours libres pour réviser.
-    busy = [planner.Busy(datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"]))
-            for e in db.execute("SELECT title, start, end FROM events WHERE user_id = ? AND end >= ?", (uid, _iso(now)))
-            if not suggestions.is_holiday(e["title"])]
-    busy += [planner.Busy(datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
-             for s in db.execute("SELECT start, end FROM sessions WHERE user_id = ? AND start >= ?", (uid, _iso(now)))]
+    event_busy = [planner.Busy(datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"]))
+                  for e in db.execute("SELECT title, start, end FROM events WHERE user_id = ? AND end >= ?",
+                                      (uid, _iso(now)))
+                  if not suggestions.is_holiday(e["title"])]
+    replannable = db.execute(
+        f"SELECT * FROM sessions WHERE user_id = ? AND done = 0 AND manual = 0 AND start >= ? "
+        f"AND subject_id IN ({marks}) ORDER BY start", (uid, _iso(now), *ids)).fetchall()
+
+    fixed: list[planner.PlannedSession] = []
+    conflicting = 0
+    if repair:
+        locked = [planner.Busy(datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
+                  for s in db.execute("SELECT start, end FROM sessions WHERE user_id = ? AND start >= ? "
+                                      "AND (done = 1 OR manual = 1)", (uid, _iso(now)))]
+        exam_days = {sub.id: sub.exam_date for sub in subjects if sub.goal == "exam"}
+        to_delete = []
+        for s in replannable:
+            start, end = datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"])
+            if _session_conflicts(start, end, event_busy + locked, prefs, exam_days.get(s["subject_id"])):
+                to_delete.append(s["id"])
+            else:
+                fixed.append(planner.PlannedSession(s["subject_id"], start, end, s["topic"], s["kind"],
+                                                    s["activity"], ref=s["id"]))
+        conflicting = len(to_delete)
+        db.executemany("DELETE FROM sessions WHERE id = ?", [(i,) for i in to_delete])
+    else:
+        db.execute(f"DELETE FROM sessions WHERE user_id = ? AND done = 0 AND manual = 0 AND start >= ? "
+                   f"AND subject_id IN ({marks})", (uid, _iso(now), *ids))
+    kept_ids = {f.ref for f in fixed}
+    busy = event_busy + [planner.Busy(datetime.fromisoformat(s["start"]), datetime.fromisoformat(s["end"]))
+                         for s in db.execute("SELECT id, start, end FROM sessions WHERE user_id = ? AND start >= ?",
+                                             (uid, _iso(now)))
+                         if s["id"] not in kept_ids]
 
     result = planner.generate_plan(subjects, prefs, busy, now, horizon_days=prow["horizon_weeks"] * 7,
-                                   done_study=done_study)
+                                   done_study=done_study, fixed=fixed)
+    db.executemany("DELETE FROM sessions WHERE id = ?", [(f.ref,) for f in result.dropped])
     db.executemany(
         "INSERT INTO sessions (user_id, subject_id, start, end, topic, kind, activity) VALUES (?, ?, ?, ?, ?, ?, ?)",
         [(uid, s.subject_id, _iso(s.start), _iso(s.end), s.topic, s.kind, s.activity) for s in result.sessions])
     db.commit()
+    result.kept = len(fixed) - len(result.dropped)
+    result.replaced = conflicting + len(result.dropped)
     return result
 
 
-def regenerate_and_report(uid: int, reason: str, only: set[int] | None = None):
+def regenerate_and_report(uid: int, reason: str, only: set[int] | None = None, repair: bool = False,
+                          quiet: bool = False):
     """Recalcule et explique le résultat à l'utilisateur (retour immédiat : loi de Doherty)."""
-    result = regenerate(uid, only)
+    result = regenerate(uid, only, repair)
     if result is None:
-        flash(reason, "success")
+        if reason:
+            flash(reason, "success")
         return
     planned = sum(int((s.end - s.start).total_seconds() // 60) for s in result.sessions)
-    flash(f"{reason} Planning mis à jour : {len(result.sessions)} séances, "
-          f"{planner.fmt_minutes(planned)} de travail.", "success")
+    if repair:
+        if not result.sessions and not result.replaced:
+            if not quiet:
+                flash(f"{reason} Ton planning n'a pas besoin de bouger.".strip(), "success")
+        else:
+            flash(f"{reason} Planning ajusté : {result.kept} séance(s) gardée(s) à leur place, "
+                  f"{len(result.sessions)} replacée(s) ou ajoutée(s).".strip(), "success")
+    else:
+        flash(f"{reason} Planning mis à jour : {len(result.sessions)} séances, "
+              f"{planner.fmt_minutes(planned)} de travail.".strip(), "success")
     for w in result.warnings:
         flash(w, "warning")
 
@@ -1009,24 +1320,30 @@ def subject_program(subject_id):
     f = request.form
     back = url_for("main.subject_detail", subject_id=subject_id) + "#programme"
     goal = f.get("goal") if f.get("goal") in GOALS else s["goal"]
-    exam_date = s["exam_date"]
+    exam_manual, exam_source = None, ""
+    exam_date = None
     if goal == "exam":
+        manual, typed = resolve_exam_input(f, s)
+        source = "manuel" if manual else s["exam_source"]
+        if not typed:  # champ vidé : l'emploi du temps décide (épreuve, sinon dernière séance)
+            typed, source = agenda_exam_for(subject_id)
         try:
-            exam_date = date.fromisoformat(f.get("exam_date", "")).isoformat()
+            exam_date = date.fromisoformat(typed or "").isoformat()
         except ValueError:
             exam_date = None
         if not exam_date or exam_date <= date.today().isoformat():
             flash("Indique une date d'examen à venir pour construire le programme.", "error")
             return redirect(back)
-    else:
-        exam_date = None
+        exam_manual, exam_source = manual, source
     try:
         weekly = max(0.5, min(40.0, float(f.get("weekly_hours", s["weekly_hours"]))))
     except ValueError:
         weekly = s["weekly_hours"]
-    get_db().execute("UPDATE subjects SET goal=?, exam_date=?, comfort=?, weekly_hours=? WHERE id=?",
-                     (goal, exam_date, _int(f.get("comfort"), s["comfort"], 1, 5), weekly, subject_id))
+    get_db().execute("UPDATE subjects SET goal=?, exam_date=?, comfort=?, weekly_hours=?, exam_manual=?, exam_source=? "
+                     "WHERE id=?", (goal, exam_date, _int(f.get("comfort"), s["comfort"], 1, 5), weekly,
+                                    exam_manual, exam_source, subject_id))
     get_db().commit()
+    flash_all(sync_exam_dates(g.user["id"]))
     regenerate_and_report(g.user["id"], f"Programme de « {s['name']} » construit.", only={subject_id})
     return redirect(back)
 

@@ -261,24 +261,61 @@ def school_keyword(school: str) -> str:
     return max(words, key=len) if words else ""
 
 def find_resources(subject: str, topics: list[str], extra_keywords: list[str] | None = None,
-                   level: str = "autre", school: str = "") -> tuple[list[dict], list[str]]:
-    """Retourne (ressources, erreurs). Chaque ressource a un `kind` : web, video ou platform."""
+                   level: str = "autre", school: str = "",
+                   exam_days: int | None = None) -> tuple[list[dict], list[str]]:
+    """Retourne (ressources, erreurs). Chaque ressource a un `kind` : exam, web, video ou platform.
+
+    exam_days : nombre de jours avant l'examen quand il approche. Des ressources de préparation
+    (annales, sujets corrigés, vidéos de révision) sont alors cherchées en premier (kind « exam »).
+    """
     results: list[dict] = []
     errors: list[str] = []
     lvl = LEVEL_QUERY.get(level, "")
 
-    # 1. Documents PDF en priorité : polycopiés de l'établissement, puis cours et exercices
-    #    corrigés du bon niveau ; quelques pages web classiques en complément.
     def q(*parts):
         return " ".join(p for p in parts if p)
 
+    school_key = school_keyword(school)
+
+    # 0. Examen proche : annales et sujets corrigés (ceux de l'établissement d'abord)
+    if exam_days is not None:
+        exam_queries = []
+        if school:
+            exam_queries.append((q(subject, school, "examen corrigé filetype:pdf"), True))
+        exam_queries += [(q(subject, "annales examen corrigé", lvl, "filetype:pdf"), False),
+                         (q(subject, "sujet d'examen avec corrigé", lvl), False)]
+        exam = []
+        for query, from_school in exam_queries:
+            try:
+                found = duckduckgo_search(query, limit=6)
+            except requests.RequestException as e:
+                errors.append(f"Recherche d'annales indisponible ({e.__class__.__name__}).")
+                break
+            for r in found:
+                r["kind"] = "exam"
+                r["pdf"] = is_pdf(r)
+                if r["title"].upper().startswith("PDF "):
+                    r["title"] = r["title"][4:].strip()
+                if from_school and school_key and (school_key in r["url"].lower() or school_key in r["title"].lower()):
+                    r["meta"] = f"Lié à {school}"
+            exam += found
+        exam.sort(key=lambda r: (not r.get("meta"), not r["pdf"], -level_score(r["title"], level)))
+        results += exam[:10]
+        try:
+            for v in youtube_search(q(subject, "révision examen", lvl), limit=4):
+                v["kind"] = "exam"
+                results.append(v)
+        except (requests.RequestException, ValueError):
+            pass  # les vidéos d'examen sont un bonus : on ne signale pas leur absence
+
+    # 1. Documents PDF en priorité : polycopiés de l'établissement, puis cours et exercices
+    #    corrigés du bon niveau ; quelques pages web classiques en complément.
     web_queries = []
     if school:
         web_queries.append((q(subject, school, "filetype:pdf"), True))
     web_queries += [(q(subject, "cours", lvl, "filetype:pdf"), False),
                     (q(subject, "exercices corrigés", lvl, "filetype:pdf"), False),
                     (q(subject, "cours", lvl), False)]
-    school_key = school_keyword(school)
     web = []
     for query, from_school in web_queries:
         try:

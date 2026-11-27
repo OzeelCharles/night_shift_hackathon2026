@@ -100,7 +100,60 @@ class PlannerTests(unittest.TestCase):
         self.assertTrue(res.warnings)
 
 
+class RepairTests(unittest.TestCase):
+    """Mode réparation : les séances déjà planifiées restent à leur place."""
+
+    def setUp(self):
+        self.prefs = planner.Prefs(session_minutes=50, daily_max_minutes=180, day_start=time(9), day_end=time(19))
+        self.subj = planner.SubjectIn(id=1, name="Maths", goal="exam", comfort=3,
+                                      exam_date=NOW.date() + timedelta(days=21),
+                                      topics=[f"C{i}" for i in range(1, 6)])
+
+    def test_keeping_everything_changes_nothing(self):
+        first = planner.generate_plan([self.subj], self.prefs, [], NOW)
+        fixed = [planner.PlannedSession(s.subject_id, s.start, s.end, s.topic, s.kind, s.activity, ref=i)
+                 for i, s in enumerate(first.sessions)]
+        again = planner.generate_plan([self.subj], self.prefs, [], NOW, fixed=fixed)
+        self.assertEqual(again.sessions, [], "tout est déjà planifié : rien à ajouter")
+        self.assertEqual(again.dropped, [])
+
+    def test_only_missing_work_is_replanned(self):
+        first = planner.generate_plan([self.subj], self.prefs, [], NOW)
+        removed = first.sessions[3]
+        fixed = [planner.PlannedSession(s.subject_id, s.start, s.end, s.topic, s.kind, s.activity, ref=i)
+                 for i, s in enumerate(first.sessions) if s is not removed]
+        again = planner.generate_plan([self.subj], self.prefs, [], NOW, fixed=fixed)
+        added = sum((s.end - s.start).total_seconds() for s in again.sessions)
+        self.assertEqual(added, (removed.end - removed.start).total_seconds(), "seul le travail retiré est replacé")
+        self.assertEqual({(s.topic, s.kind) for s in again.sessions}, {(removed.topic, removed.kind)})
+        for s in again.sessions:
+            for f in fixed:
+                self.assertFalse(s.start < f.end and f.start < s.end, "pas de chevauchement avec les séances gardées")
+
+    def test_orphan_sessions_are_dropped(self):
+        orphan = planner.PlannedSession(1, datetime(2026, 12, 1, 9), datetime(2026, 12, 1, 9, 50),
+                                        "Chapitre supprimé", "study", "x", ref=99)
+        result = planner.generate_plan([self.subj], self.prefs, [], NOW, fixed=[orphan])
+        self.assertEqual([d.ref for d in result.dropped], [99])
+
+
 class IcsTests(unittest.TestCase):
+    def test_uid_keys_and_modified_occurrence(self):
+        ics = "\r\n".join([
+            "BEGIN:VCALENDAR",
+            "BEGIN:VEVENT", "UID:cours-1", "SUMMARY:Stats", "DTSTART:20261130T100000", "DTEND:20261130T120000",
+            "RRULE:FREQ=WEEKLY;COUNT=3", "END:VEVENT",
+            # l'occurrence du 7 décembre est déplacée à 14 h
+            "BEGIN:VEVENT", "UID:cours-1", "RECURRENCE-ID:20261207T100000", "SUMMARY:Stats",
+            "DTSTART:20261207T140000", "DTEND:20261207T160000", "END:VEVENT",
+            "END:VCALENDAR"])
+        events, _ = calendar_ics.parse_ics(ics, datetime(2026, 11, 29))
+        self.assertEqual([e["start"] for e in events],
+                         [datetime(2026, 11, 30, 10), datetime(2026, 12, 7, 14), datetime(2026, 12, 14, 10)],
+                         "l'occurrence déplacée remplace l'originale, sans doublon")
+        self.assertEqual(events[1]["key"], "cours-1|2026-12-07T10:00", "clé stable : UID + date d'origine")
+        self.assertEqual(len({e["key"] for e in events}), 3)
+
     ICS = "\r\n".join([
         "BEGIN:VCALENDAR", "BEGIN:VEVENT", "SUMMARY:Cours de stats", "DTSTART:20261130T100000",
         "DTEND:20261130T120000", "RRULE:FREQ=WEEKLY;COUNT=3", "EXDATE:20261207T100000", "END:VEVENT",

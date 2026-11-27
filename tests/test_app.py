@@ -292,7 +292,8 @@ class AppTests(unittest.TestCase):
         s = self.q("SELECT goal, exam_date FROM subjects WHERE id = 1")[0]
         self.assertEqual((s["goal"], s["exam_date"]), ("exam", day))
         page = self.client.get("/matieres/1").get_data(as_text=True)
-        self.assertIn("Épreuves à venir", page)
+        self.assertIn('id="examens"', page)
+        self.assertIn("Partiel droit des contrats", page)
         # une autre date dans l'agenda : la page propose de l'utiliser, sans écraser
         other = (date.today() + timedelta(days=20)).isoformat()
         self.client.post("/matieres/1/programme", data={"goal": "exam", "exam_date": other, "comfort": "3"})
@@ -356,6 +357,186 @@ class AppTests(unittest.TestCase):
         for s in on_day:
             self.assertFalse(s["start"][11:16] < "16:15" and s["end"][11:16] > "13:15", "le cours reste bloqué")
         self.assertIn("Vacances scolaires", self.client.get(f"/planning?semaine={day.isoformat()}").get_data(as_text=True))
+
+    # ---------------------------------------------------------------- examens et emploi du temps
+    def _weekday(self, offset):
+        d = date.today() + timedelta(days=offset)
+        while d.weekday() == 6:
+            d += timedelta(days=1)
+        return d
+
+    def test_last_class_is_default_exam_and_is_pushed_back(self):
+        self.register()
+        first = self._weekday(3)
+        self.add_slot("CM Séries temporelles - Amphi B", kind="cours", day=first.isoformat(), weeks="3")
+        s = self.q("SELECT * FROM subjects")[0]
+        last = first + timedelta(weeks=2)
+        self.assertEqual((s["goal"], s["exam_date"], s["exam_source"]), ("exam", last.isoformat(), "derniere_seance"),
+                         "sans épreuve dans l'agenda, l'examen est la dernière séance")
+        self.assertTrue(all(x["start"][:10] < last.isoformat() for x in self._sessions()), "révisions avant l'examen")
+        plan = self.client.get(f"/planning?semaine={last.isoformat()}").get_data(as_text=True)
+        self.assertIn("Examen (dernière séance)", plan)
+        # un cours ajouté après la dernière séance repousse l'examen
+        later = last + timedelta(weeks=1)
+        r = self.add_slot("TD Séries temporelles", kind="cours", day=later.isoformat())
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual((s["exam_date"], s["exam_source"]), (later.isoformat(), "derniere_seance"))
+        self.assertIn("repoussé", self._last_flashes(r))
+
+    def _last_flashes(self, response):
+        """Messages affichés après une redirection (on suit la redirection une fois)."""
+        return self.client.get(response.headers["Location"]).get_data(as_text=True)
+
+    def test_timetable_exam_and_extra_manual_exams(self):
+        self.register()
+        first = self._weekday(3)
+        self.add_slot("CM Droit des contrats", kind="cours", day=first.isoformat(), weeks="4")
+        exam_day = first + timedelta(days=16)
+        self.add_slot("Partiel de droit des contrats", kind="examen", day=exam_day.isoformat(),
+                      start="09:00", end="12:00")
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual((s["exam_date"], s["exam_source"]), (exam_day.isoformat(), "agenda"),
+                         "une épreuve de l'emploi du temps l'emporte sur la dernière séance")
+        # l'utilisateur ajoute un examen en plus (un oral plus tôt) : c'est le prochain à préparer
+        oral = first + timedelta(days=8)
+        self.client.post(f"/matieres/{s['id']}/examens", data={"date": oral.isoformat(), "start": "14:00",
+                                                               "end": "14:30", "title": "Oral de droit"})
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual(s["exam_date"], oral.isoformat())
+        exams = self.q("SELECT title, source FROM events WHERE kind = 'examen' ORDER BY start")
+        self.assertEqual([e["title"] for e in exams], ["Oral de droit", "Partiel de droit des contrats"])
+        page = self.client.get(f"/matieres/{s['id']}").get_data(as_text=True)
+        self.assertIn("ajouté par toi", page)
+        # une date choisie à la main reste prioritaire…
+        chosen = (first + timedelta(days=20)).isoformat()
+        self.client.post(f"/matieres/{s['id']}/programme", data={"goal": "exam", "exam_date": chosen, "comfort": "3"})
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual((s["exam_date"], s["exam_source"]), (chosen, "manuel"))
+        self.add_slot("Examen final droit des contrats", kind="examen", day=(first + timedelta(days=18)).isoformat())
+        self.assertEqual(self.q("SELECT exam_date FROM subjects")[0]["exam_date"], chosen)
+        # …et recalculer sans changer la date ne la « fige » pas à tort
+        self.client.post(f"/matieres/{s['id']}/examen/auto")
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual((s["exam_date"], s["exam_source"]), (oral.isoformat(), "agenda"))
+        self.client.post(f"/matieres/{s['id']}/programme", data={"goal": "exam", "exam_date": oral.isoformat(),
+                                                                 "comfort": "2"})
+        s = self.q("SELECT * FROM subjects")[0]
+        self.assertEqual(s["exam_source"], "agenda")
+        self.assertIsNone(s["exam_manual"])
+
+    def _ics(self, events):
+        lines = ["BEGIN:VCALENDAR"]
+        for uid, title, day, start, end in events:
+            d = day.strftime("%Y%m%d")
+            lines += ["BEGIN:VEVENT", f"UID:{uid}", f"SUMMARY:{title}", f"DTSTART:{d}T{start}00",
+                      f"DTEND:{d}T{end}00", "END:VEVENT"]
+        lines.append("END:VCALENDAR")
+        return ("\r\n".join(lines) + "\r\n").encode()
+
+    def _import(self, events, replace=True):
+        data = {"ics": (io.BytesIO(self._ics(events)), "edt.ics")}
+        if replace:
+            data["replace"] = "on"
+        return self.client.post("/agenda/import", data=data, content_type="multipart/form-data")
+
+    def test_reimport_with_few_changes_keeps_planning_stable(self):
+        self.register()
+        self.new_subject("Séries temporelles", goal="a_jour", weekly_hours="6")
+        self.new_subject("Anglais", goal="a_jour", weekly_hours="3")
+        days = [self._weekday(i) for i in range(1, 15)]
+        timetable = [(f"ev{i}@ensai", "Séries temporelles 1 2ASTA03 - Marie" if i % 2 else "Anglais 2AHUM01 -",
+                      d, "1000", "1200") for i, d in enumerate(days)]
+        self._import(timetable)
+        self.assertEqual(len(self.q("SELECT * FROM events")), 14)
+        ids_before = {e["uid"]: e["id"] for e in self.q("SELECT id, uid FROM events")}
+        # correction manuelle d'un rattachement : elle doit survivre aux mises à jour
+        anglais_ev = self.q("SELECT id FROM events WHERE title LIKE 'Anglais%' LIMIT 1")[0]["id"]
+        self.client.post(f"/agenda/{anglais_ev}/matiere", data={"subject": "1"})
+        sessions_before = {s["id"]: (s["start"], s["end"]) for s in self._sessions()}
+        self.assertTrue(sessions_before)
+
+        # même fichier : rien ne bouge
+        r = self._import(timetable)
+        self.assertIn("aucun changement", self._last_flashes(r))
+        self.assertEqual({s["id"]: (s["start"], s["end"]) for s in self._sessions()}, sessions_before)
+
+        # nouvel emploi du temps : 1 cours déplacé sur une séance existante, 1 supprimé, 1 ajouté
+        victim = next(s for s in self._sessions() if not s["manual"])
+        vday = date.fromisoformat(victim["start"][:10])
+        changed = list(timetable)
+        moved_i = next(i for i, ev in enumerate(changed) if ev[2] != vday)
+        uid, title, _, _, _ = changed[moved_i]
+        changed[moved_i] = (uid, title, vday, victim["start"][11:13] + victim["start"][14:16],
+                            victim["end"][11:13] + victim["end"][14:16])
+        removed_uid = changed.pop(-1)[0]
+        changed.append(("new@ensai", "Anglais 2AHUM01 -", self._weekday(16), "0800", "0900"))
+        r = self._import(changed)
+        msg = self._last_flashes(r)
+        self.assertIn("1 ajouté(s), 1 déplacé(s) ou renommé(s), 1 supprimé(s), 12 inchangé(s)", msg)
+        events = {e["uid"]: e for e in self.q("SELECT * FROM events")}
+        self.assertNotIn(removed_uid, events)
+        self.assertEqual(events[uid]["id"], ids_before[uid], "un cours déplacé garde sa ligne")
+        self.assertEqual(self.q("SELECT subject_id FROM events WHERE id = ?", anglais_ev)[0]["subject_id"], 1,
+                         "la correction manuelle est conservée")
+        after = {s["id"]: (s["start"], s["end"]) for s in self._sessions()}
+        self.assertNotIn(victim["id"], after, "la séance en conflit a été replacée")
+        # Seules les séances qui gênent un cours nouveau ou déplacé (marge de 15 min comprise) changent.
+        pad = timedelta(minutes=15)
+        new_slots = [(datetime.fromisoformat(e["start"]), datetime.fromisoformat(e["end"]))
+                     for e in self.q("SELECT * FROM events WHERE uid IN (?, ?)", uid, "new@ensai")]
+        expected_gone = {i for i, (a, b) in sessions_before.items()
+                         if any(datetime.fromisoformat(a) < e + pad and s - pad < datetime.fromisoformat(b)
+                                for s, e in new_slots)}
+        gone = {i for i in sessions_before if after.get(i) != sessions_before[i]}
+        self.assertTrue(expected_gone)
+        self.assertEqual(gone, expected_gone, "le reste du planning ne bouge pas")
+        for s in self._sessions():
+            for e in self.q("SELECT start, end FROM events"):
+                self.assertFalse(s["start"] < e["end"] and e["start"] < s["end"], "aucune séance sur un cours")
+
+    def test_course_repeated_for_each_group_is_merged(self):
+        """Export d'ENT réel : le même cours répété pour chaque groupe de TD (UID différents)."""
+        self.register()
+        day = self._weekday(4)
+        timetable = [(f"grp{i}@ensai", "Séries temporelles 1 2ASTA03 -", day, "1400", "1640" if i == 2 else "1600")
+                     for i in range(11)]
+        r = self._import(timetable)
+        rows = self.q("SELECT * FROM events")
+        self.assertEqual(len(rows), 1, "un seul exemplaire du cours")
+        self.assertEqual(rows[0]["end"][11:16], "16:40", "on garde l'exemplaire le plus long")
+        self.assertIn("10 doublon(s)", self._last_flashes(r))
+        r = self._import(timetable)
+        self.assertEqual(len(self.q("SELECT * FROM events")), 1, "pas de doublon recréé à l'import suivant")
+
+    def test_exam_resources_when_exam_is_near(self):
+        from app import routes
+        self.register(level="master", school="ENSAI")
+        near = (date.today() + timedelta(days=10)).isoformat()
+        far = (date.today() + timedelta(days=60)).isoformat()
+        self.new_subject("Probabilités", goal="exam", exam_date=near)
+        self.new_subject("Statistique", goal="exam", exam_date=far)
+        fake = [{"title": "Annales corrigées", "url": "https://ensai.fr/annales.pdf", "source": "ensai.fr",
+                 "kind": "exam", "thumbnail": "", "meta": "Lié à ENSAI", "snippet": ""}]
+        calls = {}
+
+        def fake_find(name, topics, kw, level, school, exam_days):
+            calls[name] = exam_days
+            return (fake if exam_days is not None else []), []
+
+        with mock.patch.object(resources, "find_resources", side_effect=fake_find):
+            with self.app.test_request_context(), self.app.app_context():
+                db = get_db()
+                user = db.execute("SELECT * FROM users WHERE email='eleve@test.fr'").fetchone()
+                for sid in (1, 2):
+                    routes.refresh_resources(db.execute("SELECT * FROM subjects WHERE id=?", (sid,)).fetchone(), user)
+        self.assertEqual(calls["Probabilités"], 10, "examen dans 10 jours : ressources d'examen demandées")
+        self.assertIsNone(calls["Statistique"], "examen lointain : pas encore de ressources d'examen")
+        page = self.client.get("/matieres/1").get_data(as_text=True)
+        self.assertIn("Préparer l&#39;examen", page.replace("Préparer l'examen", "Préparer l&#39;examen"))
+        self.assertIn("Annales corrigées", page)
+        self.assertNotIn('id="examen-ressources"', self.client.get("/matieres/2").get_data(as_text=True))
+        sig = self.q("SELECT resources_sig FROM subjects WHERE id = 1")[0]["resources_sig"]
+        self.assertTrue(sig.endswith("|examen"), "la signature change quand l'examen approche")
 
     def test_schools_api_is_public(self):
         r = self.client.get("/api/ecoles?q=ensai")

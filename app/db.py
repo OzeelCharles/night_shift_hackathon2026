@@ -101,9 +101,13 @@ def init_app(app):
 # sans perdre les données.
 MIGRATIONS = {
     "users": {"level": "TEXT NOT NULL DEFAULT 'autre'", "school": "TEXT NOT NULL DEFAULT ''"},
-    "subjects": {"resources_status": "TEXT NOT NULL DEFAULT 'ok'", "resources_sig": "TEXT NOT NULL DEFAULT ''"},
+    "subjects": {"resources_status": "TEXT NOT NULL DEFAULT 'ok'", "resources_sig": "TEXT NOT NULL DEFAULT ''",
+                 # date d'examen choisie par l'utilisateur (prioritaire) et origine de la date retenue :
+                 # manuel, agenda (épreuve de l'emploi du temps) ou derniere_seance (par défaut)
+                 "exam_manual": "TEXT", "exam_source": "TEXT NOT NULL DEFAULT ''"},
     "events": {"subject_id": "INTEGER REFERENCES subjects(id) ON DELETE SET NULL",
-               "kind": "TEXT NOT NULL DEFAULT 'autre'"},
+               "kind": "TEXT NOT NULL DEFAULT 'autre'",
+               "uid": "TEXT NOT NULL DEFAULT ''"},  # clé de synchronisation d'un événement importé
     "sessions": {"manual": "INTEGER NOT NULL DEFAULT 0"},
     "resources": {"kind": "TEXT NOT NULL DEFAULT 'web'", "thumbnail": "TEXT NOT NULL DEFAULT ''",
                   "meta": "TEXT NOT NULL DEFAULT ''", "saved": "INTEGER NOT NULL DEFAULT 0"},
@@ -117,4 +121,8 @@ def migrate(db: sqlite3.Connection):
             if name not in existing:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
     db.execute("CREATE INDEX IF NOT EXISTS idx_events_subject ON events(subject_id)")
+    # Dates d'examen enregistrées avant l'existence de exam_source : on les considère comme
+    # choisies par l'utilisateur, pour ne jamais les écraser automatiquement.
+    db.execute("UPDATE subjects SET exam_manual = exam_date, exam_source = 'manuel' "
+               "WHERE exam_source = '' AND exam_date IS NOT NULL")
     db.commit()

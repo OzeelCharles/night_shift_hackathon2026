@@ -135,6 +135,7 @@ class PlannedSession:
     topic: str
     kind: str
     activity: str
+    ref: int | None = None  # identifiant en base d'une séance déjà planifiée (mode réparation)
 
 
 @dataclass
@@ -144,6 +145,7 @@ class PlanResult:
     needed_minutes: int
     available_minutes: int
     warnings: list[str]
+    dropped: list[PlannedSession] = field(default_factory=list)  # séances gardées devenues inutiles
 
 
 def _round5(x: float) -> int:
@@ -302,18 +304,49 @@ def _pick(ready: list[Task], day: date, last_subject: int | None) -> Task:
     return best
 
 
-def schedule(tasks: list[Task], prefs: Prefs, busy: list[Busy], now: datetime) -> PlanResult:
+def _minutes(s: PlannedSession) -> int:
+    return int((s.end - s.start).total_seconds() // 60)
+
+
+def schedule(tasks: list[Task], prefs: Prefs, busy: list[Busy], now: datetime,
+             fixed: list[PlannedSession] | None = None) -> PlanResult:
+    """Place les tâches dans les créneaux libres.
+
+    fixed : séances déjà planifiées que l'on veut garder à leur place (mode réparation, après un
+    changement d'emploi du temps). Chacune est imputée à la tâche correspondante (même matière,
+    chapitre et type) ; seules les minutes restantes sont replanifiées. Une séance gardée qui ne
+    correspond plus à aucune tâche est renvoyée dans `dropped` pour être supprimée.
+    """
     pending = {t.id: t for t in tasks}
     known_ids = set(pending)
     done_date: dict[int, date] = {}
     sessions: list[PlannedSession] = []
     unplaced: list[Task] = []
     available = 0
+    dropped: list[PlannedSession] = []
+    used_by_day: dict[date, int] = defaultdict(int)
     if not tasks:
-        return PlanResult([], [], 0, 0, [])
+        return PlanResult([], [], 0, 0, [], list(fixed or []))
+    kept = []
+    for f in sorted(fixed or [], key=lambda s: s.start):
+        d = f.start.date()
+        candidates = [t for t in pending.values() if t.subject_id == f.subject_id and t.topic == f.topic
+                      and t.kind == f.kind and t.earliest <= d <= t.deadline]
+        if not candidates:
+            dropped.append(f)
+            continue
+        t = min(candidates, key=lambda t: (t.target, t.id))
+        t.remaining -= _minutes(f)
+        if t.remaining <= 0:
+            done_date[t.id] = d
+            del pending[t.id]
+        used_by_day[d] += _minutes(f)
+        kept.append(f)
+    busy = sorted(list(busy) + [Busy(f.start, f.end) for f in kept], key=lambda b: b.start)
+    if not pending:
+        return PlanResult([], [], sum(t.minutes for t in tasks), 0, [], dropped)
     day = now.date()
-    last_day = max(t.deadline for t in tasks)
-    busy = sorted(busy, key=lambda b: b.start)
+    last_day = max(t.deadline for t in pending.values())
     while day <= last_day and pending:
         for t in list(pending.values()):
             if t.deadline < day or (t.depends_on in known_ids and t.depends_on not in pending
@@ -326,7 +359,7 @@ def schedule(tasks: list[Task], prefs: Prefs, busy: list[Busy], now: datetime) -
         slots = free_slots(day, prefs, day_busy, now)
         available += min(prefs.daily_max_minutes,
                          sum(int((e - s).total_seconds() // 60) for s, e in slots))
-        used = 0
+        used = used_by_day[day]  # les séances gardées comptent dans le temps max du jour
         last_subject = None
         for s_start, s_end in slots:
             cursor = s_start
@@ -356,7 +389,7 @@ def schedule(tasks: list[Task], prefs: Prefs, busy: list[Busy], now: datetime) -
         day += timedelta(days=1)
     unplaced.extend(pending.values())
     needed = sum(t.minutes for t in tasks)
-    return PlanResult(sessions, unplaced, needed, available, [])
+    return PlanResult(sessions, unplaced, needed, available, [], dropped)
 
 
 def fmt_minutes(m: int) -> str:
@@ -368,7 +401,8 @@ def fmt_minutes(m: int) -> str:
 
 def generate_plan(subjects: list[SubjectIn], prefs: Prefs, busy: list[Busy], now: datetime,
                   horizon_days: int = 28,
-                  done_study: dict[int, dict[str, date]] | None = None) -> PlanResult:
+                  done_study: dict[int, dict[str, date]] | None = None,
+                  fixed: list[PlannedSession] | None = None) -> PlanResult:
     done_study = done_study or {}
     ids = itertools.count(1)
     tasks: list[Task] = []
@@ -377,7 +411,7 @@ def generate_plan(subjects: list[SubjectIn], prefs: Prefs, busy: list[Busy], now
         t, w = build_tasks(s, now.date(), horizon_days, ids, done_study.get(s.id))
         tasks += t
         warnings += w
-    result = schedule(tasks, prefs, busy, now)
+    result = schedule(tasks, prefs, busy, now, fixed)
     missing = defaultdict(int)
     names = {s.id: s.name for s in subjects}
     for t in result.unplaced:

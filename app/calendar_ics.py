@@ -88,6 +88,7 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180,
     """
     window_end = window_start + timedelta(days=window_days)
     events, skipped = [], 0
+    raw: list[dict] = []
     cur: dict | None = None
     for line in _unfold(text):
         if line == "BEGIN:VEVENT":
@@ -95,22 +96,7 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180,
             continue
         if line == "END:VEVENT":
             if cur is not None:
-                start, end = cur.get("start"), cur.get("end")
-                if isinstance(start, date) and not isinstance(start, datetime) and keep_allday \
-                        and keep_allday(cur.get("title", "")):
-                    start = datetime.combine(start, datetime.min.time()).replace(hour=8)
-                    end = start.replace(hour=18)
-                if start is None or not isinstance(start, datetime):
-                    skipped += start is not None
-                else:
-                    if not isinstance(end, datetime):
-                        end = start + cur.get("duration", timedelta(hours=1))
-                    length = end - start
-                    starts = (_expand(start, cur["rrule"], cur["exdates"], window_end)
-                              if "rrule" in cur else [start])
-                    for s in starts:
-                        if s + length >= window_start and s <= window_end:
-                            events.append({"title": cur.get("title", "Occupé"), "start": s, "end": s + length})
+                raw.append(cur)
             cur = None
             continue
         if cur is None or ":" not in line:
@@ -128,6 +114,10 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180,
                 cur["title"] = _unescape(value) or "Occupé"
             elif name == "RRULE":
                 cur["rrule"] = value.strip()
+            elif name == "UID":
+                cur["uid"] = value.strip()
+            elif name == "RECURRENCE-ID":
+                cur["recurrence_id"] = _parse_dt(value)
             elif name == "EXDATE":
                 for v in value.split(","):
                     d = _parse_dt(v)
@@ -135,6 +125,39 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180,
                         cur["exdates"].add(d)
         except ValueError:
             continue
+
+    # Une occurrence modifiée d'un cours récurrent (RECURRENCE-ID) remplace l'occurrence d'origine.
+    overridden = {(ev.get("uid"), ev["recurrence_id"]) for ev in raw
+                  if ev.get("uid") and isinstance(ev.get("recurrence_id"), datetime)}
+    for ev in raw:
+        start, end = ev.get("start"), ev.get("end")
+        if isinstance(start, date) and not isinstance(start, datetime) and keep_allday \
+                and keep_allday(ev.get("title", "")):
+            start = datetime.combine(start, datetime.min.time()).replace(hour=8)
+            end = start.replace(hour=18)
+        if start is None or not isinstance(start, datetime):
+            skipped += start is not None
+            continue
+        if not isinstance(end, datetime):
+            end = start + ev.get("duration", timedelta(hours=1))
+        length = end - start
+        uid = ev.get("uid", "")
+        # Clé stable de chaque occurrence, pour repérer un cours déplacé d'un import à l'autre :
+        # l'UID seul pour un événement simple ; UID + date d'origine pour une occurrence d'un cours
+        # récurrent (c'est ce que désigne RECURRENCE-ID quand une occurrence est modifiée).
+        if isinstance(ev.get("recurrence_id"), datetime):
+            occurrences = [(start, f"{uid}|{ev['recurrence_id'].isoformat(timespec='minutes')}")]
+        elif "rrule" in ev:
+            occurrences = [(s, f"{uid}|{s.isoformat(timespec='minutes')}")
+                           for s in _expand(start, ev["rrule"], ev["exdates"], window_end)
+                           if (uid, s) not in overridden]
+        else:
+            occurrences = [(start, uid)]
+        for s, key in occurrences:
+            if s + length >= window_start and s <= window_end:
+                events.append({"title": ev.get("title", "Occupé"), "start": s, "end": s + length,
+                               "key": key if uid else ""})
+    events.sort(key=lambda e: e["start"])
     return events, skipped
 
 

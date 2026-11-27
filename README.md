@@ -56,8 +56,16 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
   Les embeddings sont des vecteurs de 512 dimensions obtenus par hachage de traits (racines, débuts de mots,
   n-grammes de caractères), sans modèle à télécharger ; `embed()` est le seul point à remplacer pour brancher
   un modèle sémantique.
-- **Dates d'examen** : un événement « Partiel de probabilités », « DS de maths », « Examen final - Droit »… fixe la date
-  d'examen de la matière correspondante (y compris les épreuves notées « journée entière » dans le .ics).
+- **Dates d'examen**, par ordre de priorité : la date choisie par l'utilisateur ; sinon la prochaine épreuve de
+  l'emploi du temps (« Partiel de probabilités », « DS de maths »…, y compris notée « journée entière ») ou ajoutée
+  à la main sur la page de la matière ; sinon, **par défaut, la dernière séance de cours**. Un cours ajouté après
+  la dernière séance repousse automatiquement l'examen.
+- **Mise à jour de l'emploi du temps** : un nouvel import est synchronisé (UID des événements) : seuls les cours
+  ajoutés, déplacés ou supprimés changent, les rattachements corrigés à la main sont conservés, les cours répétés
+  pour chaque groupe de TD sont fusionnés, et le planning est *réparé* : seules les séances devenues impossibles
+  sont replacées.
+- **Ressources d'examen** : à moins de 21 jours de l'examen, annales et sujets corrigés (de l'établissement d'abord)
+  et vidéos de révision sont ajoutés automatiquement.
 
 ## Établissements de France
 
