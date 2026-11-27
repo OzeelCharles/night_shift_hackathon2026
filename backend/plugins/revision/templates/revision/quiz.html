@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set space = "revision" %}
+{% block title %}QCM {{ q.subject_name }}{% endblock %}
+{% block content %}
+{% include "revision/_style.html" %}
+{% set done = q.result is not none %}
+<div class="page-head">
+  <div>
+    <h1>QCM : {{ q.subject_name }}</h1>
+    <p class="subject-facts">
+      <span class="tag">{{ q.chapter or "Toute la matière" }}</span>
+      <span class="tag">Difficulté : {{ difficulties[q.difficulty] }}</span>
+      <span class="tag tag-quiet">{{ q.total }} questions</span>
+      {% if q.settings.penalty %}<span class="tag tag-hot">−{{ "%g"|format(q.settings.penalty)|replace(".", ",") }} point par mauvaise réponse</span>{% endif %}
+    </p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('revision.hub', subject_id=q.subject_id) }}#notes">Retour à la matière</a>
+</div>
+
+{% if done %}
+{% set r = q.result %}
+<section class="card">
+  <div class="split">
+    <div>
+      <p class="rv-big">{{ q.score|nombre }}<span class="muted" style="font-size: 1.4rem">/20</span></p>
+      <p>{{ r.correct }} bonne(s) réponse(s), {{ r.wrong }} erreur(s), {{ r.blank }} sans réponse.
+        {% if q.seconds %}Rendu en {{ q.seconds // 60 }} min {{ "%02d"|format(q.seconds % 60) }}.{% endif %}</p>
+      <p class="small muted">{% if q.score >= 16 %}Excellent : tente un niveau au-dessus.{% elif q.score >= 10 %}Bien : relis les corrections ci-dessous puis recommence.{% else %}Relis les fiches des chapitres en rouge, puis retente ta chance.{% endif %}</p>
+    </div>
+    <div class="actions">
+      <form method="post" action="{{ url_for('revision.new_quiz', subject_id=q.subject_id) }}" data-busy="Préparation…">
+        {{ csrf_field() }}
+        <input type="hidden" name="chapitre" value="{{ q.chapter }}"><input type="hidden" name="difficulte" value="{{ q.difficulty }}">
+        <button class="btn">Nouveau QCM</button>
+      </form>
+      <a class="btn btn-ghost" href="{{ url_for('revision.sheets', subject_id=q.subject_id, chapitre=q.chapter) }}">Revoir les fiches</a>
+    </div>
+  </div>
+  {% if r.by_chapter|length > 1 %}
+  <ul class="rv-bars">
+    {% for ch, st in r.by_chapter.items() %}{% set pct = (100 * st[0] / st[1])|round|int %}
+    <li><span>{{ ch }}</span><span class="rv-bar {% if pct < 50 %}is-weak{% endif %}"><span style="width: {{ pct }}%"></span></span><span class="small">{{ st[0] }}/{{ st[1] }}</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+
+<form method="post" class="card">
+  {{ csrf_field() }}
+  {% for question in q.questions %}
+  {% set qi = loop.index0 %}
+  {% set given = q.answers[qi] if done else none %}
+  <fieldset class="rv-q">
+    <legend><h3>Question {{ loop.index }}. {{ question.prompt }}</h3></legend>
+    {% if question.quote %}<blockquote class="rv-quote">{{ question.quote }}</blockquote>{% endif %}
+    <div class="rv-opts">
+      {% for opt in question.options %}
+      {% set cls = ("is-right" if loop.index0 == question.answer else ("is-wrong" if loop.index0 == given else "")) if done else "" %}
+      <label class="rv-opt {{ cls }}">
+        <input type="radio" name="q{{ qi }}" value="{{ loop.index0 }}" {% if done %}disabled{% endif %} {% if given == loop.index0 %}checked{% endif %}>
+        <span>{{ opt }}</span>
+        {% if done and loop.index0 == question.answer %}<span class="rv-mark is-right"><svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Bonne réponse</span>
+        {% elif done and loop.index0 == given %}<span class="rv-mark is-wrong"><svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>Ta réponse</span>{% endif %}
+      </label>
+      {% endfor %}
+    </div>
+    {% if done %}
+    <p class="rv-explain">{% if given is none %}Sans réponse. {% endif %}{{ question.explanation }} <span class="tag tag-quiet">{{ question.chapter }}</span></p>
+    {% endif %}
+  </fieldset>
+  {% endfor %}
+  {% if not done %}
+  <p class="small muted">Une question sans réponse vaut 0{% if q.settings.penalty %} (pas de pénalité){% endif %}.</p>
+  <button class="btn btn-lg" onclick="return [...this.form.querySelectorAll('fieldset')].every(f => f.querySelector('input:checked')) || confirm('Certaines questions sont sans réponse. Rendre la copie quand même ?')">Rendre ma copie</button>
+  {% endif %}
+</form>
+{% endblock %}

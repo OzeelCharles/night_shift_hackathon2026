@@ -67,20 +67,58 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 - **Ressources d'examen** : à moins de 21 jours de l'examen, annales et sujets corrigés (de l'établissement d'abord)
   et vidéos de révision sont ajoutés automatiquement.
 
-## Dossier scolaire
+## Atelier de révision (fonctionnalité enfichable)
 
-Espace à part dans la barre du haut (à côté d'Encadrement). Il liste toutes les matières de l'utilisateur, notées
-ou non : celles qu'il a créées et les cours de son agenda, au départ « Sans note ». Pour chaque note : valeur,
-barème, coefficient, intitulé et date. Le dossier affiche la moyenne de chaque matière (sur 20, pondérée),
-l'effet de la dernière note (en progrès / en baisse), une mini-courbe par matière et la courbe de la moyenne
-générale (avec infobulle et tableau des valeurs).
+Onglet **Réviser** de la barre du haut, à côté d'**Encadrement** (et un panneau en bas de la page de chaque matière). À partir des supports d'une matière :
 
-- **Confidentialité** : les notes ne sont lues et modifiées que par leur propriétaire (toutes les requêtes filtrent
-  sur l'utilisateur connecté) ; l'administration n'y a pas accès ; supprimer un compte supprime ses notes.
-- **Historique** : une note saisie pour un cours de l'agenda est rattachée à la matière quand celle-ci est créée ;
-  supprimer une matière garde ses notes (« ancienne matière »).
-- Code : `backend/business/grades.py` (calculs), `backend/services/dossier_service.py`, `backend/dao/grades.py`,
-  `backend/controllers/dossier.py`, `frontend/templates/dossier/index.html`.
+- **Niveau de difficulté demandé** pour chaque matière avant toute révision (Facile, Moyen, Difficile ; proposition
+  d'après l'aisance déclarée), réglable aussi **chapitre par chapitre**.
+- **Fiches de révision** par chapitre : définitions, théorèmes et propriétés, formules, l'essentiel, mots-clés.
+  En difficile, les définitions deviennent des cartes à retourner (rappel actif). Imprimables.
+- **QCM notés sur 20**, sur toute la matière ou un chapitre, **rédigés par Claude après lecture des PDF du cours**
+  (formules comprises : densités, lois, théorèmes et leurs hypothèses), mathématiques en LaTeX affichées par KaTeX.
+  Le niveau change le nombre de questions (8, 10, 15), de choix (3, 4, 5), la proximité des distracteurs et ajoute
+  −0,25 par erreur en difficile. Correction détaillée après la copie.
+- **Carnet de notes** : courbe de la note au fil des essais, moyenne, meilleure note, progression, réussite par
+  chapitre (« À retravailler » sous 50 %), historique avec accès aux corrections. Après 3 notes ≥ 16/20 (ou ≤ 8/20),
+  l'atelier propose de changer de niveau.
+- **Exercices** : énoncés « Exercice n » (et leur corrigé) repérés dans tes supports, puis dans des PDF d'exercices
+  corrigés trouvés en ligne (adaptés au chapitre, à la difficulté et à ton niveau d'études), classés par chapitre
+  avec une difficulté estimée. **Si la recherche ne trouve rien, Claude rédige des exercices corrigés d'après le cours.**
+- **Notebooks Jupyter d'exercices** pour les cours de data science (régression, apprentissage, statistiques…) :
+  d'abord des notebooks existants trouvés en ligne (GitHub, Kaggle, Colab ; lien « Ouvrir dans Colab » pour GitHub).
+  **Si la recherche ne trouve rien, Claude en rédige un** : énoncés, code à compléter (`# TODO`) et corrigés en fin
+  de notebook, sur données simulées, téléchargeable en `.ipynb`.
+
+Sans support déposé, l'atelier renvoie vers la page de la matière (espace Encadrement) pour en déposer.
+
+**Claude** (`ai.py`, modèle `claude-opus-5-5`, réglable par `REVISION_AI_MODEL` et `REVISION_AI_EFFORT`) lit les PDF
+eux-mêmes : le texte extrait des PDF abîme les formules (σ devient ε, Σ devient !). Sans clé, ou si Claude ne répond
+pas, les QCM sont fabriqués par des règles de traitement du texte (`generator.py`) et rien n'est rédigé par Claude.
+
+La clé d'API n'est **jamais** dans le code ni dans git. Au choix :
+
+- variable d'environnement, propre à ta session Windows (`setx` l'enregistre pour les prochains terminaux) :
+  `setx ANTHROPIC_API_KEY "sk-ant-..."` ;
+- ou fichier `instance/anthropic_api_key` contenant seulement la clé : le dossier `instance/` est ignoré par git
+  (comme la clé secrète du site), et `.gitignore` exclut aussi tout fichier `anthropic_api_key` et `.env`.
+
+**Alternative Groq** (offre gratuite) : une clé `gsk_…` dans `GROQ_API_KEY`, dans `instance/groq_api_key`, ou même
+rangée dans `instance/anthropic_api_key`, est reconnue et prioritaire. QCM, exercices et notebooks passent alors par
+Groq (`openai/gpt-oss-120b`, modifiable par `REVISION_GROQ_MODEL`). Groq ne lit pas les PDF : il reçoit un extrait du
+texte des supports, limité à ~9 000 caractères pour tenir dans le quota gratuit (8 000 jetons par minute) ; compter
+une minute entre deux générations.
+
+**Lecture de photos** (même clé Groq, modèle `qwen/qwen3.8-27b`, modifiable par `VISION_MODEL`) :
+- *Mon agenda › Ajouter depuis une photo* : une photo d'emploi du temps ou de liste d'examens devient des créneaux
+  (source « photo », rattachés aux matières comme un import .ics, sans doublon si on renvoie la même photo) ;
+- *page d'une matière › Ajouter depuis des photos* : chaque photo de notes, de polycopié ou du tableau est recopiée
+  en Markdown (formules en LaTeX) et rangée comme support de cours : chapitres détectés, atelier de révision.
+Code : `backend/dao/vision.py` (appel à Groq), `backend/business/timetable_photo.py` (créneaux tirés de la réponse).
+
+**Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
+tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
+`FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.
 
 ## Établissements de France
 

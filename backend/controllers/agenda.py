@@ -1,6 +1,7 @@
 """Mon agenda : import de l'emploi du temps, créneaux, rattachements."""
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
+from backend.business.text import bounded_int
 from backend.core.features import Feature, NavItem
 from backend.core.security import login_required, safe_next
 from backend.services import agenda_service
@@ -30,6 +31,18 @@ def import_ics():
     flash_report(agenda_service.import_ics(g.user, f.read().decode("utf-8", errors="ignore"),
                                            sync_mode=bool(request.form.get("replace")),
                                            create_missing=bool(request.form.get("create_missing"))))
+    return _back()
+
+
+@bp.route("/agenda/photo", methods=("POST",))
+@login_required
+def import_photo():
+    f = request.files.get("photo")
+    if not f or not (f.mimetype or "").startswith("image/"):
+        flash("Choisis une photo de ton emploi du temps (JPEG, PNG…).", "error")
+        return _back()
+    weeks = bounded_int(request.form.get("repeat_weeks"), 1, 1, 52)
+    flash_report(agenda_service.import_photo(g.user, f.read(), weeks, bool(request.form.get("create_missing"))))
     return _back()
 
 

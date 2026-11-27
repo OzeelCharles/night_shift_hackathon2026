@@ -4,40 +4,59 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Rivezli{% endblock %} | Rivezli</title>
+  <script>
+    // Thème choisi (clair/sombre) appliqué avant le premier rendu : pas de flash de couleur.
+    try { const t = localStorage.getItem('theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+    document.documentElement.classList.add('js');
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Crimson+Pro:wght@600;700&display=swap">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+<a class="skip-link" href="#contenu">Aller au contenu</a>
 {% set ep = request.endpoint or '' %}
 {# Espace de la page : « encadrement » par défaut. Une page peut écrire « set space = none »
    (page de départ) ou le nom d'un autre espace, juste après son « extends ». #}
 {% set space = space | default('encadrement') %}
-{% from "_topbar.html" import brand, account, nav_links with context %}
+{% from "_topbar.html" import brand, account, nav_links, theme_toggle with context %}
 {# Barre du haut : les espaces de Rivezli (Encadrement, et ceux qui viendront) #}
 <header class="topbar">
   {{ brand() }}
+  <button class="icon-btn menu-toggle" type="button" aria-expanded="false" aria-label="Ouvrir le menu">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+  </button>
   <nav aria-label="Espaces de Rivezli">{{ nav_links('site', space) }}</nav>
   {{ account() }}
+  {{ theme_toggle() }}
 </header>
-{# Seconde barre : les onglets de l'espace courant #}
-{% if space and g.user %}
+{# Seconde barre : les onglets de l'espace courant (seulement s'il en a) #}
+{% if space and g.user and nav_items | selectattr('section', 'equalto', space) | first %}
 <nav class="subbar" aria-label="Onglets de l'espace {{ space }}"><div class="subbar-inner">{{ nav_links(space) }}</div></nav>
 {% endif %}
-<main class="container">
+<main class="container" id="contenu" tabindex="-1">
   {% if g.user and not g.user.school and ep not in ('auth.profile', 'main.index') %}
   <div class="notice"><p>Indique ton niveau et ton établissement pour recevoir des ressources adaptées. <a href="{{ url_for('auth.profile') }}">Compléter mon profil</a></p></div>
   {% endif %}
-  {% with messages = get_flashed_messages(with_categories=true) %}
-    {% if messages %}
-    <div class="flashes" role="status">
-      {% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
-    </div>
-    {% endif %}
-  {% endwith %}
   {% block content %}{% endblock %}
 </main>
+{# Messages : en bas à droite ; les confirmations s'effacent seules (5 s), les erreurs restent jusqu'à fermeture #}
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% if messages %}
+  <div class="flashes" role="status" aria-live="polite">
+    {% for cat, msg in messages %}
+    <div class="flash flash-{{ cat }}" {% if cat in ('success', 'info', 'message') %}data-autoclose{% endif %}>
+      <div>{{ msg }}</div>
+      <button type="button" class="flash-close" aria-label="Fermer le message">
+        <svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      {% if cat in ('success', 'info', 'message') %}<span class="flash-timer" aria-hidden="true"></span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endwith %}
 <script>
   // Autocomplétion des établissements de France (liste locale de ~18 000 collèges, lycées et établissements du supérieur)
   document.querySelectorAll('input[data-schools-url]').forEach(input => {
@@ -75,6 +94,53 @@
       setTimeout(() => { btn.disabled = true; }, 0);
     });
   });
+
+  // Menu sur petit écran
+  const topbar = document.querySelector('.topbar');
+  const menuBtn = topbar.querySelector('.menu-toggle');
+  menuBtn.addEventListener('click', () => {
+    const open = topbar.classList.toggle('is-open');
+    menuBtn.setAttribute('aria-expanded', open);
+    menuBtn.setAttribute('aria-label', open ? 'Fermer le menu' : 'Ouvrir le menu');
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && topbar.classList.contains('is-open')) { menuBtn.click(); menuBtn.focus(); }
+  });
+
+  // Thème clair / sombre (mémorisé dans ce navigateur)
+  const themeBtn = document.querySelector('.theme-toggle');
+  if (themeBtn) themeBtn.addEventListener('click', () => {
+    const root = document.documentElement;
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    themeBtn.setAttribute('aria-pressed', !dark);
+    try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+  });
+
+  // Messages : fermeture à la main, ou automatique pour les confirmations (pause au survol)
+  document.querySelectorAll('.flash').forEach(flash => {
+    const close = () => { flash.classList.add('is-leaving'); setTimeout(() => flash.remove(), 160); };
+    flash.querySelector('.flash-close').addEventListener('click', close);
+    const timer = flash.querySelector('.flash-timer');
+    if (timer) timer.addEventListener('animationend', close);
+  });
+
+  // Entrée des blocs de la page, décalée de 40 ms (seulement les premiers, jamais bloquant)
+  [...document.querySelectorAll('main > *')].slice(0, 8).forEach((el, i) => {
+    el.classList.add('reveal'); el.style.setProperty('--i', i);
+  });
+
+  // Ancres d'une page (matière) : surligne la section visible
+  const anchors = document.querySelectorAll('.anchors a[href^="#"]');
+  if (anchors.length && 'IntersectionObserver' in window) {
+    const byId = new Map([...anchors].map(a => [a.getAttribute('href').slice(1), a]));
+    const io = new IntersectionObserver(entries => entries.forEach(en => {
+      if (!en.isIntersecting) return;
+      anchors.forEach(a => a.classList.remove('is-current'));
+      const a = byId.get(en.target.id); if (a) a.classList.add('is-current');
+    }), { rootMargin: '-30% 0px -60% 0px' });
+    byId.forEach((_, id) => { const el = document.getElementById(id); if (el) io.observe(el); });
+  }
 </script>
 </body>
 </html>

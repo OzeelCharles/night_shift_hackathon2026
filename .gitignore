@@ -4,3 +4,10 @@ instance/
 .venv/
 venv/
 .pytest_cache/
+
+# Clés d'API : jamais dans git (la clé Claude se met dans instance/anthropic_api_key ou en variable d'environnement)
+.env
+anthropic_api_key
+secret_key
+
+groq_api_key

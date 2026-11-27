@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% set space = "cafeine" %}
+{% block title %}Caféine{% endblock %}
+{% block content %}
+{% set st = status %}
+<div class="page-head">
+  <div>
+    <h1>Compteur de caféine</h1>
+    <p class="muted">Red Bull, Monster, café… on compte, pour réviser sans te cramer.</p>
+  </div>
+</div>
+
+<div class="grid2">
+  <section class="card caf-mascot caf-{{ 'over' if st.over else 'ok' }}">
+    <div class="caf-face" aria-hidden="true">{{ st.emoji }}</div>
+    <div>
+      <h2>{{ st.title }}</h2>
+      <p>{{ st.message }}</p>
+    </div>
+    <div class="caf-meter">
+      <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="{{ st.limits.daily }}" aria-valuenow="{{ st.total }}">
+        <span style="width: {{ st.pct }}%"></span>
+      </div>
+      <div class="small"><strong>{{ st.total }} mg</strong> sur {{ st.limits.daily }} mg recommandés aujourd'hui
+        <span class="muted">({{ st.pct }} %)</span></div>
+      <div class="small muted">Encore actif dans ton corps en ce moment : environ {{ st.active }} mg.</div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Puis-je en reprendre une ?</h2>
+    {% if st.can_drink %}
+      <p class="caf-verdict caf-go">Oui, tu peux reprendre une canette standard (80 mg).</p>
+    {% else %}
+      <p class="caf-verdict caf-wait">Pas encore. Reviens {% if st.next_ok.date() == now.date() %}à <strong>{{ st.next_ok|hm }}</strong>{% else %}<strong>demain à {{ st.next_ok|hm }}</strong>{% endif %}.</p>
+    {% endif %}
+    {% if free_streak is not none %}
+      <p class="small muted">{% if free_streak %}Série en cours : <strong>{{ free_streak }} jour(s)</strong> sans caféine.{% else %}Série sans caféine : à relancer demain.{% endif %}</p>
+    {% endif %}
+    <p class="small muted">Repères : {{ st.limits.daily }} mg par jour et {{ st.limits.active }} mg en même temps au maximum ({{ levels[g.user.level] }}).
+      Valeurs approximatives, à but préventif : ce n'est pas un avis médical.</p>
+  </section>
+</div>
+
+<section class="card caf-sleep">
+  <h2>Mon sommeil 🌙</h2>
+  <form method="post" action="{{ url_for('caffeine.sleep') }}" class="caf-sleep-form">
+    {{ csrf_field() }}
+    <label>Je me couche à <input type="time" name="bedtime" value="{{ sleep_times[0].strftime('%H:%M') }}" required></label>
+    <label>Je me lève à <input type="time" name="wake_time" value="{{ sleep_times[1].strftime('%H:%M') }}" required></label>
+    <button class="btn btn-ghost">Enregistrer</button>
+  </form>
+
+  <div class="caf-sleep-grid">
+    <div><div class="caf-big">{{ st.sleep_planned|duree }}</div><div class="small muted">de nuit prévue ({{ st.bed|hm }} → {{ st.wake|hm }})</div></div>
+    {% if not st.in_night %}
+    <div><div class="caf-big {% if st.sleep_risk %}warn{% endif %}">{{ st.at_bedtime }} mg</div><div class="small muted">de caféine encore active à {{ st.bed|hm }}</div></div>
+    <div><div class="caf-big {% if st.sleep_short %}warn{% endif %}">≈ {{ st.sleep_estimated|duree }}</div>
+      <div class="small muted">de sommeil estimé{% if st.sleep_lost %} (environ {{ st.sleep_lost }} min perdues à cause de la caféine){% endif %}</div></div>
+    {% endif %}
+  </div>
+
+  {% if st.in_night %}
+    <p class="muted">C'est l'heure de dormir. Pas de canette : ton cerveau a un planning de récupération à respecter.</p>
+  {% else %}
+    {% if st.sleep_short %}
+      <p class="warn">Tu vises moins que les {{ (st.sleep_need / 60)|round|int }} h recommandées pour ton âge{% if st.sleep_lost %}, et la caféine rogne encore dessus{% endif %}. Une nuit courte, c'est de la mémoire en moins demain.</p>
+    {% elif st.sleep_lost %}
+      <p class="warn">La caféine d'aujourd'hui pourrait te coûter environ {{ st.sleep_lost }} min de sommeil.</p>
+    {% else %}
+      <p class="caf-go">Avec ta consommation actuelle, ton sommeil est préservé.</p>
+    {% endif %}
+    {% if st.no_more_today %}
+      <p class="warn">Plus aucune caféine d'ici ton coucher si tu veux bien t'endormir.</p>
+    {% elif st.cutoff_passed %}
+      <p class="warn">La dernière canette conseillée était avant {{ st.cutoff|hm }} : pour ce soir, c'est trop tard, passe à l'eau.</p>
+    {% else %}
+      <p>Dernière canette (80 mg) conseillée avant <strong>{{ st.cutoff|hm }}</strong>.</p>
+    {% endif %}
+  {% endif %}
+  <p class="small muted">Estimation indicative : on compte environ 20 min de sommeil perdues pour 60 mg encore actifs au coucher. La caféine met environ 5 h à diminuer de moitié.</p>
+</section>
+
+<section class="card">
+  <h2>J'ai bu…</h2>
+  <form method="post" action="{{ url_for('caffeine.add') }}" class="caf-form">
+    {{ csrf_field() }}
+    <div class="caf-drinks">
+    {% for key, d in drinks.items() %}
+      <button class="btn btn-ghost" name="drink" value="{{ key }}">{{ d[0] }}<span class="small"> · {{ d[1] }} mg</span></button>
+    {% endfor %}
+    </div>
+    <details>
+      <summary>Une autre boisson, ou une heure précise</summary>
+      <div class="form-grid caf-custom">
+        <label>Nom <input type="text" name="custom_label" maxlength="40" placeholder="Boisson maison"></label>
+        <label>Caféine (mg) <input type="number" name="custom_mg" min="1" max="500"></label>
+        <label>Bue à (aujourd'hui, facultatif) <input type="time" name="time"></label>
+        <div class="full"><button class="btn">Ajouter</button>
+          <span class="hint">Pour une boisson du catalogue à une autre heure, renseigne l'heure puis clique sur la boisson ci-dessus.</span></div>
+      </div>
+    </details>
+  </form>
+</section>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Aujourd'hui</h2>
+    {% if today_intakes %}
+    <ul class="caf-list">
+      {% for i in today_intakes %}
+      <li>
+        <span><strong>{{ i.taken_at|hm }}</strong> · {{ i.label }} <span class="muted">{{ i.mg }} mg</span></span>
+        <form method="post" action="{{ url_for('caffeine.remove', intake_id=i.id) }}" class="inline">
+          {{ csrf_field() }}<button class="btn-link" aria-label="Supprimer {{ i.label }} de {{ i.taken_at|hm }}">Supprimer</button></form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+      <p class="muted">Rien pour l'instant. Une journée sans, ça se fête.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>7 derniers jours</h2>
+    <ul class="caf-history">
+    {% for h in history %}
+      <li>
+        <span class="caf-day">{{ jours[h.day.weekday()] }} {{ h.day.day }}</span>
+        <div class="progress {% if h.mg > st.limits.daily %}caf-bar-over{% endif %}"><span style="width: {{ (h.mg / history_max * 100)|round|int }}%"></span></div>
+        <span class="small">{{ h.mg }} mg</span>
+      </li>
+    {% endfor %}
+    </ul>
+    <p class="small muted">Un jour au-dessus de {{ st.limits.daily }} mg est affiché en rouge.</p>
+  </section>
+</div>
+{% endblock %}

@@ -5,7 +5,7 @@
   <form method="post" action="{{ url_for('planning.toggle', session_id=s.id) }}">
     {{ csrf_field() }}
     <input type="hidden" name="next" value="{{ request.path }}">
-    <button class="tick" aria-label="{{ 'Marquer comme à faire' if s.done else 'Marquer comme faite' }}">{% if s.done %}✓{% endif %}</button>
+    <button class="tick" aria-label="{{ 'Marquer comme à faire' if s.done else 'Marquer comme faite' }}">{% if s.done %}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}</button>
   </form>
   <div>
     <div class="when">{% if show_day %}{{ s.start|jour }}, {% endif %}{{ s.start|hm }} à {{ s.end|hm }}{% if is_next %}<span class="next-badge">À suivre</span>{% endif %}</div>

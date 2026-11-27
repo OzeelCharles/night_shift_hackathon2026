@@ -41,6 +41,20 @@
   </form>
 </div>
 
+<form method="post" enctype="multipart/form-data" action="{{ url_for('agenda.import_photo') }}" class="card photo-import" data-busy="Lecture de la photo par Groq…">
+  {{ csrf_field() }}
+  <h2>Ajouter depuis une photo</h2>
+  {% if photo_enabled %}
+  <p class="muted small">Prends en photo ton emploi du temps (papier, écran, liste d'examens) : Groq lit les créneaux et les ajoute à ton agenda. Un créneau sans date est placé à sa prochaine occurrence ; vérifie la liste après l'import.</p>
+  <input type="file" name="photo" accept="image/*" capture="environment" required>
+  <label>Répéter les cours (semaines) <input type="number" name="repeat_weeks" value="1" min="1" max="52"></label>
+  <label class="inline-check"><input type="checkbox" name="create_missing"> Créer une matière pour chaque cours qui ne ressemble à aucune de mes matières</label>
+  <button class="btn">Lire la photo</button>
+  {% else %}
+  <p class="muted small">Indisponible : il faut une clé Groq (gsk_…) dans <code>instance/anthropic_api_key</code> ou <code>instance/groq_api_key</code>.</p>
+  {% endif %}
+</form>
+
 {% if revisions %}
 <section class="card">
   <h2>Mes créneaux de révision ({{ revisions|length }})</h2>
