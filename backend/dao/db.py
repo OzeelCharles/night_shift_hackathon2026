@@ -71,6 +71,14 @@ CREATE TABLE IF NOT EXISTS resources (
     source TEXT NOT NULL DEFAULT '',
     snippet TEXT NOT NULL DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS caffeine_intakes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    mg INTEGER NOT NULL CHECK (mg > 0),
+    taken_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_caffeine_user_taken ON caffeine_intakes(user_id, taken_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON sessions(user_id, start);
 CREATE INDEX IF NOT EXISTS idx_events_user_start ON events(user_id, start);
 """
@@ -151,6 +159,7 @@ MIGRATIONS = {
                "kind": "TEXT NOT NULL DEFAULT 'autre'",
                "uid": "TEXT NOT NULL DEFAULT ''"},  # clé de synchronisation d'un événement importé
     "sessions": {"manual": "INTEGER NOT NULL DEFAULT 0"},
+    "preferences": {"bedtime": "TEXT NOT NULL DEFAULT '23:00'", "wake_time": "TEXT NOT NULL DEFAULT '07:00'"},
     "resources": {"kind": "TEXT NOT NULL DEFAULT 'web'", "thumbnail": "TEXT NOT NULL DEFAULT ''",
                   "meta": "TEXT NOT NULL DEFAULT ''", "saved": "INTEGER NOT NULL DEFAULT 0"},
 }

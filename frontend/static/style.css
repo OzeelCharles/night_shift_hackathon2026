@@ -375,3 +375,23 @@ form[data-kind="autre"] .kind-school { display: none; }
 .subbar .admin-link { margin-left: auto; }
 .topbar nav a[aria-current="page"] { background: var(--ink-soft); box-shadow: none; border-radius: 6px; }
 @media (max-width: 720px) { .subbar-inner { padding: 0 12px; } }
+
+/* ---------- Compteur de caféine ---------- */
+.caf-mascot { display: grid; grid-template-columns: auto 1fr; gap: 8px 20px; align-items: center; }
+.caf-face { font-size: 4rem; line-height: 1; }
+.caf-meter { grid-column: 1 / -1; }
+.caf-over { border-color: var(--margin); }
+.caf-over .progress span { background: var(--margin); }
+.caf-verdict { font-size: 1.15rem; margin-bottom: .5em; }
+.caf-go { color: var(--ok); }
+.caf-wait { color: var(--warn); }
+.caf-drinks { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 16px; }
+.caf-custom { margin-top: 12px; }
+.caf-list, .caf-history { list-style: none; padding: 0; margin: 0; }
+.caf-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.caf-history li { display: grid; grid-template-columns: 5.5rem 1fr 5rem; gap: 12px; align-items: center; }
+.caf-bar-over span { background: var(--margin); }
+.caf-sleep-form { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; margin-bottom: 16px; }
+.caf-sleep-form label { display: grid; gap: 4px; font-weight: 700; }
+.caf-sleep-grid { display: flex; flex-wrap: wrap; gap: 12px 36px; margin-bottom: 12px; }
+.caf-big { font-size: 1.7rem; font-weight: 700; line-height: 1.2; }
