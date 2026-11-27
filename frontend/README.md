@@ -1,12 +1,16 @@
 # Frontend
 
-Interface de Révisio, servie par le backend Flask (`../backend`).
+Interface de Rivezli, servie par le backend Flask (`../backend`).
 
 ```
 frontend/
   templates/   gabarits Jinja (pages HTML rendues par les contrôleurs du backend)
-    base.html            mise en page commune : barre du haut, menu, messages
-    landing.html         accueil (visiteur non connecté)
+    base.html            mise en page commune : barre du haut (les espaces de Rivezli : Encadrement…)
+                         et, en dessous, la barre des onglets de l'espace courant (Aujourd'hui, Planning…)
+    _topbar.html         morceaux des barres : logo, compte, liens de menu d'une barre
+    home.html            page de départ « / » : le nom « Rivezli », hors de tout espace (pas de seconde barre)
+    landing.html         présentation du planificateur, montrée à un visiteur qui ouvre « Encadrement » ;
+                         un utilisateur connecté arrive directement sur l'onglet « Aujourd'hui »
     dashboard.html       « Aujourd'hui »
     plan.html            planning de la semaine
     calendar.html        « Mon agenda »
@@ -19,6 +23,11 @@ frontend/
 ```
 
 Le backend y est relié dans `backend/__init__.py` (`template_folder` et `static_folder`).
+
+Espaces : une page appartient à l'espace « encadrement » par défaut. Une page d'un futur espace écrit
+`{% set space = "nom_de_l_espace" %}` juste après son `{% extends "base.html" %}` ; la barre du haut surligne
+alors l'espace et la seconde barre affiche ses onglets (entrées de menu déclarées avec `section="nom_de_l_espace"`).
+L'entrée de l'espace dans la barre du haut se déclare avec `section="site", opens="nom_de_l_espace"`.
 
 Conventions à respecter dans les gabarits :
 - liens : `url_for('<fonctionnalité>.<route>')`, par exemple `url_for('subjects.detail', subject_id=s.id)` ;

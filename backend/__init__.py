@@ -1,4 +1,4 @@
-"""Révisio : backend Flask organisé en couches (le frontend est dans ../frontend).
+"""Rivezli : backend Flask organisé en couches (le frontend est dans ../frontend).
 
   controllers/  routes HTTP (une fonctionnalité enfichable par module, voir core/features.py)
   services/     cas d'usage : orchestrent les DAO et les règles métier

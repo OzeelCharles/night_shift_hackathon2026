@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Révisio{% endblock %} | Révisio</title>
+  <title>{% block title %}Rivezli{% endblock %} | Rivezli</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap">
@@ -11,31 +11,22 @@
 </head>
 <body>
 {% set ep = request.endpoint or '' %}
+{# Espace de la page : « encadrement » par défaut. Une page peut écrire « set space = none »
+   (page de départ) ou le nom d'un autre espace, juste après son « extends ». #}
+{% set space = space | default('encadrement') %}
+{% from "_topbar.html" import brand, account, nav_links with context %}
+{# Barre du haut : les espaces de Rivezli (Encadrement, et ceux qui viendront) #}
 <header class="topbar">
-  <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark" aria-hidden="true"></span>Révisio</a>
-  {% if g.user %}
-  <nav aria-label="Navigation principale">
-    {# Menu fourni par les fonctionnalités chargées (core/features.py) #}
-    {% for item in nav_items if not item.admin or g.user.role == 'admin' %}
-    {% set section = item.endpoint.split('.')[0] ~ '.' %}
-    <a href="{{ url_for(item.endpoint) }}" {% if item.admin %}class="admin-link"{% endif %}
-       {% if ep == item.endpoint or (item.admin and ep.startswith(section)) %}aria-current="page"{% endif %}>{{ item.label }}</a>
-    {% endfor %}
-  </nav>
-  <form method="post" action="{{ url_for('auth.logout') }}" class="logout">
-    {{ csrf_field() }}
-    <a href="{{ url_for('auth.profile') }}" class="profile-link" {% if ep == 'auth.profile' %}aria-current="page"{% endif %} title="Mon profil : niveau et établissement">{{ g.user.username }}{% if g.user.school %}<span class="muted">, {{ g.user.school }}</span>{% endif %}</a>
-    <button class="btn-link">Se déconnecter</button>
-  </form>
-  {% else %}
-  <nav>
-    <a href="{{ url_for('auth.login') }}">Se connecter</a>
-    <a class="btn" href="{{ url_for('auth.register') }}">Créer un compte</a>
-  </nav>
-  {% endif %}
+  {{ brand() }}
+  <nav aria-label="Espaces de Rivezli">{{ nav_links('site', space) }}</nav>
+  {{ account() }}
 </header>
+{# Seconde barre : les onglets de l'espace courant #}
+{% if space and g.user %}
+<nav class="subbar" aria-label="Onglets de l'espace {{ space }}"><div class="subbar-inner">{{ nav_links(space) }}</div></nav>
+{% endif %}
 <main class="container">
-  {% if g.user and not g.user.school and ep != 'auth.profile' %}
+  {% if g.user and not g.user.school and ep not in ('auth.profile', 'main.index') %}
   <div class="notice"><p>Indique ton niveau et ton établissement pour recevoir des ressources adaptées. <a href="{{ url_for('auth.profile') }}">Compléter mon profil</a></p></div>
   {% endif %}
   {% with messages = get_flashed_messages(with_categories=true) %}

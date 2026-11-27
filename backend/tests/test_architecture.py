@@ -62,6 +62,40 @@ class PluginTests(_Base):
 
 
 class PagesTests(_Base):
+    def test_home_topbar_and_encadrement_topbar(self):
+        def topbar(html):
+            return html[html.index('<header class="topbar">'):html.index("</header>")]
+
+        # visiteur : page de départ = nom de l'app + « Encadrement »
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('<h1 class="home-name">Rivezli</h1>', page, "l'accueil n'affiche que le nom de l'application")
+        self.assertNotIn("Un planning de révision qui tient", page)
+        self.assertIn('href="/encadrement"', topbar(page))
+        self.assertIn("Se connecter", topbar(page))
+        self.assertIn("Un planning de révision qui tient", self.client.get("/encadrement").get_data(as_text=True),
+                      "un visiteur voit la présentation du planificateur")
+
+        # connecté : la page de départ n'a que la barre du haut (les espaces), sans seconde barre
+        self.register()
+        home = self.client.get("/").get_data(as_text=True)
+        self.assertIn('href="/encadrement"', topbar(home))
+        self.assertNotIn('class="subbar"', home, "pas d'onglets sur la page de départ")
+        r = self.client.get("/encadrement")
+        self.assertTrue(r.headers["Location"].endswith("/tableau-de-bord"), "Encadrement s'ouvre sur « Aujourd'hui »")
+
+        # dans l'espace Encadrement : même barre du haut (Encadrement surligné), onglets en dessous
+        page = self.client.get("/tableau-de-bord").get_data(as_text=True).replace("&#39;", "'")
+        bar = topbar(page)
+        self.assertRegex(bar, r'href="/encadrement"\s+aria-current="page">Encadrement</a>', "espace surligné")
+        self.assertIn("Se déconnecter", bar)
+        self.assertNotIn("Planning", bar, "les onglets ne sont plus dans la barre du haut")
+        sub = page[page.index('<nav class="subbar"'):]
+        sub = sub[:sub.index("</nav>")]
+        self.assertGreater(page.index('<nav class="subbar"'), page.index("</header>"), "seconde barre sous la première")
+        self.assertIn('aria-current="page">Aujourd\'hui</a>', sub, "onglet « Aujourd'hui » actif")
+        for tab in ("Planning", "Mon agenda", "Mes réglages"):
+            self.assertIn(f">{tab}</a>", sub)
+
     def test_every_page_renders(self):
         self.assertEqual(self.client.get("/").status_code, 200)
         self.assertEqual(self.client.get("/connexion").status_code, 200)
