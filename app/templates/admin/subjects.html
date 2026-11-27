@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Matières (admin){% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.index') }}">← Retour à l'administration</a></p>
+<h1>Toutes les matières ({{ subjects|length }})</h1>
+<section class="card">
+  <table>
+    <thead><tr><th>Matière</th><th>Propriétaire</th><th>Objectif</th><th>Examen</th><th>Docs</th><th>Séances</th><th></th></tr></thead>
+    <tbody>
+    {% for s in subjects %}
+    <tr><td>{{ s.name }}</td><td><a href="{{ url_for('admin.user_edit', user_id=s.user_id) }}">{{ s.email }}</a></td>
+      <td>{{ s.goal }}</td><td>{{ s.exam_date|datefr }}</td><td>{{ s.n_docs }}</td><td>{{ s.n_sessions }}</td>
+      <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière ?')">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn-link danger">supprimer</button></form></td></tr>
+    {% else %}
+    <tr><td colspan="7" class="muted">Aucune matière.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Préférences{% endblock %}
+{% block content %}
+<h1>Mes préférences de travail</h1>
+<form method="post" class="card form-grid">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <fieldset class="full">
+    <legend>Méthode de travail</legend>
+    <div class="choices">
+    {% for key, m in methods.items() %}
+      <label class="choice">
+        <input type="radio" name="method" value="{{ key }}" {% if p.method == key %}checked{% endif %}>
+        <span><strong>{{ m.label }}</strong><br><span class="muted small">{{ m.description }}</span></span>
+      </label>
+    {% endfor %}
+    </div>
+  </fieldset>
+  <label>Durée d'une séance (min)
+    <input type="number" name="session_minutes" min="20" max="240" step="5" value="{{ p.session_minutes }}">
+    <span class="hint">Pomodoro : 50 = 2 pomodoros.</span></label>
+  <label>Pause entre deux séances (min)
+    <input type="number" name="break_minutes" min="0" max="60" step="5" value="{{ p.break_minutes }}"></label>
+  <label>Temps de travail max par jour (min)
+    <input type="number" name="daily_max_minutes" min="20" max="720" step="10" value="{{ p.daily_max_minutes }}"></label>
+  <label>Marge autour des événements de l'agenda (min)
+    <input type="number" name="buffer_minutes" min="0" max="120" step="5" value="{{ p.buffer_minutes }}">
+    <span class="hint">Temps de trajet, repas…</span></label>
+  <label>Je commence à partir de
+    <input type="time" name="day_start" value="{{ p.day_start }}"></label>
+  <label>Je m'arrête au plus tard à
+    <input type="time" name="day_end" value="{{ p.day_end }}"></label>
+  <fieldset>
+    <legend>Jours de repos</legend>
+    <div class="days">
+    {% for j in jours %}
+      <label class="day"><input type="checkbox" name="rest_days" value="{{ loop.index0 }}" {% if loop.index0 in rest %}checked{% endif %}> {{ j }}</label>
+    {% endfor %}
+    </div>
+  </fieldset>
+  <label>Horizon du planning « être à jour » (semaines)
+    <input type="number" name="horizon_weeks" min="1" max="16" value="{{ p.horizon_weeks }}">
+    <span class="hint">Pour un examen, le planning va jusqu'à la date de l'examen.</span></label>
+  <div class="full"><button class="btn">Enregistrer</button></div>
+</form>
+{% endblock %}

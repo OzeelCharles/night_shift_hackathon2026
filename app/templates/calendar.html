@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Agenda{% endblock %}
+{% block content %}
+<h1>Mon agenda</h1>
+<p class="muted">Les créneaux ci-dessous sont bloqués : aucune révision n'y sera placée. L'agenda est facultatif.</p>
+<div class="grid2">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('main.calendar_import') }}" class="card">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <h2>Importer un fichier .ics</h2>
+    <p class="muted small">Export de Google Agenda, Outlook, Apple Calendrier ou de l'emploi du temps de l'ENT. Les cours récurrents sont pris en compte.</p>
+    <input type="file" name="ics" accept=".ics" required>
+    <label class="inline-check"><input type="checkbox" name="replace" checked> Remplacer le précédent import</label>
+    <button class="btn">Importer</button>
+  </form>
+  <form method="post" action="{{ url_for('main.event_add') }}" class="card form-grid">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <h2 class="full">Ajouter un créneau occupé</h2>
+    <label class="full">Intitulé <input name="title" placeholder="Cours, sport, job étudiant…"></label>
+    <label>Date <input type="date" name="date" required></label>
+    <label>Répéter (semaines) <input type="number" name="repeat_weeks" value="1" min="1" max="52"></label>
+    <label>Début <input type="time" name="start" required></label>
+    <label>Fin <input type="time" name="end" required></label>
+    <div class="full"><button class="btn">Ajouter</button></div>
+  </form>
+</div>
+
+<section class="card">
+  <div class="page-head">
+    <h2>Créneaux à venir ({{ events|length }})</h2>
+    {% if events %}
+    <form method="post" action="{{ url_for('main.events_clear') }}" onsubmit="return confirm('Vider tout l\'agenda ?')">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-danger">Tout vider</button>
+    </form>
+    {% endif %}
+  </div>
+  {% if events %}
+  <table>
+    <thead><tr><th>Jour</th><th>Horaire</th><th>Intitulé</th><th>Source</th><th></th></tr></thead>
+    <tbody>
+    {% for e in events %}
+    <tr><td>{{ e.start|jour }}</td><td>{{ e.start|hm }}–{{ e.end|hm }}</td><td>{{ e.title }}</td>
+      <td><span class="tag">{{ e.source }}</span></td>
+      <td><form method="post" action="{{ url_for('main.event_delete', event_id=e.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link danger">supprimer</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Aucun créneau occupé.</p>{% endif %}
+</section>
+{% endblock %}

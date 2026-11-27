@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ "Nouvelle matière" if new else "Modifier la matière" }}{% endblock %}
+{% block content %}
+<h1>{{ "Nouvelle matière" if new else "Modifier la matière" }}</h1>
+<form method="post" enctype="multipart/form-data" class="card form-grid"
+      action="{{ url_for('main.subject_new') if new else url_for('main.subject_edit', subject_id=subject_id) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <label class="full">Nom de la matière
+    <input name="name" required maxlength="100" placeholder="ex. Probabilités, Droit des contrats, Biologie cellulaire" value="{{ s.name or '' }}"></label>
+
+  <fieldset class="full">
+    <legend>Objectif</legend>
+    <div class="choices">
+      {% for key, label in goals.items() %}
+      <label class="choice"><input type="radio" name="goal" value="{{ key }}" {% if (s.goal or 'exam') == key %}checked{% endif %}
+             onchange="document.body.dataset.goal=this.value"> <span>{{ label }}</span></label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  <label class="goal-exam">Date de l'examen
+    <input type="date" name="exam_date" value="{{ s.exam_date or '' }}"></label>
+  <label class="goal-ajour">Heures par semaine à y consacrer
+    <input type="number" name="weekly_hours" min="0.5" max="40" step="0.5" value="{{ s.weekly_hours or 3 }}"></label>
+
+  <label class="full">Mon aisance dans ce cours
+    <select name="comfort">
+      {% for k, label in comfort.items() %}
+      <option value="{{ k }}" {% if (s.comfort or 3)|int == k %}selected{% endif %}>{{ k }} : {{ label }}</option>
+      {% endfor %}
+    </select>
+    <span class="hint">Moins tu es à l'aise, plus le planning prévoit de temps d'étude et d'entraînement.</span></label>
+
+  {% if new %}
+  <label class="full">Supports de cours (facultatif)
+    <input type="file" name="documents" multiple accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md">
+    <span class="hint">PDF, PowerPoint, Word, LibreOffice (ODT/ODP), texte. Les chapitres sont détectés automatiquement.</span></label>
+  {% endif %}
+
+  <label class="full">Chapitres (un par ligne, facultatif)
+    <textarea name="topics" rows="8" placeholder="Laisse vide : les chapitres seront extraits de tes documents ou proposés à partir de Wikipédia.">{{ s.topics or '' }}</textarea></label>
+
+  <div class="full actions">
+    <button class="btn">{{ "Créer la matière" if new else "Enregistrer" }}</button>
+    <a class="btn btn-ghost" href="{{ url_for('main.dashboard') if new else url_for('main.subject_detail', subject_id=subject_id) }}">Annuler</a>
+  </div>
+</form>
+<script>
+  document.body.dataset.goal = (document.querySelector('input[name=goal]:checked') || {}).value || 'exam';
+</script>
+{% endblock %}

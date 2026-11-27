@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Tableau de bord{% endblock %}
+{% macro session_row(s, show_day=false) %}
+<li class="session {% if s.done %}is-done{% elif s.end < now %}is-missed{% endif %}" style="--hue: {{ (s.subject_id * 67) % 360 }}">
+  <form method="post" action="{{ url_for('main.session_toggle', session_id=s.id) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <button class="check" title="Marquer comme fait">{% if s.done %}✓{% endif %}</button>
+  </form>
+  <div>
+    <div class="when">{% if show_day %}{{ s.start|jour }} · {% endif %}{{ s.start|hm }}–{{ s.end|hm }}</div>
+    <strong>{{ s.subject_name }}</strong> — {{ s.topic }}
+    <div class="muted small">{{ s.activity }}</div>
+  </div>
+</li>
+{% endmacro %}
+{% block content %}
+<div class="page-head">
+  <h1>Bonjour {{ g.user.username }}</h1>
+  <div class="actions">
+    <a class="btn btn-ghost" href="{{ url_for('main.subject_new') }}">+ Ajouter une matière</a>
+    {% if subjects %}
+    <form method="post" action="{{ url_for('main.plan_generate') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn">Générer / mettre à jour le planning</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+{% if not subjects %}
+<div class="card empty">
+  <h2>Commence en 3 étapes</h2>
+  <ol>
+    <li><a href="{{ url_for('main.preferences') }}">Règle tes préférences</a> : méthode, durée des séances, horaires.</li>
+    <li><a href="{{ url_for('main.calendar') }}">Importe ton agenda</a> (.ics) ou ajoute tes cours à la main (facultatif).</li>
+    <li><a href="{{ url_for('main.subject_new') }}">Ajoute une matière</a> : juste son nom, ou tes supports de cours.</li>
+  </ol>
+</div>
+{% else %}
+<div class="grid2">
+  <section class="card">
+    <h2>Aujourd'hui</h2>
+    {% if today_sessions %}<ul class="sessions">{% for s in today_sessions %}{{ session_row(s) }}{% endfor %}</ul>
+    {% else %}<p class="muted">Rien de prévu aujourd'hui. Profite !</p>{% endif %}
+    {% if upcoming %}
+    <h3>À venir</h3>
+    <ul class="sessions">{% for s in upcoming %}{{ session_row(s, true) }}{% endfor %}</ul>
+    {% endif %}
+    <p><a href="{{ url_for('main.plan') }}">Voir le planning de la semaine →</a></p>
+  </section>
+  <section class="card">
+    <h2>Mes matières</h2>
+    <ul class="subjects">
+    {% for s in subjects %}
+      {% set pct = ((s.done_min / s.planned) * 100)|round|int if s.planned else 0 %}
+      <li style="--hue: {{ (s.id * 67) % 360 }}">
+        <a href="{{ url_for('main.subject_detail', subject_id=s.id) }}"><strong>{{ s.name }}</strong></a>
+        <span class="tag">{{ goals[s.goal] }}</span>
+        {% if s.exam_date %}
+          {% set left = (date_fromiso(s.exam_date) - today).days %}
+          <span class="tag {% if left <= 7 %}tag-hot{% endif %}">{% if left > 0 %}J-{{ left }}{% elif left == 0 %}Aujourd'hui{% else %}Passé{% endif %}</span>
+        {% endif %}
+        <div class="progress"><span style="width: {{ pct }}%"></span></div>
+        <div class="muted small">{{ s.done_min|int|duree }} faites sur {{ s.planned|int|duree }} prévues
+          {% if s.missed %} · <span class="warn">{{ s.missed }} séance(s) manquée(s) : régénère le planning pour les replacer</span>{% endif %}</div>
+      </li>
+    {% endfor %}
+    </ul>
+  </section>
+</div>
+{% endif %}
+{% endblock %}

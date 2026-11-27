@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Inscription{% endblock %}
+{% block content %}
+<div class="card narrow">
+  <h1>Créer un compte</h1>
+  <p class="muted">Un compte est nécessaire pour enregistrer tes matières, ton agenda et ton planning.</p>
+  <form method="post">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" value="{{ request.form.username }}"></label>
+    <label>E-mail <input type="email" name="email" required value="{{ request.form.email }}"></label>
+    <label>Mot de passe (8 caractères min.) <input type="password" name="password" required minlength="8"></label>
+    <label>Confirmation <input type="password" name="password2" required minlength="8"></label>
+    <button class="btn">Créer mon compte</button>
+  </form>
+</div>
+{% endblock %}

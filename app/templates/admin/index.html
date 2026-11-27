@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Administration{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Administration</h1>
+  <div class="actions">
+    <a class="btn btn-ghost" href="{{ url_for('admin.subjects') }}">Toutes les matières</a>
+    <a class="btn" href="{{ url_for('admin.user_new') }}">+ Nouvel utilisateur</a>
+  </div>
+</div>
+<div class="stats">
+  <div class="card stat"><span>{{ stats.users }}</span>utilisateurs</div>
+  <div class="card stat"><span>{{ stats.subjects }}</span>matières</div>
+  <div class="card stat"><span>{{ stats.documents }}</span>documents</div>
+  <div class="card stat"><span>{{ stats.sessions }}</span>séances ({{ stats.done }} faites)</div>
+</div>
+<section class="card">
+  <form method="get" class="search">
+    <input name="q" value="{{ q }}" placeholder="Rechercher par e-mail ou nom">
+    <button class="btn btn-ghost">Rechercher</button>
+  </form>
+  <table>
+    <thead><tr><th>Utilisateur</th><th>E-mail</th><th>Rôle</th><th>Statut</th><th>Matières</th><th>Séances</th><th>Inscrit le</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.username }}</td><td>{{ u.email }}</td>
+      <td><span class="tag {% if u.role == 'admin' %}tag-hot{% endif %}">{{ u.role }}</span></td>
+      <td>{{ "actif" if u.is_active else "désactivé" }}</td>
+      <td>{{ u.n_subjects }}</td><td>{{ u.n_sessions }}</td><td class="small">{{ u.created_at[:10]|datefr }}</td>
+      <td class="row-actions">
+        <a href="{{ url_for('admin.user_edit', user_id=u.id) }}">modifier</a>
+        {% if u.id != g.user.id %}
+        <form method="post" action="{{ url_for('admin.user_delete', user_id=u.id) }}" class="inline"
+              onsubmit="return confirm('Supprimer cet utilisateur et toutes ses données ?')">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn-link danger">supprimer</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

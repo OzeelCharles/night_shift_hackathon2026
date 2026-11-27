@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}{{ s.name }}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ s.name }}</h1>
+    <span class="tag">{{ goals[s.goal] }}</span>
+    {% if s.exam_date %}<span class="tag">Examen le {{ s.exam_date|datefr }}</span>{% else %}<span class="tag">{{ s.weekly_hours }} h / semaine</span>{% endif %}
+    <span class="tag">Aisance : {{ comfort[s.comfort] }}</span>
+  </div>
+  <div class="actions">
+    <a class="btn btn-ghost" href="{{ url_for('main.subject_edit', subject_id=s.id) }}">Modifier</a>
+    <form method="post" action="{{ url_for('main.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière, ses documents et ses séances ?')">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn btn-danger">Supprimer</button>
+    </form>
+  </div>
+</div>
+
+<div class="grid2">
+  <section class="card">
+    <h2>Chapitres ({{ topics|length }})</h2>
+    <ol class="topics">{% for t in topics %}<li>{{ t }}</li>{% endfor %}</ol>
+    <p class="muted small">Tu peux les réordonner ou les corriger via « Modifier ».</p>
+
+    <h2>Supports de cours</h2>
+    {% if docs %}
+    <ul class="docs">
+      {% for d in docs %}
+      <li>{{ d.filename }} <span class="muted small">· {{ d.topics_found }} chapitre(s) détecté(s)</span>
+        <form method="post" action="{{ url_for('main.document_delete', doc_id=d.id) }}" class="inline">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <button class="btn-link danger">supprimer</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">Aucun document.</p>{% endif %}
+    <form method="post" enctype="multipart/form-data" action="{{ url_for('main.subject_upload', subject_id=s.id) }}" class="upload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <input type="file" name="documents" multiple required accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md">
+      <button class="btn btn-ghost">Ajouter des documents</button>
+    </form>
+  </section>
+
+  <section class="card" id="ressources">
+    <div class="page-head">
+      <h2>Ressources en ligne</h2>
+      <form method="post" action="{{ url_for('main.subject_resources', subject_id=s.id) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="btn btn-ghost">Actualiser</button>
+      </form>
+    </div>
+    {% if resources %}
+    <ul class="resources">
+      {% for r in resources %}
+      <li><a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
+        <span class="tag">{{ r.source }}</span>
+        {% if r.snippet %}<div class="muted small">{{ r.snippet }}</div>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% else %}<p class="muted">Aucune ressource pour l'instant. Clique sur « Actualiser ».</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Séances prévues ({{ sessions|length }})</h2>
+  {% if sessions %}
+  <table>
+    <thead><tr><th>Quand</th><th>Type</th><th>Chapitre</th><th>Activité</th><th>Statut</th></tr></thead>
+    <tbody>
+    {% for se in sessions %}
+    <tr class="{% if se.done %}is-done{% elif se.end < now %}is-missed{% endif %}">
+      <td>{{ se.start|jour }} {{ se.start|hm }}–{{ se.end|hm }}</td>
+      <td>{{ kinds[se.kind] }}</td><td>{{ se.topic }}</td><td class="small">{{ se.activity }}</td>
+      <td>
+        <form method="post" action="{{ url_for('main.session_toggle', session_id=se.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ request.path }}">
+          <button class="btn-link">{% if se.done %}✓ fait{% elif se.end < now %}manqué{% else %}à faire{% endif %}</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}<p class="muted">Pas encore de planning : génère-le depuis le tableau de bord.</p>{% endif %}
+</section>
+{% endblock %}

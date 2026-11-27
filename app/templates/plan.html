@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Planning{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1>Semaine du {{ monday|jour }}</h1>
+  <div class="actions">
+    <a class="btn btn-ghost" href="{{ url_for('main.plan', semaine=prev.isoformat()) }}">← Précédente</a>
+    <a class="btn btn-ghost" href="{{ url_for('main.plan') }}">Cette semaine</a>
+    <a class="btn btn-ghost" href="{{ url_for('main.plan', semaine=next.isoformat()) }}">Suivante →</a>
+    {% if has_subjects %}
+    <form method="post" action="{{ url_for('main.plan_generate') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="btn">Régénérer</button>
+    </form>
+    <a class="btn btn-ghost" href="{{ url_for('main.plan_export') }}">Exporter (.ics)</a>
+    {% endif %}
+  </div>
+</div>
+{% if not has_subjects %}
+<div class="card empty"><p>Ajoute une matière pour générer ton planning. <a href="{{ url_for('main.subject_new') }}">Ajouter une matière →</a></p></div>
+{% endif %}
+<p class="muted small">Coche une séance quand elle est faite. Après un imprévu, clique sur « Régénérer » : les séances déjà faites sont conservées et le reste est replanifié.</p>
+<div class="week">
+  {% for d, items in days %}
+  <div class="day-col {% if d == today %}is-today{% endif %}">
+    <div class="day-head">{{ d|jour }}</div>
+    {% for type, it in items %}
+      {% if type == 'session' %}
+      <div class="slot {% if it.done %}is-done{% elif it.end < now %}is-missed{% endif %}" style="--hue: {{ (it.subject_id * 67) % 360 }}">
+        <form method="post" action="{{ url_for('main.session_toggle', session_id=it.id) }}">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button class="check" title="Marquer comme fait">{% if it.done %}✓{% endif %}</button>
+        </form>
+        <div class="when">{{ it.start|hm }}–{{ it.end|hm }} · {{ kinds[it.kind] }}</div>
+        <a href="{{ url_for('main.subject_detail', subject_id=it.subject_id) }}"><strong>{{ it.subject_name }}</strong></a>
+        <div>{{ it.topic }}</div>
+        <div class="muted small">{{ it.activity }}</div>
+      </div>
+      {% else %}
+      <div class="slot busy">
+        <div class="when">{{ it.start|hm }}–{{ it.end|hm }}</div>
+        <div>{{ it.title }}</div>
+      </div>
+      {% endif %}
+    {% else %}
+      <div class="muted small pad">Libre</div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}{{ "Nouvel utilisateur" if new else "Modifier l'utilisateur" }}{% endblock %}
+{% block content %}
+<p><a href="{{ url_for('admin.index') }}">← Retour à l'administration</a></p>
+<h1>{{ "Nouvel utilisateur" if new else "Modifier " ~ u.email }}</h1>
+<form method="post" class="card form-grid"
+      action="{{ url_for('admin.user_new') if new else url_for('admin.user_edit', user_id=user_id) }}">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <label>Nom d'utilisateur <input name="username" required value="{{ u.username or '' }}"></label>
+  <label>E-mail <input type="email" name="email" required value="{{ u.email or '' }}"></label>
+  <label>{{ "Mot de passe" if new else "Nouveau mot de passe (laisser vide pour ne pas changer)" }}
+    <input type="password" name="password" minlength="8" {% if new %}required{% endif %}></label>
+  <label>Rôle
+    <select name="role">
+      <option value="user" {% if u.role != 'admin' %}selected{% endif %}>Utilisateur</option>
+      <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>Administrateur</option>
+    </select></label>
+  {% if not new %}
+  <label class="inline-check full"><input type="checkbox" name="is_active" {% if u.is_active and u.is_active != '0' %}checked{% endif %}> Compte actif</label>
+  {% endif %}
+  <div class="full"><button class="btn">{{ "Créer" if new else "Enregistrer" }}</button></div>
+</form>
+{% if not new and subjects %}
+<section class="card">
+  <h2>Matières de cet utilisateur</h2>
+  <table>
+    <thead><tr><th>Matière</th><th>Objectif</th><th>Examen</th><th></th></tr></thead>
+    <tbody>
+    {% for s in subjects %}
+    <tr><td>{{ s.name }}</td><td>{{ s.goal }}</td><td>{{ s.exam_date|datefr }}</td>
+      <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière ?')">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <input type="hidden" name="next" value="{{ request.path }}">
+        <button class="btn-link danger">supprimer</button></form></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endblock %}
