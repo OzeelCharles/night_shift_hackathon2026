@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% block title %}Forum{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Forum</h1>
+    <p class="muted">Exercices, astuces, retours d'expérience, orientation et concours : on s'entraide, dans le respect de <a href="{{ url_for('community.rules_page') }}">nos règles</a>.</p>
+  </div>
+  <a class="btn" href="{{ url_for('community.new_topic', categorie=category) }}">Nouvelle discussion</a>
+</div>
+
+<nav class="com-cats" aria-label="Catégories">
+  <a href="{{ url_for('community.forum', q=q or None) }}" {% if not category %}aria-current="page"{% endif %}>Toutes</a>
+  {% for key, (label, _desc) in categories.items() %}
+  <a href="{{ url_for('community.forum', categorie=key, q=q or None) }}" {% if category == key %}aria-current="page"{% endif %}>{{ label }}{% if counts.get(key) %} <span class="muted">{{ counts[key] }}</span>{% endif %}</a>
+  {% endfor %}
+</nav>
+{% if category %}<p class="muted">{{ categories[category][1] }}</p>{% endif %}
+
+<form method="get" class="com-search" role="search">
+  {% if category %}<input type="hidden" name="categorie" value="{{ category }}">{% endif %}
+  <input type="search" name="q" value="{{ q }}" placeholder="Rechercher dans le forum" aria-label="Rechercher dans le forum">
+  <button class="btn btn-ghost">Chercher</button>
+</form>
+
+{% if topics %}
+<ul class="com-topics">
+  {% for t in topics %}
+  <li class="card">
+    <a class="com-title" href="{{ url_for('community.topic', topic_id=t.id) }}">{{ t.title }}</a>
+    <div class="small muted">
+      <span class="tag">{{ categories[t.category][0] if t.category in categories else t.category }}</span>
+      par {{ t.author }} · dernière activité le {{ t.last_activity[:10] | datefr }} à {{ t.last_activity[11:16] }}
+      · {{ t.replies }} réponse{{ 's' if t.replies != 1 }}
+    </div>
+  </li>
+  {% endfor %}
+</ul>
+{% if pages > 1 %}
+<nav class="actions" aria-label="Pages">
+  {% if page > 1 %}<a class="btn btn-ghost btn-sm" href="{{ url_for('community.forum', categorie=category, q=q or None, page=page - 1) }}">← Précédent</a>{% endif %}
+  <span class="small muted">Page {{ page }} sur {{ pages }}</span>
+  {% if page < pages %}<a class="btn btn-ghost btn-sm" href="{{ url_for('community.forum', categorie=category, q=q or None, page=page + 1) }}">Suivant →</a>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<div class="empty-state">
+  <p>{% if q %}Aucune discussion ne correspond à « {{ q }} ».{% else %}Aucune discussion pour l'instant. Lance la première !{% endif %}</p>
+  <a class="btn" href="{{ url_for('community.new_topic', categorie=category) }}">Nouvelle discussion</a>
+</div>
+{% endif %}
+{% endblock %}

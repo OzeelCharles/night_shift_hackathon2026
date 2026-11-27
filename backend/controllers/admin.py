@@ -57,6 +57,19 @@ def user_delete(user_id):
     return redirect(url_for("admin.index"))
 
 
+@bp.route("/utilisateurs/<int:user_id>/moderateur", methods=("POST",))
+@admin_required
+def user_moderator(user_id):
+    on = request.form.get("on") == "1"
+    error = admin_service.set_moderator(user_id, on)
+    name = admin_service.get_user(user_id)["username"]
+    if error:
+        flash(error, "error")
+    else:
+        flash(f"{name} est maintenant modérateur de la communauté." if on else f"{name} n'est plus modérateur.", "success")
+    return redirect(url_for("admin.index"))
+
+
 @bp.route("/matieres")
 @admin_required
 def subjects():

@@ -39,6 +39,17 @@ def admin_required(view):
     return wrapped
 
 
+def moderator_required(view):
+    """Administrateurs et modérateurs nommés."""
+    @functools.wraps(view)
+    @login_required
+    def wrapped(**kwargs):
+        if g.user["role"] != "admin" and not g.user["is_moderator"]:
+            abort(403)
+        return view(**kwargs)
+    return wrapped
+
+
 def safe_next(value: str | None, default: str) -> str:
     """N'accepte qu'un chemin interne (pas de redirection vers un autre site)."""
     value = value or ""

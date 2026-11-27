@@ -24,6 +24,7 @@ class NavItem:
     label: str
     order: int = 50        # position dans le menu (plus petit = plus à gauche)
     admin: bool = False    # réservé aux administrateurs
+    moderator: bool = False  # réservé aux modérateurs (et aux administrateurs)
     # Barre où l'entrée apparaît :
     # - « site » : barre du haut, visible de tous, qui liste les espaces de Rivezli (Encadrement…) ;
     # - sinon le nom d'un espace (« encadrement » par défaut) : ses onglets, dans la seconde barre.

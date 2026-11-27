@@ -12,6 +12,7 @@ FEATURES = [
     "backend.controllers.subjects",
     "backend.controllers.resources",
     "backend.controllers.caffeine",
+    "backend.controllers.community",
     "backend.controllers.api",
     "backend.controllers.admin",
     "backend.controllers.dossier",

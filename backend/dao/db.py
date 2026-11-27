@@ -96,6 +96,70 @@ CREATE TABLE IF NOT EXISTS grades (
     created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 CREATE INDEX IF NOT EXISTS idx_grades_user ON grades(user_id);
+-- Communauté : messages privés, forum et fichiers échangés. Les messages et sujets d'un utilisateur
+-- supprimé disparaissent avec lui.
+CREATE TABLE IF NOT EXISTS dm_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_dm_pair ON dm_messages(sender_id, recipient_id);
+CREATE INDEX IF NOT EXISTS idx_dm_recipient ON dm_messages(recipient_id, read_at);
+CREATE TABLE IF NOT EXISTS forum_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    last_activity TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_topics_category ON forum_topics(category, last_activity);
+CREATE TABLE IF NOT EXISTS forum_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id INTEGER NOT NULL REFERENCES forum_topics(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_posts_topic ON forum_posts(topic_id);
+CREATE TABLE IF NOT EXISTS shared_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    message_id INTEGER REFERENCES dm_messages(id) ON DELETE CASCADE,
+    post_id INTEGER REFERENCES forum_posts(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_files_message ON shared_files(message_id);
+CREATE INDEX IF NOT EXISTS idx_files_post ON shared_files(post_id);
+-- Modération : un signalement garde une copie du contenu (il reste traitable si l'auteur le supprime).
+-- Il survit à la suppression du contenu, de l'auteur et de celui qui signale.
+CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('post', 'message')),
+    target_id INTEGER NOT NULL,
+    author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    content TEXT NOT NULL DEFAULT '',
+    context TEXT NOT NULL DEFAULT '',
+    topic_id INTEGER,
+    reason TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+    decision TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    handled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, target_type, target_id);
+-- Un utilisateur ne peut pas signaler deux fois le même contenu tant que le premier signalement est ouvert.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_once ON reports(reporter_id, target_type, target_id) WHERE status = 'open';
 """
 
 
@@ -165,7 +229,9 @@ MINUTES = "((julianday(end) - julianday(start)) * 1440)"
 # Colonnes ajoutées après la première version : on les crée sur les bases existantes
 # sans perdre les données.
 MIGRATIONS = {
-    "users": {"level": "TEXT NOT NULL DEFAULT 'autre'", "school": "TEXT NOT NULL DEFAULT ''"},
+    "users": {"level": "TEXT NOT NULL DEFAULT 'autre'", "school": "TEXT NOT NULL DEFAULT ''",
+              # modération de la communauté : nommé par un administrateur ; suspendu = lecture seule
+              "is_moderator": "INTEGER NOT NULL DEFAULT 0", "community_muted": "INTEGER NOT NULL DEFAULT 0"},
     "subjects": {"resources_status": "TEXT NOT NULL DEFAULT 'ok'", "resources_sig": "TEXT NOT NULL DEFAULT ''",
                  # date d'examen choisie par l'utilisateur (prioritaire) et origine de la date retenue :
                  # manuel, agenda (épreuve de l'emploi du temps) ou derniere_seance (par défaut)

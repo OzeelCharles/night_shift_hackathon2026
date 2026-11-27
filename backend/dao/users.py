@@ -22,7 +22,8 @@ def create(email, username, password_hash, role, level, school) -> int:
 
 
 def update(user_id, **fields) -> None:
-    allowed = {"email", "username", "role", "is_active", "level", "school", "password_hash"}
+    allowed = {"email", "username", "role", "is_active", "level", "school", "password_hash",
+               "is_moderator", "community_muted"}
     cols = [k for k in fields if k in allowed]
     execute(f"UPDATE users SET {', '.join(f'{c} = ?' for c in cols)} WHERE id = ?",
             *[fields[c] for c in cols], user_id)

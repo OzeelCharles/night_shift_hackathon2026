@@ -24,7 +24,8 @@
 {# Entrées de menu fournies par les fonctionnalités (core/features.py), pour une barre donnée.
    space : l'espace où l'on se trouve (son entrée de la barre du haut est surlignée). #}
 {% set ep = request.endpoint or '' %}
-{% for item in nav_items if item.section == section and (not item.admin or (g.user and g.user.role == 'admin')) %}
+{% for item in nav_items if item.section == section and (not item.admin or (g.user and g.user.role == 'admin'))
+   and (not item.moderator or (g.user and (g.user.role == 'admin' or g.user.is_moderator))) %}
 {% set prefix = item.endpoint.split('.')[0] ~ '.' %}
 <a href="{{ url_for(item.endpoint) }}" {% if item.admin %}class="admin-link"{% endif %}
    {% if ep == item.endpoint or (item.opens and item.opens == space) or (item.admin and ep.startswith(prefix)) %}aria-current="page"{% endif %}>{{ item.label }}</a>

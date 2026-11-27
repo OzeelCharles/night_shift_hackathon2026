@@ -107,6 +107,23 @@ La clé d'API n'est **jamais** dans le code ni dans git. Au choix :
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
 `FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.
 
+## Communauté
+
+Espace **Communauté** de la barre du haut : un **forum** par catégories (exercices, astuces, retours d'expérience,
+lycée → supérieur, prépas et concours, écoles), des **messages privés** et le **partage de fichiers** (polys, diapos,
+photos, ou copie d'un support déjà déposé dans une matière). L'e-mail des membres n'est jamais affiché ; les fichiers
+d'une conversation privée ne sont téléchargeables que par ses deux participants.
+
+**Modération** :
+- tout message du forum, ou message privé reçu, peut être **signalé** (haine, harcèlement, triche, document sans droit,
+  spam…) ; la page `/communaute/regles` rappelle les règles ;
+- les signalements arrivent dans l'onglet **Modération**, réservé aux administrateurs et aux **modérateurs**, un
+  élément par message signalé (le contenu est copié : il reste traitable si l'auteur le supprime) ;
+- décisions : rejeter, supprimer le contenu, ou supprimer et **suspendre** l'auteur (il garde la lecture, mais ne peut
+  plus publier ni écrire ; un membre de la modération le rétablit). Un modérateur ne peut pas suspendre un autre
+  modérateur, personne ne suspend un administrateur ;
+- l'administrateur **nomme ou retire** les modérateurs depuis la page Administration.
+
 ## Établissements de France
 
 L'autocomplétion de l'école ou de l'université (inscription, profil, admin) cherche parmi environ 18 000 collèges,

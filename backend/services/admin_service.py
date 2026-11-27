@@ -2,11 +2,12 @@
 from werkzeug.security import generate_password_hash
 
 from backend.business.accounts import LEVELS, validate_account
+from backend.dao import community as community_dao
 from backend.dao import documents as documents_dao
 from backend.dao import subjects as subjects_dao
 from backend.dao import users as dao
 
-from . import auth_service, subject_service
+from . import auth_service, community_service, subject_service
 from .common import owned
 
 
@@ -51,6 +52,17 @@ def update_user(user_id, form) -> list[str]:
     return []
 
 
+def set_moderator(user_id, on: bool) -> str | None:
+    """Nomme ou retire un modérateur de la communauté ; renvoie un message d'erreur si refusé."""
+    u = get_user(user_id)
+    if u["role"] == "admin":
+        return "Un administrateur modère déjà : il n'a pas besoin d'être nommé."
+    if on and not u["is_active"]:
+        return "Ce compte est désactivé."
+    dao.update(user_id, is_moderator=1 if on else 0)
+    return None
+
+
 def delete_user(user_id, current_user_id) -> str | None:
     """Supprime un utilisateur et toutes ses données ; renvoie un message d'erreur si refusé."""
     u = get_user(user_id)
@@ -59,6 +71,7 @@ def delete_user(user_id, current_user_id) -> str | None:
     if u["role"] == "admin" and dao.active_admin_count() <= 1:
         return "Impossible de supprimer le dernier administrateur."
     subject_service.remove_files(documents_dao.paths_for_user(user_id))
+    community_service.remove_files(community_dao.paths_for_user(user_id))
     dao.delete(user_id)
     return None
 
