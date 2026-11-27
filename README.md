@@ -49,9 +49,9 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 
 ## Agenda intelligent
 
-- **Rapprochement des noms** (`app/matching.py`) : « TD Proba B204 » est rattaché à la matière « Probabilités »
+- **Rapprochement des noms** (`app/business/matching.py`) : « TD Proba B204 » est rattaché à la matière « Probabilités »
   par similarité cosinus sur les mots (racines, abréviations), seuil 0,75 calibré sur des cas réels.
-- **Suggestions de matières** (`app/embeddings.py`, `app/suggestions.py`) : à la création d'une matière, les cours
+- **Suggestions de matières** (`app/business/embeddings.py`, `app/business/agenda_analysis.py`) : à la création d'une matière, les cours
   de l'agenda sans matière sont proposés, puis classés pendant la saisie par similarité cosinus entre embeddings.
   Les embeddings sont des vecteurs de 512 dimensions obtenus par hachage de traits (racines, débuts de mots,
   n-grammes de caractères), sans modèle à télécharger ; `embed()` est le seul point à remplacer pour brancher
@@ -78,27 +78,72 @@ Mon Master…). Pour le mettre à jour :
 python scripts/build_schools.py
 ```
 
-## Structure
+## Architecture en couches
+
+Chaque couche n'utilise que celles du dessous (vérifié par `tests/test_architecture.py`) :
+
+```
+controllers/   HTTP : lit la requête, appelle un service, affiche (flash + gabarit). Aucune règle métier.
+    │
+services/      Cas d'usage : orchestrent DAO et règles métier, renvoient un Report (messages à afficher).
+    │
+business/      Règles pures, testables seules : aucun Flask, aucune base, aucun réseau.
+dao/           Accès aux données : SQLite (une fonction par requête), fichier des écoles, sources web.
+
+core/          Transversal : sécurité (connexion, CSRF), filtres d'affichage, fonctionnalités, événements.
+```
 
 ```
 app/
-  planner.py       moteur de planification (pur Python, testé)
-  extractor.py     extraction du texte et des chapitres des documents
-  calendar_ics.py  lecture/écriture iCalendar (récurrences comprises)
-  matching.py      rapprochement des noms de cours (similarité cosinus)
-  embeddings.py    embeddings d'intitulés et classement par similarité cosinus
-  suggestions.py   suggestions de matières depuis l'agenda, lecture des dates d'examen
-  schools.py       autocomplétion des établissements de France
-  resources.py     recherche de ressources (Wikipédia, web, vidéos, plateformes) selon le niveau
-  auth.py          inscription, connexion, profil, rôles
-  admin.py         espace administrateur (CRUD)
-  routes.py        pages de l'application
-  db.py            schéma SQLite et migrations
-  data/            liste des établissements de France
+  __init__.py            create_app : configuration, base, sécurité, chargement des fonctionnalités
+  config.py              configuration par défaut, liste des fonctionnalités (FEATURES)
+  core/                  security.py, filters.py, features.py (plugins), events.py (bus d'événements)
+  controllers/           auth, main (tableau de bord, réglages), planning, agenda, subjects, resources, api, admin
+  services/              auth, preference, planning, agenda, subject, exam, resource, suggestion, admin
+  business/              planner, matching, embeddings, agenda_analysis, exams, subjects, accounts,
+                         resource_rules, school_search, calendar_ics, extractor, text
+  dao/                   db (schéma, migrations, transaction par requête), users, preferences, subjects,
+                         documents, agenda, sessions, resources, schools, web
+  data/                  liste des établissements de France
   templates/, static/
 scripts/build_schools.py
 run.py
 tests/
 ```
+
+Chaque requête HTTP est une transaction : tout ce qu'elle écrit est validé à la fin, ou annulé en cas d'erreur.
+
+## Ajouter une fonctionnalité (plugin)
+
+Une fonctionnalité est un module qui expose une variable `feature`. Exemple complet : `tests/fake_feature.py`.
+
+```python
+from flask import Blueprint
+from app.core import events
+from app.core.features import Feature, NavItem
+
+bp = Blueprint("stats", __name__, template_folder="templates")
+
+@bp.route("/stats")
+def page(): ...
+
+def on_subject_created(user_id, subject_ids, **_):
+    return ["Message affiché à l'utilisateur (facultatif)."]
+
+feature = Feature(
+    "stats",
+    blueprints=[bp],                                         # ses pages
+    nav=[NavItem("stats.page", "Statistiques", order=35)],   # son entrée de menu (admin=True : réservée aux admins)
+    subscriptions=[(events.SUBJECT_CREATED, on_subject_created)],  # ses réactions aux événements
+    subject_panels=["stats_panel.html"],                     # un panneau en bas de chaque page matière
+)
+```
+
+Pour l'activer sans toucher au cœur : variable d'environnement `EXTRA_FEATURES=mon_paquet.stats`
+(plusieurs modules séparés par des virgules), ou clé `EXTRA_FEATURES` passée à `create_app`.
+
+Événements disponibles (`app/core/events.py`) : `profile.changed`, `subject.created`, `subject.deleted`,
+`agenda.changed`, `plan.updated`. Les fonctionnalités du cœur utilisent le même mécanisme : par exemple, la
+recherche de ressources réagit à `subject.created` et `profile.changed`.
 
 Données stockées dans `instance/` (base SQLite, fichiers déposés, clé secrète), exclu de git.

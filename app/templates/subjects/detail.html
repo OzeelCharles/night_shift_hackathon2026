@@ -1,8 +1,8 @@
 {% extends "base.html" %}
 {% block title %}{{ s.name }}{% endblock %}
 {% macro keep_button(r) %}
-<form method="post" action="{{ url_for('main.resource_keep', resource_id=r.id) }}" class="inline">
-  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+<form method="post" action="{{ url_for('resources.keep', resource_id=r.id) }}" class="inline">
+  {{ csrf_field() }}
   <button class="btn btn-ghost btn-sm">Ajouter à mes ressources</button>
 </form>
 {% endmacro %}
@@ -21,9 +21,9 @@
     </p>
   </div>
   <div class="actions">
-    <a class="btn btn-ghost" href="{{ url_for('main.subject_edit', subject_id=s.id) }}">Modifier</a>
-    <form method="post" action="{{ url_for('main.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière, ses documents et ses séances ?')">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <a class="btn btn-ghost" href="{{ url_for('subjects.edit', subject_id=s.id) }}">Modifier</a>
+    <form method="post" action="{{ url_for('subjects.delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière, ses documents et ses séances ?')">
+      {{ csrf_field() }}
       <button class="btn btn-danger">Supprimer</button>
     </form>
   </div>
@@ -32,15 +32,15 @@
 {% if hint %}
 <div class="notice">
   <p>Tu voulais créer « {{ hint.name }} » : comme le nom ressemble à « {{ s.name }} », tout a été rangé ici.
-     <a href="{{ url_for('main.subject_new', nom=hint.name, nouvelle=1) }}">C'est une autre matière ? Crée-la séparément.</a></p>
+     <a href="{{ url_for('subjects.new', nom=hint.name, nouvelle=1) }}">C'est une autre matière ? Crée-la séparément.</a></p>
 </div>
 {% endif %}
 
 {% if agenda_exam %}
 <div class="notice notice-action">
   <p>{% if agenda_exam_event.source == 'agenda' %}Ton emploi du temps contient « {{ agenda_exam_event.title }} » le <strong>{{ agenda_exam|datefr }}</strong>{% else %}D'après ton emploi du temps, la dernière séance de cours est le <strong>{{ agenda_exam|datefr }}</strong>{% endif %}{% if s.exam_date %}, alors que tu as choisi le {{ s.exam_date|datefr }}{% else %} : cette matière n'a pas encore de date d'examen{% endif %}.</p>
-  <form method="post" action="{{ url_for('main.exam_auto', subject_id=s.id) }}" data-busy="Construction du programme…">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" action="{{ url_for('subjects.exam_auto', subject_id=s.id) }}" data-busy="Construction du programme…">
+    {{ csrf_field() }}
     <button class="btn btn-sm">Préparer l'examen du {{ agenda_exam|datefr }}</button>
   </form>
 </div>
@@ -63,8 +63,8 @@
         <span class="when">{{ x.start|jour }}, {{ x.start|hm }} à {{ x.end|hm }}</span>
         <span>{{ x.title }} <span class="tag tag-quiet">{{ "ajouté par toi" if x.source == 'manuel' else "emploi du temps" }}</span></span>
         {% if x.source == 'manuel' %}
-        <form method="post" action="{{ url_for('main.event_delete', event_id=x.id) }}" class="inline" onsubmit="return confirm('Supprimer cet examen ?')">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <form method="post" action="{{ url_for('agenda.delete', event_id=x.id) }}" class="inline" onsubmit="return confirm('Supprimer cet examen ?')">
+          {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.path }}#examens">
           <button class="btn-link danger small">Supprimer</button>
         </form>
@@ -82,8 +82,8 @@
     {% endif %}
     <details class="add-exam">
       <summary>Ajouter un examen</summary>
-      <form method="post" action="{{ url_for('main.exam_add', subject_id=s.id) }}" class="form-grid" data-busy="Ajout de l'examen…">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <form method="post" action="{{ url_for('subjects.exam_add', subject_id=s.id) }}" class="form-grid" data-busy="Ajout de l'examen…">
+        {{ csrf_field() }}
         <label class="full">Intitulé <input name="title" maxlength="200" placeholder="Examen de {{ s.name }}, partiel, oral…"></label>
         <label class="full">Date <input type="date" name="date" required min="{{ today.isoformat() }}"></label>
         <label>Début <input type="time" name="start" value="08:00"></label>
@@ -104,7 +104,7 @@
     </ul>
     {% else %}
     <p class="muted">Aucun cours rattaché à cette matière.</p>
-    <p class="small"><a href="{{ url_for('main.calendar') }}">Ajoute tes horaires de cours</a> ou importe ton emploi du temps : les cours au nom proche de « {{ s.name }} » y seront rattachés automatiquement.</p>
+    <p class="small"><a href="{{ url_for('agenda.index') }}">Ajoute tes horaires de cours</a> ou importe ton emploi du temps : les cours au nom proche de « {{ s.name }} » y seront rattachés automatiquement.</p>
     {% endif %}
   </section>
   <section class="card">
@@ -113,13 +113,13 @@
     <ul class="mini-sessions">
       {% for se in upcoming %}
       <li class="{% if se.done %}is-done{% endif %}">
-        <form method="post" action="{{ url_for('main.session_toggle', session_id=se.id) }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <form method="post" action="{{ url_for('planning.toggle', session_id=se.id) }}">
+          {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.path }}#horaires">
           <button class="tick" aria-label="{{ 'Marquer comme à faire' if se.done else 'Marquer comme faite' }}">{% if se.done %}✓{% endif %}</button>
         </form>
         <div>
-          <a class="when" href="{{ url_for('main.plan', semaine=se.start[:10]) }}">{{ se.start|jour }}, {{ se.start|hm }} à {{ se.end|hm }}</a>
+          <a class="when" href="{{ url_for('planning.week', semaine=se.start[:10]) }}">{{ se.start|jour }}, {{ se.start|hm }} à {{ se.end|hm }}</a>
           <div>{{ kinds[se.kind] }} : {{ se.topic }}{% if se.manual %} <span class="tag">choisi par toi</span>{% endif %}</div>
           <div class="small muted">{{ se.activity }}</div>
         </div>
@@ -146,11 +146,11 @@
       <details>
         <summary>{{ topics|length }} chapitres</summary>
         <ol class="topics-compact">{% for t in topics %}<li>{{ t }}</li>{% endfor %}</ol>
-        <p class="small"><a href="{{ url_for('main.subject_edit', subject_id=s.id) }}">Modifier les chapitres</a></p>
+        <p class="small"><a href="{{ url_for('subjects.edit', subject_id=s.id) }}">Modifier les chapitres</a></p>
       </details>
     </div>
-    <form method="post" action="{{ url_for('main.subject_program', subject_id=s.id) }}" class="program-form" data-busy="Construction du programme…">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <form method="post" action="{{ url_for('subjects.program', subject_id=s.id) }}" class="program-form" data-busy="Construction du programme…">
+      {{ csrf_field() }}
       <fieldset>
         <legend>Objectif</legend>
         <div class="segmented segmented-full">
@@ -208,12 +208,12 @@
   <ul class="docs">
     {% for d in docs %}
     <li>
-      <a href="{{ url_for('main.document_open', doc_id=d.id) }}" target="_blank" rel="noopener"><strong>{{ d.filename }}</strong></a>
+      <a href="{{ url_for('subjects.document_open', doc_id=d.id) }}" target="_blank" rel="noopener"><strong>{{ d.filename }}</strong></a>
       <span class="muted small">{{ d.topics_found }} chapitre(s) détecté(s), ajouté le {{ d.created_at[:10]|datefr }}</span>
       <span class="row-actions">
-        <a href="{{ url_for('main.document_open', doc_id=d.id, telecharger=1) }}">Télécharger</a>
-        <form method="post" action="{{ url_for('main.document_delete', doc_id=d.id) }}" class="inline" onsubmit="return confirm('Supprimer ce document ?')">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <a href="{{ url_for('subjects.document_open', doc_id=d.id, telecharger=1) }}">Télécharger</a>
+        <form method="post" action="{{ url_for('subjects.document_delete', doc_id=d.id) }}" class="inline" onsubmit="return confirm('Supprimer ce document ?')">
+          {{ csrf_field() }}
           <button class="btn-link danger">Supprimer</button>
         </form>
       </span>
@@ -221,8 +221,8 @@
     {% endfor %}
   </ul>
   {% else %}<p class="muted">Aucun support pour l'instant. Dépose tes PDF ou slides : les chapitres seront détectés.</p>{% endif %}
-  <form method="post" enctype="multipart/form-data" action="{{ url_for('main.subject_upload', subject_id=s.id) }}" class="upload" data-busy="Analyse des documents…">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('subjects.upload', subject_id=s.id) }}" class="upload" data-busy="Analyse des documents…">
+    {{ csrf_field() }}
     <input type="file" name="documents" multiple required accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md">
     <button class="btn btn-ghost">Ajouter des supports</button>
   </form>
@@ -239,8 +239,8 @@
         <a href="{{ r.url }}" target="_blank" rel="noopener noreferrer">{{ r.title }}</a>
         <div class="small muted">{{ r.source }}{% if r.meta %}, {{ r.meta }}{% endif %}</div>
       </div>
-      <form method="post" action="{{ url_for('main.resource_remove', resource_id=r.id) }}" class="inline">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <form method="post" action="{{ url_for('resources.remove', resource_id=r.id) }}" class="inline">
+        {{ csrf_field() }}
         <button class="btn-link danger">Retirer</button>
       </form>
     </li>
@@ -249,8 +249,8 @@
   {% else %}
   <p class="muted">Garde ici les vidéos et liens utiles : clique sur « Ajouter à mes ressources » dans les propositions ci-dessous, ou ajoute ton propre lien.</p>
   {% endif %}
-  <form method="post" action="{{ url_for('main.resource_add', subject_id=s.id) }}" class="add-link">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" action="{{ url_for('resources.add', subject_id=s.id) }}" class="add-link">
+    {{ csrf_field() }}
     <input name="title" placeholder="Nom du lien (facultatif)" maxlength="300" aria-label="Nom du lien">
     <input name="url" type="url" required placeholder="https://…" aria-label="Adresse du lien">
     <button class="btn btn-ghost">Ajouter ce lien</button>
@@ -284,10 +284,10 @@
   <div class="page-head">
     <div>
       <h2>Ressources proposées</h2>
-      <p class="small muted">Adaptées à ton profil : {{ level_label }}{% if g.user.school %}, {{ g.user.school }}{% endif %}. <a href="{{ url_for('auth.profile') }}">Modifier</a></p>
+      <p class="small muted">Adaptées à ton profil : {{ levels.get(g.user.level, '') }}{% if g.user.school %}, {{ g.user.school }}{% endif %}. <a href="{{ url_for('auth.profile') }}">Modifier</a></p>
     </div>
-    <form method="post" action="{{ url_for('main.subject_resources', subject_id=s.id) }}">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <form method="post" action="{{ url_for('resources.refresh', subject_id=s.id) }}">
+      {{ csrf_field() }}
       <button class="btn btn-ghost" {% if pending %}disabled{% endif %}>{{ "Recherche en cours…" if pending else "Actualiser" }}</button>
     </form>
   </div>
@@ -320,6 +320,9 @@
   {% if not web and not platforms and not pending %}<p class="muted">Aucune ressource proposée pour l'instant.</p>{% endif %}
 </section>
 
+{# Panneaux ajoutés par des fonctionnalités enfichables (Feature.subject_panels) #}
+{% for panel in subject_panels %}{% include panel %}{% endfor %}
+
 {% if history %}
 <details class="card">
   <summary>Historique des séances ({{ history|length }})</summary>
@@ -330,8 +333,8 @@
     <tr class="{% if se.done %}is-done{% else %}is-missed{% endif %}">
       <td>{{ se.start|jour }}, {{ se.start|hm }}</td><td>{{ kinds[se.kind] }}</td><td>{{ se.topic }}</td>
       <td>
-        <form method="post" action="{{ url_for('main.session_toggle', session_id=se.id) }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <form method="post" action="{{ url_for('planning.toggle', session_id=se.id) }}">
+          {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.path }}">
           <button class="btn-link">{{ "Faite" if se.done else "Manquée" }}</button>
         </form>

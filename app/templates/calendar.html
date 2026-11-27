@@ -4,8 +4,8 @@
 <h1>Mon agenda</h1>
 <p class="muted">Tes cours et occupations bloquent ces créneaux : aucune révision n'y sera placée. Un cours dont le nom ressemble à une de tes matières y est rattaché automatiquement.</p>
 <div class="grid2">
-  <form method="post" action="{{ url_for('main.event_add') }}" class="card form-grid" data-busy="Ajout et mise à jour du planning…">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" action="{{ url_for('agenda.add') }}" class="card form-grid" data-busy="Ajout et mise à jour du planning…">
+    {{ csrf_field() }}
     <h2 class="full">Ajouter un créneau</h2>
     <fieldset class="full">
       <legend>C'est…</legend>
@@ -18,7 +18,7 @@
     <div class="full">
       <label>Intitulé
         <input name="title" maxlength="200" placeholder="CM Probabilités, TD Droit, partiel de maths, sport…"
-               autocomplete="off" aria-describedby="link-preview" data-link-url="{{ url_for('main.api_slot_link') }}"></label>
+               autocomplete="off" aria-describedby="link-preview" data-link-url="{{ url_for('api.slot_link') }}"></label>
       <div class="link-preview kind-school" id="link-preview" aria-live="polite">
         <p class="small muted">Le créneau sera rattaché à la matière dont le nom est le plus proche. S'il n'y en a aucune, une nouvelle matière sera créée.</p>
       </div>
@@ -30,8 +30,8 @@
     <div class="full"><button class="btn">Ajouter</button></div>
   </form>
 
-  <form method="post" enctype="multipart/form-data" action="{{ url_for('main.calendar_import') }}" class="card" data-busy="Import et rattachement des cours…">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" enctype="multipart/form-data" action="{{ url_for('agenda.import_ics') }}" class="card" data-busy="Import et rattachement des cours…">
+    {{ csrf_field() }}
     <h2>Importer mon emploi du temps</h2>
     <p class="muted small">Fichier .ics exporté de Google Agenda, Outlook, Apple Calendrier ou de l'ENT. Les cours récurrents sont pris en compte.</p>
     <input type="file" name="ics" accept=".ics" required>
@@ -51,10 +51,10 @@
     {% for r in revisions %}
     <tr class="{% if r.done %}is-done{% endif %}">
       <td>{{ r.start|jour }}</td><td>{{ r.start|hm }} à {{ r.end|hm }}</td>
-      <td><a class="subj-link hl-{{ r.subject_id % 6 }}" href="{{ url_for('main.subject_detail', subject_id=r.subject_id) }}">{{ r.subject_name }}</a></td>
+      <td><a class="subj-link hl-{{ r.subject_id % 6 }}" href="{{ url_for('subjects.detail', subject_id=r.subject_id) }}">{{ r.subject_name }}</a></td>
       <td>{{ r.topic }}</td>
-      <td><form method="post" action="{{ url_for('main.session_delete', session_id=r.id) }}">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link danger">Supprimer</button></form></td>
+      <td><form method="post" action="{{ url_for('agenda.delete_revision', session_id=r.id) }}">
+        {{ csrf_field() }}<button class="btn-link danger">Supprimer</button></form></td>
     </tr>
     {% endfor %}
     </tbody>
@@ -66,8 +66,8 @@
   <div class="page-head">
     <h2>Cours et occupations à venir ({{ events|length }})</h2>
     {% if events %}
-    <form method="post" action="{{ url_for('main.events_clear') }}" onsubmit="return confirm('Vider tout l\'agenda ?')">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <form method="post" action="{{ url_for('agenda.clear') }}" onsubmit="return confirm('Vider tout l\'agenda ?')">
+      {{ csrf_field() }}
       <button class="btn btn-danger">Tout vider</button>
     </form>
     {% endif %}
@@ -79,11 +79,11 @@
     {% for e in events %}
     <tr>
       <td>{{ e.start|jour }}</td><td>{{ e.start|hm }} à {{ e.end|hm }}</td>
-      <td>{% if e.subject_id %}<a href="{{ url_for('main.subject_detail', subject_id=e.subject_id) }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}
+      <td>{% if e.subject_id %}<a href="{{ url_for('subjects.detail', subject_id=e.subject_id) }}">{{ e.title }}</a>{% else %}{{ e.title }}{% endif %}
         {% if e.kind == 'examen' %}<span class="tag tag-hot">Examen</span>{% endif %}</td>
       <td>
-        <form method="post" action="{{ url_for('main.event_link', event_id=e.id) }}" class="link-form">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <form method="post" action="{{ url_for('agenda.link', event_id=e.id) }}" class="link-form">
+          {{ csrf_field() }}
           <select name="subject" onchange="this.form.requestSubmit()" aria-label="Matière rattachée à {{ e.title }}" class="hl-select {% if e.subject_id %}hl-{{ e.subject_id % 6 }}{% endif %}">
             <option value="">Aucune (occupation)</option>
             {% for s in subjects %}<option value="{{ s.id }}" {% if s.id == e.subject_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
@@ -91,8 +91,8 @@
           <noscript><button class="btn-link">OK</button></noscript>
         </form>
       </td>
-      <td><form method="post" action="{{ url_for('main.event_delete', event_id=e.id) }}">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link danger">Supprimer</button></form></td>
+      <td><form method="post" action="{{ url_for('agenda.delete', event_id=e.id) }}">
+        {{ csrf_field() }}<button class="btn-link danger">Supprimer</button></form></td>
     </tr>
     {% endfor %}
     </tbody>

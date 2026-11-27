@@ -1,7 +1,7 @@
 import unittest
 
-from app.matching import THRESHOLD, best_match, clean_title, similarity
-from app.resources import level_score, rank_for_level, school_keyword
+from app.business.matching import THRESHOLD, best_match, clean_title, similarity
+from app.business.resource_rules import level_score, rank_for_level, school_keyword
 
 
 class MatchingTests(unittest.TestCase):
@@ -55,7 +55,7 @@ class RealTimetableTests(unittest.TestCase):
                          "la salle M347 n'est pas un numéro de cours")
 
     def test_non_course_events(self):
-        from app.suggestions import is_course, is_holiday
+        from app.business.agenda_analysis import is_course, is_holiday
         for t in ["Vacances scolaires - Holidays  -", "Férié - Bank holiday  -"]:
             self.assertTrue(is_holiday(t), t)
             self.assertFalse(is_course(t), t)
@@ -90,7 +90,8 @@ class LevelRankingTests(unittest.TestCase):
 class ResourceOrderTests(unittest.TestCase):
     def test_pdfs_come_before_wikipedia(self):
         from unittest import mock
-        from app import resources
+        from app.dao import web
+        from app.services import resource_service
 
         def fake_ddg(query, limit=5):
             if "filetype:pdf" in query and "ENSAI" in query:
@@ -104,10 +105,10 @@ class ResourceOrderTests(unittest.TestCase):
 
         wiki = [{"title": "Wikipédia : Probabilité", "url": "https://fr.wikipedia.org/wiki/Probabilit%C3%A9",
                  "snippet": "", "source": "Wikipédia", "kind": "web"}]
-        with mock.patch.object(resources, "duckduckgo_search", side_effect=fake_ddg), \
-                mock.patch.object(resources, "wikipedia_search", return_value=wiki), \
-                mock.patch.object(resources, "youtube_search", return_value=[]):
-            found, errors = resources.find_resources("Probabilités", ["Lois"], level="master", school="ENSAI")
+        with mock.patch.object(web, "duckduckgo_search", side_effect=fake_ddg), \
+                mock.patch.object(web, "wikipedia_search", return_value=wiki), \
+                mock.patch.object(web, "youtube_search", return_value=[]):
+            found, errors = resource_service.find_resources("Probabilités", ["Lois"], level="master", school="ENSAI")
         web = [r for r in found if r["kind"] == "web"]
         self.assertEqual(errors, [])
         self.assertEqual(web[0]["url"], "https://ensai.fr/poly.pdf", "le PDF de l'établissement d'abord")
@@ -120,7 +121,7 @@ class ResourceOrderTests(unittest.TestCase):
 
 class EmbeddingTests(unittest.TestCase):
     def test_unit_vectors_and_cosine(self):
-        from app.embeddings import DIM, cosine, embed
+        from app.business.embeddings import DIM, cosine, embed
         v = embed("Probabilités")
         self.assertEqual(len(v), DIM)
         self.assertAlmostEqual(sum(x * x for x in v), 1.0, places=6)
@@ -128,7 +129,7 @@ class EmbeddingTests(unittest.TestCase):
         self.assertGreater(cosine(embed("prob"), v), cosine(embed("droit"), v))
 
     def test_rank_partial_typing(self):
-        from app.embeddings import rank
+        from app.business.embeddings import rank
         courses = ["Probabilités", "Droit des contrats", "Statistique inférentielle", "Macroéconomie", "Anglais"]
         self.assertEqual(rank("prob", courses)[0][0], "Probabilités")
         self.assertEqual(rank("macro eco", courses)[0][0], "Macroéconomie")
@@ -140,7 +141,7 @@ class EmbeddingTests(unittest.TestCase):
 
 class ExamDetectionTests(unittest.TestCase):
     def test_is_exam_and_course_name(self):
-        from app.suggestions import course_name, is_exam
+        from app.business.agenda_analysis import course_name, is_exam
         cases = {"Partiel Probabilités": "Probabilités", "DS de maths": "Maths",
                  "Examen final - Droit des contrats": "Droit des contrats", "Contrôle continu Anglais": "Anglais"}
         for title, name in cases.items():
@@ -151,7 +152,7 @@ class ExamDetectionTests(unittest.TestCase):
 
     def test_detect_exam_date(self):
         from datetime import date, timedelta
-        from app.suggestions import detect_exam_date
+        from app.business.agenda_analysis import detect_exam_date
         d1 = (date.today() + timedelta(days=20)).isoformat()
         d2 = (date.today() + timedelta(days=9)).isoformat()
         past = (date.today() - timedelta(days=3)).isoformat()
@@ -166,14 +167,14 @@ class ExamDetectionTests(unittest.TestCase):
 
 class SchoolSearchTests(unittest.TestCase):
     def test_france_wide_list(self):
-        from app import schools
-        self.assertGreater(schools.count(), 15000, "collèges, lycées et supérieur de toute la France")
-        self.assertEqual(schools.search("ensai")[0]["value"], "ENSAI")
-        self.assertIn("Université de Rennes", [r["value"] for r in schools.search("univ renn", "licence")])
-        lycee = schools.search("chateaubriand", "lycee")[0]
+        from app.services import suggestion_service
+        self.assertGreater(suggestion_service.school_count(), 15000, "collèges, lycées et supérieur de toute la France")
+        self.assertEqual(suggestion_service.schools("ensai")[0]["value"], "ENSAI")
+        self.assertIn("Université de Rennes", [r["value"] for r in suggestion_service.schools("univ renn", "licence")])
+        lycee = suggestion_service.schools("chateaubriand", "lycee")[0]
         self.assertEqual(lycee["kind"], "Lycée")
         self.assertIn("(", lycee["value"], "homonymes : la ville est ajoutée")
-        self.assertEqual(schools.search("a"), [], "au moins deux lettres")
+        self.assertEqual(suggestion_service.schools("a"), [], "au moins deux lettres")
 
 
 if __name__ == "__main__":

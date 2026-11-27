@@ -15,13 +15,15 @@
   <a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark" aria-hidden="true"></span>Révisio</a>
   {% if g.user %}
   <nav aria-label="Navigation principale">
-    {% for endpoint, label in [('main.dashboard', "Aujourd'hui"), ('main.plan', 'Planning'), ('main.calendar', 'Mon agenda'), ('main.preferences', 'Mes réglages')] %}
-    <a href="{{ url_for(endpoint) }}" {% if ep == endpoint %}aria-current="page"{% endif %}>{{ label }}</a>
+    {# Menu fourni par les fonctionnalités chargées (core/features.py) #}
+    {% for item in nav_items if not item.admin or g.user.role == 'admin' %}
+    {% set section = item.endpoint.split('.')[0] ~ '.' %}
+    <a href="{{ url_for(item.endpoint) }}" {% if item.admin %}class="admin-link"{% endif %}
+       {% if ep == item.endpoint or (item.admin and ep.startswith(section)) %}aria-current="page"{% endif %}>{{ item.label }}</a>
     {% endfor %}
-    {% if g.user.role == 'admin' %}<a class="admin-link" href="{{ url_for('admin.index') }}" {% if ep.startswith('admin.') %}aria-current="page"{% endif %}>Administration</a>{% endif %}
   </nav>
   <form method="post" action="{{ url_for('auth.logout') }}" class="logout">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {{ csrf_field() }}
     <a href="{{ url_for('auth.profile') }}" class="profile-link" {% if ep == 'auth.profile' %}aria-current="page"{% endif %} title="Mon profil : niveau et établissement">{{ g.user.username }}{% if g.user.school %}<span class="muted">, {{ g.user.school }}</span>{% endif %}</a>
     <button class="btn-link">Se déconnecter</button>
   </form>

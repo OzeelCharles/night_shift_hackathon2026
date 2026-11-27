@@ -9,17 +9,17 @@
   </div>
   <div class="actions">
     <div class="segmented" role="group" aria-label="Changer de semaine">
-      <a href="{{ url_for('main.plan', semaine=prev.isoformat()) }}" aria-label="Semaine précédente">‹</a>
-      <a href="{{ url_for('main.plan') }}">Aujourd'hui</a>
-      <a href="{{ url_for('main.plan', semaine=next.isoformat()) }}" aria-label="Semaine suivante">›</a>
+      <a href="{{ url_for('planning.week', semaine=prev.isoformat()) }}" aria-label="Semaine précédente">‹</a>
+      <a href="{{ url_for('planning.week') }}">Aujourd'hui</a>
+      <a href="{{ url_for('planning.week', semaine=next.isoformat()) }}" aria-label="Semaine suivante">›</a>
     </div>
     {% if subjects %}
-    <form method="post" action="{{ url_for('main.plan_generate') }}" data-busy="Calcul en cours…">
-      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <form method="post" action="{{ url_for('planning.generate') }}" data-busy="Calcul en cours…">
+      {{ csrf_field() }}
       <input type="hidden" name="next" value="{{ request.full_path }}">
       <button class="btn">Tout recalculer</button>
     </form>
-    <a class="btn btn-ghost" href="{{ url_for('main.plan_export') }}">Exporter vers mon agenda</a>
+    <a class="btn btn-ghost" href="{{ url_for('planning.export') }}">Exporter vers mon agenda</a>
     {% endif %}
   </div>
 </div>
@@ -36,15 +36,15 @@
 <nav class="legend" aria-label="Matières">
   <span class="muted">Clique sur une matière, une séance ou un cours pour ouvrir sa page :</span>
   {% for s in subjects %}
-  <a class="chip hl-{{ s.id % 6 }}" href="{{ url_for('main.subject_detail', subject_id=s.id) }}">{{ s.name }}</a>
+  <a class="chip hl-{{ s.id % 6 }}" href="{{ url_for('subjects.detail', subject_id=s.id) }}">{{ s.name }}</a>
   {% endfor %}
-  <a class="chip chip-add" href="{{ url_for('main.subject_new') }}">+ Ajouter une matière</a>
+  <a class="chip chip-add" href="{{ url_for('subjects.new') }}">+ Ajouter une matière</a>
 </nav>
 {% else %}
 <div class="empty-state">
   <h2>Ton planning est vide</h2>
   <p>Ajoute une première matière : son nom suffit. Le planning se construit tout seul autour de tes horaires.</p>
-  <a class="btn btn-lg" href="{{ url_for('main.subject_new') }}">Ajouter une matière</a>
+  <a class="btn btn-lg" href="{{ url_for('subjects.new') }}">Ajouter une matière</a>
 </div>
 {% endif %}
 
@@ -76,7 +76,7 @@
         {% if r.subject_id %}
         {% set default_exam = r.id in default_exam_events %}
         <a class="blk busy is-course hl-{{ r.subject_id % 6 }} {% if b.short %}is-short{% endif %} {% if r.kind == 'examen' or default_exam %}is-exam{% endif %}" style="top:{{ b.top }}%;height:{{ b.height }}%"
-           href="{{ url_for('main.subject_detail', subject_id=r.subject_id) }}"
+           href="{{ url_for('subjects.detail', subject_id=r.subject_id) }}"
            title="{% if default_exam %}Examen par défaut (dernière séance) de {{ r.subject_name }}{% elif r.kind == 'examen' %}Examen de {{ r.subject_name }}{% else %}Cours de {{ r.subject_name }}{% endif %} : {{ r.title }} ({{ r.start|hm }}–{{ r.end|hm }})">
           <span class="t">{{ r.start|hm }}–{{ r.end|hm }}</span>
           {% if default_exam %}<span class="exam-flag">Examen (dernière séance)</span>{% elif r.kind == 'examen' %}<span class="exam-flag">Examen</span>{% endif %}
@@ -90,14 +90,14 @@
       {% else %}
       <div class="blk sess hl-{{ r.subject_id % 6 }} {% if r.done %}is-done{% elif r.end < now %}is-missed{% endif %} {% if b.short %}is-short{% endif %} {% if r.manual %}is-manual{% endif %}"
            style="top:{{ b.top }}%;height:{{ b.height }}%">
-        <a href="{{ url_for('main.subject_detail', subject_id=r.subject_id) }}"
+        <a href="{{ url_for('subjects.detail', subject_id=r.subject_id) }}"
            title="{{ r.subject_name }} : {{ r.topic }} ({{ kinds[r.kind] }}, {{ r.start|hm }}–{{ r.end|hm }})">
           <span class="t">{{ r.start|hm }}–{{ r.end|hm }}</span>
           <strong>{{ r.subject_name }}</strong>
           {% if not b.short %}<span class="topic">{{ kinds[r.kind] }} : {{ r.topic }}</span>{% endif %}
         </a>
-        <form method="post" action="{{ url_for('main.session_toggle', session_id=r.id) }}">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <form method="post" action="{{ url_for('planning.toggle', session_id=r.id) }}">
+          {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.full_path }}">
           <button class="tick" aria-label="{{ 'Marquer comme à faire' if r.done else 'Marquer comme faite' }}">{% if r.done %}✓{% endif %}</button>
         </form>

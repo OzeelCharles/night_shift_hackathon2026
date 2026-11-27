@@ -33,7 +33,7 @@
         {% if u.id != g.user.id %}
         <form method="post" action="{{ url_for('admin.user_delete', user_id=u.id) }}" class="inline"
               onsubmit="return confirm('Supprimer cet utilisateur et toutes ses données ?')">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          {{ csrf_field() }}
           <button class="btn-link danger">supprimer</button>
         </form>
         {% endif %}

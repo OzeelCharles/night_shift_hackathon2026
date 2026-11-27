@@ -2,14 +2,14 @@
 {% block title %}Aujourd'hui{% endblock %}
 {% macro session_item(s, show_day=false, is_next=false) %}
 <li class="today-item hl-{{ s.subject_id % 6 }} {% if s.done %}is-done{% elif s.end < now %}is-missed{% endif %} {% if is_next %}is-next{% endif %}">
-  <form method="post" action="{{ url_for('main.session_toggle', session_id=s.id) }}">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <form method="post" action="{{ url_for('planning.toggle', session_id=s.id) }}">
+    {{ csrf_field() }}
     <input type="hidden" name="next" value="{{ request.path }}">
     <button class="tick" aria-label="{{ 'Marquer comme à faire' if s.done else 'Marquer comme faite' }}">{% if s.done %}✓{% endif %}</button>
   </form>
   <div>
     <div class="when">{% if show_day %}{{ s.start|jour }}, {% endif %}{{ s.start|hm }} à {{ s.end|hm }}{% if is_next %}<span class="next-badge">À suivre</span>{% endif %}</div>
-    <a class="plain-link" href="{{ url_for('main.subject_detail', subject_id=s.subject_id) }}"><strong>{{ s.subject_name }}</strong></a> : {{ s.topic }}
+    <a class="plain-link" href="{{ url_for('subjects.detail', subject_id=s.subject_id) }}"><strong>{{ s.subject_name }}</strong></a> : {{ s.topic }}
     <div class="small muted">{{ s.activity }}</div>
   </div>
 </li>
@@ -25,7 +25,7 @@
     <p class="muted">{{ today|jour|capitalize }}</p>
   </div>
   <div class="actions">
-    <a class="btn btn-ghost" href="{{ url_for('main.subject_new') }}">Ajouter une matière</a>
+    <a class="btn btn-ghost" href="{{ url_for('subjects.new') }}">Ajouter une matière</a>
   </div>
 </div>
 
@@ -33,8 +33,8 @@
 <div class="empty-state">
   <h2>On prépare ton premier planning ?</h2>
   <p>Ajoute une matière : son nom suffit. Tes supports de cours et ton agenda sont facultatifs, tu pourras les ajouter plus tard.</p>
-  <a class="btn btn-lg" href="{{ url_for('main.subject_new') }}">Ajouter ma première matière</a>
-  <p class="small muted" style="margin-top:1.2em">Tu peux aussi d'abord <a href="{{ url_for('main.preferences') }}">régler tes horaires et ta méthode</a> ou <a href="{{ url_for('main.calendar') }}">importer ton emploi du temps</a>.</p>
+  <a class="btn btn-lg" href="{{ url_for('subjects.new') }}">Ajouter ma première matière</a>
+  <p class="small muted" style="margin-top:1.2em">Tu peux aussi d'abord <a href="{{ url_for('main.preferences') }}">régler tes horaires et ta méthode</a> ou <a href="{{ url_for('agenda.index') }}">importer ton emploi du temps</a>.</p>
 </div>
 {% else %}
 <div class="grid2">
@@ -54,7 +54,7 @@
     <h3>Les prochains jours</h3>
     <ul class="today-list">{% for s in upcoming %}{{ session_item(s, true) }}{% endfor %}</ul>
     {% endif %}
-    <p><a href="{{ url_for('main.plan') }}">Voir toute la semaine</a></p>
+    <p><a href="{{ url_for('planning.week') }}">Voir toute la semaine</a></p>
   </section>
 
   <section class="card">
@@ -64,7 +64,7 @@
       {% set pct = ((s.done_min / s.planned) * 100)|round|int if s.planned else 0 %}
       <li class="hl-{{ s.id % 6 }}">
         <div class="subj-row">
-          <a class="subj-name" href="{{ url_for('main.subject_detail', subject_id=s.id) }}">{{ s.name }}</a>
+          <a class="subj-name" href="{{ url_for('subjects.detail', subject_id=s.id) }}">{{ s.name }}</a>
           <span>
           {% if s.exam_date %}
             {% set left = (date_fromiso(s.exam_date) - today).days %}
@@ -77,8 +77,8 @@
         <div class="progress"><span style="width: {{ pct }}%"></span></div>
         <div class="small muted">{{ s.done_min|int|duree }} faites sur {{ s.planned|int|duree }} prévues.
           {% if s.missed %}<span class="warn">{{ s.missed }} séance(s) manquée(s).</span>
-          <form method="post" action="{{ url_for('main.plan_generate') }}" class="inline" data-busy="Recalcul…">
-            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="btn-link">Les replacer</button></form>{% endif %}
+          <form method="post" action="{{ url_for('planning.generate') }}" class="inline" data-busy="Recalcul…">
+            {{ csrf_field() }}<button class="btn-link">Les replacer</button></form>{% endif %}
         </div>
       </li>
     {% endfor %}

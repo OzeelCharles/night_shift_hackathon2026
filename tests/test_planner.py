@@ -2,7 +2,7 @@ import itertools
 import unittest
 from datetime import date, datetime, time, timedelta
 
-from app import calendar_ics, extractor, planner
+from app.business import calendar_ics, extractor, planner
 
 NOW = datetime(2026, 11, 30, 8, 0)  # un lundi
 

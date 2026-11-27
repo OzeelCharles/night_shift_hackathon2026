@@ -5,7 +5,7 @@
   <h1>Créer un compte</h1>
   <p class="muted">Ton niveau et ton établissement servent à te proposer des ressources adaptées. Tu pourras les changer à tout moment.</p>
   <form method="post">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {{ csrf_field() }}
     <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" autocomplete="nickname" value="{{ request.form.username }}"></label>
     <label>E-mail <input type="email" name="email" required autocomplete="email" value="{{ request.form.email }}"></label>
     <label>Niveau d'études
@@ -17,7 +17,7 @@
       </select></label>
     <label>École ou université
       <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
-             data-schools-url="{{ url_for('main.api_schools') }}" placeholder="Tape quelques lettres : ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}">
+             data-schools-url="{{ url_for('api.schools') }}" placeholder="Tape quelques lettres : ENSAI, univ Rennes, lycée Chateaubriand…" value="{{ request.form.school }}">
       <span class="hint">Tous les collèges, lycées, universités et écoles de France. Ton établissement n'y est pas ? Écris son nom.</span></label>
     <datalist id="schools"></datalist>
     <label>Mot de passe (8 caractères min.) <input type="password" name="password" required minlength="8" autocomplete="new-password"></label>

@@ -5,7 +5,7 @@
 <h1>{{ "Nouvel utilisateur" if new else "Modifier " ~ u.email }}</h1>
 <form method="post" class="card form-grid"
       action="{{ url_for('admin.user_new') if new else url_for('admin.user_edit', user_id=user_id) }}">
-  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {{ csrf_field() }}
   <label>Nom d'utilisateur <input name="username" required value="{{ u.username or '' }}"></label>
   <label>E-mail <input type="email" name="email" required value="{{ u.email or '' }}"></label>
   <label>{{ "Mot de passe" if new else "Nouveau mot de passe (laisser vide pour ne pas changer)" }}
@@ -15,7 +15,7 @@
       {% for key, label in levels.items() %}<option value="{{ key }}" {% if (u.level or 'autre') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
     </select></label>
   <label>École ou université <input name="school" maxlength="120" list="schools" autocomplete="off"
-         data-schools-url="{{ url_for('main.api_schools') }}" value="{{ u.school or '' }}"></label>
+         data-schools-url="{{ url_for('api.schools') }}" value="{{ u.school or '' }}"></label>
   <datalist id="schools"></datalist>
   <label>Rôle
     <select name="role">
@@ -36,7 +36,7 @@
     {% for s in subjects %}
     <tr><td>{{ s.name }}</td><td>{{ s.goal }}</td><td>{{ s.exam_date|datefr }}</td>
       <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière ?')">
-        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        {{ csrf_field() }}
         <input type="hidden" name="next" value="{{ request.path }}">
         <button class="btn-link danger">supprimer</button></form></td></tr>
     {% endfor %}

@@ -4,8 +4,8 @@
 <h1>{{ "Nouvelle matière" if new else "Modifier " ~ (s.name or "la matière") }}</h1>
 {% if new %}<p class="muted">Seul le nom est obligatoire. Le reste affine ton programme.</p>{% endif %}
 <form method="post" enctype="multipart/form-data" class="card form-grid" data-busy="{{ 'Analyse et construction du planning…' if new else 'Mise à jour du planning…' }}"
-      action="{{ url_for('main.subject_new') if new else url_for('main.subject_edit', subject_id=subject_id) }}">
-  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      action="{{ url_for('subjects.new') if new else url_for('subjects.edit', subject_id=subject_id) }}">
+  {{ csrf_field() }}
   {% if new and force_new %}
   <input type="hidden" name="force_new" value="1">
   <p class="full notice">Cette matière sera créée séparément, même si son nom ressemble à une matière existante.</p>
@@ -18,8 +18,8 @@
              {% if new %}autofocus autocomplete="off" aria-controls="suggest-box"{% endif %}></label>
     {% if new %}
     <div class="suggest-box" id="suggest-box" aria-live="polite"
-         data-url="{{ url_for('main.api_subject_suggestions') }}" data-initial='{{ (agenda_suggestions or [])|tojson }}'
-         data-subject-url="{{ url_for('main.subject_detail', subject_id=0) }}"></div>
+         data-url="{{ url_for('api.subject_suggestions') }}" data-initial='{{ (agenda_suggestions or [])|tojson }}'
+         data-subject-url="{{ url_for('subjects.detail', subject_id=0) }}"></div>
     {% endif %}
   </div>
 
@@ -66,7 +66,7 @@
 
   <div class="full actions">
     <button class="btn btn-lg">{{ "Créer la matière et mon planning" if new else "Enregistrer et mettre à jour le planning" }}</button>
-    <a class="btn btn-ghost btn-lg" href="{{ url_for('main.dashboard') if new else url_for('main.subject_detail', subject_id=subject_id) }}">Annuler</a>
+    <a class="btn btn-ghost btn-lg" href="{{ url_for('main.dashboard') if new else url_for('subjects.detail', subject_id=subject_id) }}">Annuler</a>
   </div>
 </form>
 <script>

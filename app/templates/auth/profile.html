@@ -5,7 +5,7 @@
   <h1>Mon profil</h1>
   <p class="muted">Changer de niveau ou d'établissement adapte aussitôt les ressources proposées pour toutes tes matières.</p>
   <form method="post" data-busy="Enregistrement…">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {{ csrf_field() }}
     <label>Nom d'utilisateur <input name="username" required minlength="2" maxlength="40" value="{{ u.username }}"></label>
     <label>Niveau d'études
       <select name="level" required>
@@ -15,7 +15,7 @@
       </select></label>
     <label>École ou université
       <input name="school" required minlength="2" maxlength="120" list="schools" autocomplete="off"
-             data-schools-url="{{ url_for('main.api_schools') }}" value="{{ u.school }}">
+             data-schools-url="{{ url_for('api.schools') }}" value="{{ u.school }}">
       <span class="hint">Tape quelques lettres pour chercher parmi tous les établissements de France.</span></label>
     <datalist id="schools"></datalist>
     {% if g.user.email %}<p class="small muted">Compte : {{ g.user.email }}</p>{% endif %}

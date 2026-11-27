@@ -31,6 +31,40 @@ NON_COURSE_RE = re.compile(
     r"reunion d'information|seminaire d'integration|journee d'integration)\b")
 
 
+EVENT_KINDS = {"cours": "Cours en classe", "examen": "Examen ou partiel", "revision": "Révision que je prévois",
+               "autre": "Autre occupation"}
+
+
+def dedupe(rows, key=lambda r: (r["title"], r["start"])) -> list:
+    """Un seul exemplaire d'un cours répété (même intitulé, même heure), le plus long :
+    certains exports d'ENT répètent un cours pour chaque groupe de TD."""
+    best: dict = {}
+    for r in rows:
+        k = key(r)
+        if k not in best or r["end"] > best[k]["end"]:
+            best[k] = r
+    return sorted(best.values(), key=lambda r: r["start"])
+
+
+def fallback_key(title: str, start_iso: str) -> str:
+    """Clé d'un événement sans UID : intitulé normalisé + horaire (un déplacement = suppression + ajout)."""
+    return f"~{matching.normalize(title)}|{start_iso}"
+
+
+def link_kind(title: str, subject_id) -> str:
+    """Type d'un événement importé ; une épreuve reste une épreuve même sans matière."""
+    return "examen" if is_exam(title) else ("cours" if subject_id else "autre")
+
+
+def association_message(title: str, subject_name: str, status: str, score: float) -> str | None:
+    if status == "matched":
+        return f"« {title} » associé à ta matière « {subject_name} » (similarité {score:.0%})."
+    if status == "created":
+        return (f"Aucune matière ne ressemble à « {title} » : la matière « {subject_name} » a été créée. "
+                "Complète-la depuis sa page (objectif, supports).")
+    return None
+
+
 def _plain(s: str) -> str:
     return unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
 

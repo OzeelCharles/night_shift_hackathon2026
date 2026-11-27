@@ -5,8 +5,9 @@ import unittest
 from datetime import date, datetime, timedelta
 from unittest import mock
 
-from app import create_app, resources
-from app.db import get_db
+from app import create_app
+from app.dao.db import get_db
+from app.services import resource_service
 
 
 class AppTests(unittest.TestCase):
@@ -509,7 +510,6 @@ class AppTests(unittest.TestCase):
         self.assertEqual(len(self.q("SELECT * FROM events")), 1, "pas de doublon recréé à l'import suivant")
 
     def test_exam_resources_when_exam_is_near(self):
-        from app import routes
         self.register(level="master", school="ENSAI")
         near = (date.today() + timedelta(days=10)).isoformat()
         far = (date.today() + timedelta(days=60)).isoformat()
@@ -523,12 +523,12 @@ class AppTests(unittest.TestCase):
             calls[name] = exam_days
             return (fake if exam_days is not None else []), []
 
-        with mock.patch.object(resources, "find_resources", side_effect=fake_find):
+        with mock.patch.object(resource_service, "find_resources", side_effect=fake_find):
             with self.app.test_request_context(), self.app.app_context():
                 db = get_db()
                 user = db.execute("SELECT * FROM users WHERE email='eleve@test.fr'").fetchone()
                 for sid in (1, 2):
-                    routes.refresh_resources(db.execute("SELECT * FROM subjects WHERE id=?", (sid,)).fetchone(), user)
+                    resource_service.refresh(db.execute("SELECT * FROM subjects WHERE id=?", (sid,)).fetchone(), user)
         self.assertEqual(calls["Probabilités"], 10, "examen dans 10 jours : ressources d'examen demandées")
         self.assertIsNone(calls["Statistique"], "examen lointain : pas encore de ressources d'examen")
         page = self.client.get("/matieres/1").get_data(as_text=True)
@@ -553,13 +553,12 @@ class AppTests(unittest.TestCase):
             {"title": "Poly ENSAI", "url": "https://ensai.fr/poly.pdf", "source": "ensai.fr", "kind": "web",
              "thumbnail": "", "meta": "Lié à ENSAI", "snippet": "poly"},
         ]
-        from app import routes
         with self.app.test_request_context(), \
-                mock.patch.object(resources, "find_resources", return_value=(fake, [])) as fr:
+                mock.patch.object(resource_service, "find_resources", return_value=(fake, [])) as fr:
             with self.app.app_context():
                 db = get_db()
                 user = db.execute("SELECT * FROM users WHERE email='eleve@test.fr'").fetchone()
-                routes.refresh_resources(db.execute("SELECT * FROM subjects WHERE id=1").fetchone(), user)
+                resource_service.refresh(db.execute("SELECT * FROM subjects WHERE id=1").fetchone(), user)
             self.assertEqual(fr.call_args.kwargs["level"], "master")
             self.assertEqual(fr.call_args.kwargs["school"], "ENSAI")
         page = self.client.get("/matieres/1").get_data(as_text=True)
@@ -569,11 +568,11 @@ class AppTests(unittest.TestCase):
         self.client.post(f"/ressources/{vid}/garder")
         self.assertEqual(self.q("SELECT saved FROM resources WHERE id = ?", vid)[0]["saved"], 1)
         # une nouvelle recherche ne supprime pas ce que l'utilisateur a gardé
-        with self.app.test_request_context(), mock.patch.object(resources, "find_resources", return_value=([], [])):
+        with self.app.test_request_context(), mock.patch.object(resource_service, "find_resources", return_value=([], [])):
             with self.app.app_context():
                 db = get_db()
                 user = db.execute("SELECT * FROM users WHERE email='eleve@test.fr'").fetchone()
-                routes.refresh_resources(db.execute("SELECT * FROM subjects WHERE id=1").fetchone(), user)
+                resource_service.refresh(db.execute("SELECT * FROM subjects WHERE id=1").fetchone(), user)
         self.assertEqual([r["id"] for r in self.q("SELECT id FROM resources")], [vid])
         # lien personnel
         self.client.post("/matieres/1/ressources/ajouter", data={"title": "Mon lien", "url": "https://exemple.fr/td"})

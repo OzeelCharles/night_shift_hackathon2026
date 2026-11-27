@@ -84,9 +84,15 @@ def get_db() -> sqlite3.Connection:
     return g.db
 
 
-def close_db(_exc=None):
+def close_db(exc=None):
+    """Fin de requête (ou de contexte) : on valide tout ce qui a été écrit, ou on annule en cas
+    d'erreur. Chaque requête HTTP est ainsi une seule transaction."""
     db = g.pop("db", None)
     if db is not None:
+        if exc is None:
+            db.commit()
+        else:
+            db.rollback()
         db.close()
 
 
@@ -95,6 +101,42 @@ def init_app(app):
     with app.app_context():
         get_db().executescript(SCHEMA)
         migrate(get_db())
+
+
+# ---------------------------------------------------------------- raccourcis pour les DAO
+def query(sql: str, *args) -> list[sqlite3.Row]:
+    return get_db().execute(sql, args).fetchall()
+
+
+def one(sql: str, *args) -> sqlite3.Row | None:
+    return get_db().execute(sql, args).fetchone()
+
+
+def scalar(sql: str, *args):
+    row = one(sql, *args)
+    return row[0] if row else None
+
+
+def execute(sql: str, *args) -> int:
+    """Exécute une écriture ; renvoie l'identifiant de la ligne insérée (le cas échéant)."""
+    return get_db().execute(sql, args).lastrowid
+
+
+def execute_many(sql: str, rows) -> None:
+    get_db().executemany(sql, list(rows))
+
+
+def commit() -> None:
+    """Validation anticipée (avant de lancer un traitement en arrière-plan qui lit la base)."""
+    get_db().commit()
+
+
+def placeholders(values) -> str:
+    return ",".join("?" * len(values))
+
+
+# Durée d'une séance ou d'un événement, en minutes, calculée par SQLite
+MINUTES = "((julianday(end) - julianday(start)) * 1440)"
 
 
 # Colonnes ajoutées après la première version : on les crée sur les bases existantes
@@ -121,8 +163,10 @@ def migrate(db: sqlite3.Connection):
             if name not in existing:
                 db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
     db.execute("CREATE INDEX IF NOT EXISTS idx_events_subject ON events(subject_id)")
-    # Dates d'examen enregistrées avant l'existence de exam_source : on les considère comme
-    # choisies par l'utilisateur, pour ne jamais les écraser automatiquement.
-    db.execute("UPDATE subjects SET exam_manual = exam_date, exam_source = 'manuel' "
-               "WHERE exam_source = '' AND exam_date IS NOT NULL")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 1:
+        # Dates d'examen enregistrées avant l'existence de exam_source : on les considère comme
+        # choisies par l'utilisateur, pour ne jamais les écraser automatiquement. (Une seule fois.)
+        db.execute("UPDATE subjects SET exam_manual = exam_date, exam_source = 'manuel' "
+                   "WHERE exam_source = '' AND exam_date IS NOT NULL")
+        db.execute("PRAGMA user_version = 1")
     db.commit()

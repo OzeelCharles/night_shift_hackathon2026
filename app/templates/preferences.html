@@ -4,7 +4,7 @@
 <h1>Mes réglages</h1>
 <p class="muted">Ton planning est recalculé dès que tu enregistres : les séances déjà faites sont conservées.</p>
 <form method="post" class="card form-grid" data-busy="Mise à jour du planning…">
-  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  {{ csrf_field() }}
   <fieldset class="full">
     <legend>Méthode de travail</legend>
     <div class="choices">
