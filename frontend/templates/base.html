@@ -21,8 +21,8 @@
   <nav aria-label="Espaces de Rivezli">{{ nav_links('site', space) }}</nav>
   {{ account() }}
 </header>
-{# Seconde barre : les onglets de l'espace courant #}
-{% if space and g.user %}
+{# Seconde barre : les onglets de l'espace courant (seulement s'il en a) #}
+{% if space and g.user and nav_items | selectattr('section', 'equalto', space) | first %}
 <nav class="subbar" aria-label="Onglets de l'espace {{ space }}"><div class="subbar-inner">{{ nav_links(space) }}</div></nav>
 {% endif %}
 <main class="container">

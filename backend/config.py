@@ -14,6 +14,7 @@ FEATURES = [
     "backend.controllers.api",
     "backend.controllers.admin",
     "backend.controllers.dossier",
+    "backend.plugins.revision",  # atelier de révision : fiches, QCM notés, carnet de notes, exercices
 ]
 
 

@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% set space = "revision" %}
+{% block title %}Réviser {{ s.name }}{% endblock %}
+{% macro level_fields(current) %}
+  {# Champs des niveaux par chapitre, recopiés pour ne pas les perdre lors d'un simple changement de niveau #}
+  {% for t in topics %}{% if levels.get(t) %}<input type="hidden" name="chap_{{ loop.index0 }}" value="{{ levels[t] }}">{% endif %}{% endfor %}
+{% endmacro %}
+{% block content %}
+{% include "revision/_style.html" %}
+{% set reg = register %}
+<div class="subject-hero hl-{{ s.id % 6 }}">
+  <div>
+    <h1>Réviser {{ s.name }}</h1>
+    <p class="subject-facts">
+      {% if asked %}<span class="tag">Difficulté : {{ difficulties[difficulty] }}</span>{% endif %}
+      <span class="tag tag-quiet">{{ n_docs }} support(s) de cours</span>
+      {% if reg.n %}<span class="tag tag-quiet">{{ reg.n }} QCM rendu(s)</span>{% endif %}
+    </p>
+  </div>
+  <div class="actions">
+    <a class="btn btn-ghost" href="{{ url_for('subjects.detail', subject_id=s.id) }}">Page de la matière</a>
+  </div>
+</div>
+
+{# 1. Le niveau de difficulté est demandé avant tout le reste #}
+<section class="card" id="niveau">
+  {% if not asked %}
+  <h2>Quel niveau de difficulté pour {{ s.name }} ?</h2>
+  <p>Fiches, QCM et exercices s'adaptent à ce choix. Tu pourras le changer à tout moment, et régler certains chapitres à part.
+     D'après ton aisance dans cette matière (« {{ comfort[s.comfort] }} »), on te propose <strong>{{ difficulties[suggested] }}</strong>.</p>
+  {% else %}
+  <details>
+  <summary><strong>Niveau de difficulté : {{ difficulties[difficulty] }}</strong>{% if levels|length > 1 %} ({{ levels|length - 1 }} chapitre(s) réglé(s) à part){% endif %}, modifier</summary>
+  {% endif %}
+  <form method="post" action="{{ url_for('revision.set_level', subject_id=s.id) }}">
+    {{ csrf_field() }}
+    <fieldset>
+      <legend>Pour toute la matière</legend>
+      <div class="choices">
+        {% for key, label in difficulties.items() %}
+        <label class="choice"><input type="radio" name="difficulte" value="{{ key }}" required {% if (levels.get('') or suggested) == key %}checked{% endif %}>
+          <span><strong>{{ label }}</strong>{% if not asked and key == suggested %} <span class="tag">proposé</span>{% endif %}<br><span class="hint">{{ help[key] }}</span></span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    {% if topics %}
+    <details {% if levels|length > 1 %}open{% endif %}>
+      <summary>Régler certains chapitres à part ({{ topics|length }} chapitres)</summary>
+      <table class="rv-levels-table">
+        {% for t in topics %}
+        <tr><td>{{ t }}</td><td>
+          <select name="chap_{{ loop.index0 }}" aria-label="Difficulté pour {{ t }}">
+            <option value="">Comme la matière</option>
+            {% for k, l in difficulties.items() %}<option value="{{ k }}" {% if levels.get(t) == k %}selected{% endif %}>{{ l }}</option>{% endfor %}
+          </select></td></tr>
+        {% endfor %}
+      </table>
+    </details>
+    {% endif %}
+    <p><button class="btn">{{ "Commencer à réviser" if not asked else "Enregistrer les niveaux" }}</button></p>
+  </form>
+  {% if asked %}</details>{% endif %}
+</section>
+
+{% if asked %}
+{% if reg.advice and reg.advice_target %}
+<div class="notice notice-action">
+  <p>{% if reg.advice == 'up' %}Tes 3 dernières notes en « {{ difficulties[difficulty] }} » dépassent 16/20 : prêt pour le niveau <strong>{{ difficulties[reg.advice_target] }}</strong> ?
+     {% else %}Tes 3 dernières notes en « {{ difficulties[difficulty] }} » sont sous 8/20 : le niveau <strong>{{ difficulties[reg.advice_target] }}</strong> t'aidera à consolider les bases.{% endif %}</p>
+  <form method="post" action="{{ url_for('revision.set_level', subject_id=s.id) }}">
+    {{ csrf_field() }}<input type="hidden" name="difficulte" value="{{ reg.advice_target }}">{{ level_fields(difficulty) }}
+    <button class="btn btn-sm">Passer en {{ difficulties[reg.advice_target] }}</button>
+  </form>
+</div>
+{% endif %}
+
+{% if not ai_enabled %}
+<div class="notice"><p>Claude n'est pas activé sur ce serveur (clé ANTHROPIC_API_KEY absente) : les QCM sont fabriqués à partir du texte extrait du cours, et les formules des PDF peuvent y être mal lues.</p></div>
+{% endif %}
+{% if origin == 'none' and not ai_enabled %}
+<div class="notice notice-warn"><p>Aucun texte n'a pu être extrait de tes supports (PDF scannés ?) : <a href="{{ url_for('subjects.detail', subject_id=s.id) }}#supports">dépose des supports</a> contenant du texte pour obtenir fiches et QCM.</p></div>
+{% endif %}
+
+<nav class="anchors" aria-label="Sections de la page">
+  <a href="#fiches">Fiches</a><a href="#qcm">QCM</a><a href="#notes">Carnet de notes ({{ reg.n }})</a><a href="#exercices">Exercices ({{ exercises|length }})</a>{% if data_science %}<a href="#notebooks">Notebooks ({{ notebooks|length }})</a>{% endif %}
+</nav>
+
+<div class="grid2">
+  <section class="card" id="fiches">
+    <h2>Fiches de révision</h2>
+    {% if chapters %}
+    <p class="small muted">Définitions, théorèmes, formules et l'essentiel de chaque chapitre, tirés de ton cours.
+      {% if difficulty == 'difficile' %}En difficile, les définitions sont cachées : essaie de les retrouver avant de les retourner.{% endif %}</p>
+    <p><a class="btn" href="{{ url_for('revision.sheets', subject_id=s.id) }}">Toutes les fiches (imprimables)</a></p>
+    <ul class="topics-compact">
+      {% for ch in chapters %}<li><a href="{{ url_for('revision.sheets', subject_id=s.id, chapitre=ch) }}">{{ ch }}</a>{% if levels.get(ch) %} <span class="tag tag-quiet">{{ difficulties[levels[ch]] }}</span>{% endif %}</li>{% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Les fiches apparaîtront dès que le cours contiendra du texte.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" id="qcm">
+    <h2>QCM noté</h2>
+    <form method="post" action="{{ url_for('revision.new_quiz', subject_id=s.id) }}" data-busy="{{ 'Claude lit ton cours et rédige le QCM…' if ai_enabled else 'Préparation du QCM…' }}">
+      {{ csrf_field() }}
+      <label>Sur quoi ?
+        <select name="chapitre" id="qcm-chapitre">
+          <option value="">Toute la matière</option>
+          {% for ch in chapters %}<option value="{{ ch }}" data-level="{{ levels.get(ch, '') }}">{{ ch }}</option>{% endfor %}
+        </select>
+      </label>
+      <fieldset>
+        <legend>Difficulté</legend>
+        <div class="segmented segmented-full">
+          {% for k, l in difficulties.items() %}<label><input type="radio" name="difficulte" value="{{ k }}" {% if k == difficulty %}checked{% endif %}> {{ l }}</label>{% endfor %}
+        </div>
+      </fieldset>
+      <ul class="small muted">
+        {% for k, c in settings.items() %}<li><strong>{{ difficulties[k] }}</strong> : {{ c.questions }} questions, {{ c.options }} choix{% if c.penalty %}, −{{ "%g"|format(c.penalty)|replace(".", ",") }} par erreur{% endif %}</li>{% endfor %}
+      </ul>
+      {% if ai_enabled %}<p class="small muted">Questions rédigées par Claude après lecture de tes supports (formules en LaTeX). Compte jusqu'à une minute.</p>{% endif %}
+      <button class="btn btn-block" {% if not chapters and not ai_enabled %}disabled{% endif %}>Lancer le QCM</button>
+    </form>
+  </section>
+</div>
+
+<section class="card" id="notes">
+  <h2>Carnet de notes</h2>
+  {% if reg.n %}
+  <div class="stats">
+    <p class="stat"><span>{{ reg.last|nombre }}/20</span>Dernière note</p>
+    <p class="stat"><span>{{ reg.avg|nombre }}/20</span>Moyenne sur {{ reg.n }} essai(s)</p>
+    <p class="stat"><span>{{ reg.best|nombre }}/20</span>Meilleure note</p>
+    <p class="stat"><span>{% if reg.delta is not none %}{{ "+" if reg.delta > 0 else "" }}{{ reg.delta|nombre }}{% else %}–{% endif %}</span>Progression depuis le 1er essai</p>
+  </div>
+  {% set c = reg.chart %}
+  <h3>Évolution de la note sur 20</h3>
+  <svg class="rv-chart" viewBox="0 0 {{ c.w }} {{ c.h }}" role="img" aria-label="Évolution des notes sur 20 au fil de {{ reg.n }} essais, détail dans le tableau ci-dessous">
+    <g class="grid">
+      {% for gl in c.grid %}<line x1="{{ c.left }}" x2="{{ c.w - 4 }}" y1="{{ gl.y }}" y2="{{ gl.y }}" {% if gl.v == 10 %}class="mid"{% endif %}/><text x="{{ c.left - 8 }}" y="{{ gl.y + 4 }}" text-anchor="end">{{ gl.v }}</text>{% endfor %}
+    </g>
+    {% if c.points|length > 1 %}<polyline class="line" points="{{ c.line }}"/>{% endif %}
+    {% set every = ((c.points|length) // 12) + 1 %}
+    {% for p in c.points %}
+    <g class="pt" tabindex="0">
+      <circle class="hit" cx="{{ p.x }}" cy="{{ p.y }}" r="14"/>
+      <circle class="dot" cx="{{ p.x }}" cy="{{ p.y }}" r="5"/>
+      <title>Essai {{ p.n }} : {{ p.row.score|nombre }}/20, {{ difficulties[p.row.difficulty] }}, {{ p.row.chapter or "toute la matière" }}, le {{ p.row.submitted_at[:10]|datefr }}</title>
+      {% if loop.last %}<text class="val" x="{{ p.x }}" y="{{ p.y - 12 }}" text-anchor="middle">{{ p.row.score|nombre }}</text>{% endif %}
+      {% if loop.index0 % every == 0 or loop.last %}<text x="{{ p.x }}" y="{{ c.h - 6 }}" text-anchor="middle">{{ p.n }}</text>{% endif %}
+    </g>
+    {% endfor %}
+  </svg>
+  <p class="small muted">En abscisse, le numéro de l'essai. La ligne pointillée marque 10/20. Survole un point pour le détail.</p>
+
+  {% if reg.chapters %}
+  <h3>Réussite par chapitre</h3>
+  <ul class="rv-bars">
+    {% for ch in reg.chapters %}
+    <li><span>{{ ch.chapter }}{% if ch.pct < 50 %} <span class="tag tag-hot">À retravailler</span>{% endif %}</span>
+      <span class="rv-bar {% if ch.pct < 50 %}is-weak{% endif %}"><span style="width: {{ ch.pct }}%"></span></span>
+      <span class="small">{{ ch.pct }} % sur {{ ch.n }} question(s)</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <details>
+    <summary>Tous les essais ({{ reg.n }})</summary>
+    <table>
+      <thead><tr><th>#</th><th>Date</th><th>Sur</th><th>Difficulté</th><th>Bonnes réponses</th><th>Note</th><th>Durée</th><th></th></tr></thead>
+      <tbody>
+      {% for r in reg.rows|reverse %}
+      <tr>
+        <td>{{ reg.n - loop.index0 }}</td><td>{{ r.submitted_at[:10]|datefr }}, {{ r.submitted_at[11:16] }}</td>
+        <td>{{ r.chapter or "Toute la matière" }}</td><td>{{ difficulties[r.difficulty] }}</td>
+        <td>{{ r.correct }}/{{ r.total }}</td><td><strong>{{ r.score|nombre }}/20</strong></td>
+        <td>{% if r.seconds %}{{ (r.seconds // 60) }} min {{ "%02d"|format(r.seconds % 60) }}{% endif %}</td>
+        <td><a href="{{ url_for('revision.quiz', quiz_id=r.id) }}">Correction</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% else %}
+  <p class="muted">Aucun QCM rendu pour l'instant. Lance un QCM : chaque note s'ajoute ici et la courbe montre ta progression.</p>
+  {% endif %}
+</section>
+
+<section class="card" id="exercices">
+  <div class="page-head">
+    <div>
+      <h2>Exercices</h2>
+      <p class="small muted">Repérés dans tes supports (« Exercice 1… ») et dans des PDF d'exercices corrigés trouvés en ligne{% if ai_enabled %} ; si la recherche ne donne rien, Claude en rédige d'après ton cours{% endif %}.</p>
+    </div>
+    <div class="segmented" role="group" aria-label="Filtrer par difficulté">
+      <a href="?exos=toutes#exercices" {% if only not in difficulties %}aria-current="true" style="background: var(--ink); color: #fff"{% endif %}>Toutes</a>
+      {% for k, l in difficulties.items() %}<a href="?exos={{ k }}#exercices" {% if only == k %}aria-current="true" style="background: var(--ink); color: #fff"{% endif %}>{{ l }}</a>{% endfor %}
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('revision.collect', subject_id=s.id) }}" class="add-link" data-busy="Recherche d'exercices (jusqu'à une minute)…">
+    {{ csrf_field() }}
+    <select name="chapitre" aria-label="Chapitre">
+      <option value="">Toute la matière</option>
+      {% for t in topics %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+    <select name="difficulte" aria-label="Difficulté">
+      {% for k, l in difficulties.items() %}<option value="{{ k }}" {% if k == difficulty %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-ghost">{{ "Chercher des exercices" if web_enabled else "Extraire les exercices de mes supports" }}</button>
+  </form>
+  {% if exercises_by_chapter %}
+  {% for chapter, items in exercises_by_chapter %}
+  <h3>{{ chapter }} <span class="muted small">({{ items|length }})</span></h3>
+  {% for e in items %}
+  <article class="rv-ex">
+    <div class="split">
+      <div>
+        <strong>{{ e.title }}</strong>
+        <span class="tag {% if e.difficulty == 'difficile' %}tag-hot{% endif %}">{{ difficulties[e.difficulty] }}</span>
+        {% if e.url %}<a class="tag tag-quiet" href="{{ e.url }}" target="_blank" rel="noopener noreferrer">{{ e.source }}</a>{% else %}<span class="tag tag-quiet">{{ e.source }}</span>{% endif %}
+      </div>
+      <form method="post" action="{{ url_for('revision.delete_exercise', exercise_id=e.id) }}" class="inline">
+        {{ csrf_field() }}<button class="btn-link danger small">Retirer</button>
+      </form>
+    </div>
+    <div class="rv-text">{{ e.statement }}</div>
+    {% if e.solution %}<details><summary>Voir le corrigé</summary><div class="rv-text">{{ e.solution }}</div></details>{% endif %}
+  </article>
+  {% endfor %}
+  {% endfor %}
+  {% elif exercises %}
+  <p class="muted">Aucun exercice de ce niveau. <a href="?exos=toutes#exercices">Voir tous les exercices</a>.</p>
+  {% else %}
+  <p class="muted">Pas encore d'exercices. Clique sur le bouton ci-dessus pour les chercher.</p>
+  {% endif %}
+</section>
+
+{% if data_science %}
+<section class="card" id="notebooks">
+  <h2>Notebooks d'exercices</h2>
+  <p class="small muted">Notebooks Jupyter d'exercices trouvés en ligne (GitHub, Kaggle, Colab){% if ai_enabled %} ; si la recherche ne donne rien, Claude en rédige un d'après ton cours (énoncés, code à compléter, corrigés à la fin){% endif %}. À ouvrir dans Jupyter, VS Code ou Google Colab.</p>
+  {% if web_enabled or ai_enabled %}
+  <form method="post" action="{{ url_for('revision.new_notebook', subject_id=s.id) }}" class="add-link" data-busy="Recherche de notebooks (jusqu'à deux minutes)…">
+    {{ csrf_field() }}
+    <select name="chapitre" aria-label="Chapitre">
+      <option value="">Toute la matière</option>
+      {% for t in topics %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+    <select name="difficulte" aria-label="Difficulté">
+      {% for k, l in difficulties.items() %}<option value="{{ k }}" {% if k == difficulty %}selected{% endif %}>{{ l }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-ghost">Chercher des notebooks</button>
+  </form>
+  {% else %}
+  <p class="muted">La recherche sur internet et Claude sont désactivés sur ce serveur.</p>
+  {% endif %}
+  {% for nb in notebooks %}
+  <div class="rv-nb">
+    <div><strong>{{ nb.title }}</strong> <span class="tag tag-quiet">{{ nb.source or "En ligne" }}</span>
+      <span class="small muted">{{ nb.chapter or "Toute la matière" }}, le {{ nb.created_at[:10]|datefr }}</span></div>
+    <div class="actions">
+      {% if nb.url %}<a class="btn btn-sm btn-ghost" href="{{ nb.url }}" target="_blank" rel="noopener noreferrer">Ouvrir</a>
+      {% if nb.colab %}<a class="btn btn-sm" href="{{ nb.colab }}" target="_blank" rel="noopener noreferrer">Ouvrir dans Colab</a>{% endif %}
+      {% else %}<a class="btn btn-sm" href="{{ url_for('revision.download_notebook', notebook_id=nb.id) }}" download>Télécharger (.ipynb)</a>{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+{% endif %}
+<script>
+  // Le niveau proposé pour le QCM suit le chapitre choisi (niveau propre au chapitre, sinon celui de la matière)
+  const chap = document.getElementById('qcm-chapitre');
+  if (chap) chap.addEventListener('change', () => {
+    const level = chap.selectedOptions[0].dataset.level || '{{ difficulty }}';
+    const radio = chap.form.querySelector(`input[name=difficulte][value="${level}"]`);
+    if (radio) radio.checked = true;
+  });
+</script>
+{% endblock %}

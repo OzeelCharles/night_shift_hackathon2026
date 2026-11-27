@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% set space = "revision" %}
+{% block title %}Fiches {{ s.name }}{% endblock %}
+{% block content %}
+{% include "revision/_style.html" %}
+<div class="page-head">
+  <div>
+    <h1>Fiches de révision : {{ s.name }}</h1>
+    <p class="small muted">{% if chapter %}Chapitre « {{ chapter }} ». {% endif %}Générées à partir de tes supports de cours. Vérifie-les avec ton cours : elles sont extraites automatiquement.</p>
+  </div>
+  <div class="actions rv-noprint">
+    <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('.rv-card-flip').forEach(d => d.open = true); window.print()">Imprimer</button>
+    <a class="btn btn-ghost" href="{{ url_for('revision.hub', subject_id=s.id) }}#fiches">Retour</a>
+  </div>
+</div>
+
+{% for sh in sheets %}
+<section class="card rv-sheet">
+  <h2>{{ sh.chapter }} <span class="tag tag-quiet">{{ difficulties[sh.difficulty] }}</span></h2>
+  {% if sh.keywords %}<p>{% for k in sh.keywords %}<span class="tag">{{ k }}</span>{% endfor %}</p>{% endif %}
+
+  {% if sh.definitions %}
+  <h3>Définitions</h3>
+  {% if sh.recall %}
+  <p class="small muted rv-noprint">Mode rappel actif : énonce la définition de tête, puis retourne la carte.</p>
+  {% for d in sh.definitions %}<details class="rv-card-flip"><summary>{{ d.term }}</summary><p>{{ d.text }}</p></details>{% endfor %}
+  {% else %}
+  <dl>{% for d in sh.definitions %}<dt>{{ d.term }}</dt><dd>{{ d.text }}</dd>{% endfor %}</dl>
+  {% endif %}
+  {% endif %}
+
+  {% if sh.properties %}
+  <h3>Théorèmes, propriétés et méthodes</h3>
+  <ul>{% for p in sh.properties %}<li><strong>{{ p.kind }}{% if p.term %} ({{ p.term }}){% endif %} :</strong> {{ p.text }}</li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if sh.formulas %}
+  <h3>Formules</h3>
+  <p>{% for f in sh.formulas %}<code>{{ f }}</code>{% endfor %}</p>
+  {% endif %}
+
+  {% if sh.essentials %}
+  <h3>L'essentiel</h3>
+  <ul>{% for e in sh.essentials %}<li>{{ e }}</li>{% endfor %}</ul>
+  {% endif %}
+  <div class="rv-noprint"><form method="post" action="{{ url_for('revision.new_quiz', subject_id=s.id) }}" class="inline">
+    {{ csrf_field() }}<input type="hidden" name="chapitre" value="{{ sh.chapter }}"><input type="hidden" name="difficulte" value="{{ sh.difficulty }}">
+    <button class="btn btn-sm">S'entraîner sur ce chapitre</button>
+  </form></div>
+</section>
+{% else %}
+<div class="empty-state">
+  <p>Pas assez de texte pour fabriquer des fiches{% if chapter %} sur ce chapitre{% endif %}. Dépose des supports qui contiennent du texte (les PDF scannés ne sont pas lisibles).</p>
+  <a class="btn" href="{{ url_for('subjects.detail', subject_id=s.id) }}#supports">Ajouter des supports</a>
+</div>
+{% endfor %}
+{% endblock %}
