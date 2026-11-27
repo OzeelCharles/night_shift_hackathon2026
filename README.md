@@ -69,7 +69,7 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 
 ## Atelier de révision (fonctionnalité enfichable)
 
-Menu **Réviser** (et un panneau en bas de la page de chaque matière). À partir des supports d'une matière :
+Onglet **Réviser** de la barre du haut, à côté d'**Encadrement** (et un panneau en bas de la page de chaque matière). À partir des supports d'une matière :
 
 - **Niveau de difficulté demandé** pour chaque matière avant toute révision (Facile, Moyen, Difficile ; proposition
   d'après l'aisance déclarée), réglable aussi **chapitre par chapitre**.

@@ -122,7 +122,12 @@ class RevisionPagesTests(unittest.TestCase):
         return r.get_data(as_text=True)
 
     def test_full_journey(self):
-        self.assertIn(">Réviser</a>", self.page("/tableau-de-bord"), "entrée de menu")
+        topbar = lambda html: html.split('<header class="topbar">')[1].split("</header>")[0]
+        self.assertIn(">Réviser</a>", topbar(self.page("/tableau-de-bord")), "onglet de la barre du haut")
+        self.assertIn(">Réviser</a>", topbar(self.page("/")), "visible depuis la page de garde")
+        revise = self.page("/reviser")
+        self.assertRegex(topbar(revise), r'aria-current="page">Réviser</a>', "onglet surligné dans l'atelier")
+        self.assertNotIn('class="subbar"', revise, "pas de seconde barre vide")
         self.assertIn("Choisir mon niveau", self.page("/matieres/1"), "panneau sur la page de la matière")
         self.assertIn("Choisir mon niveau", self.page("/reviser"))
 
@@ -165,7 +170,7 @@ class RevisionPagesTests(unittest.TestCase):
 
         # Exercices tirés des supports (internet désactivé dans les tests)
         self.client.post("/reviser/1/exercices", data={"chapitre": "", "difficulte": "moyen"})
-        hub = self.page("/reviser/1?exos=toutes")
+        hub = self.page("/reviser/1")  # tous les exercices sont affichés par défaut
         self.assertIn("Exercices (2)", hub)
         self.assertIn("deux dés", hub)
         self.assertIn("Voir le corrigé", hub)

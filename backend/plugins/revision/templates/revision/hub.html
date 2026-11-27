@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set space = "revision" %}
 {% block title %}Réviser {{ s.name }}{% endblock %}
 {% macro level_fields(current) %}
   {# Champs des niveaux par chapitre, recopiés pour ne pas les perdre lors d'un simple changement de niveau #}

@@ -24,7 +24,7 @@ def index():
 @login_required
 def hub(subject_id):
     context = service.hub(g.user, subject_id)
-    only = request.args.get("exos", context["difficulty"])
+    only = request.args.get("exos", "toutes")  # tous les exercices par défaut
     return render_template("revision/hub.html", **context, only=only,
                            exercises_by_chapter=service.exercises_grouped(subject_id, only),
                            difficulties=gen.DIFFICULTIES, help=gen.DIFFICULTY_HELP, settings=gen.SETTINGS)

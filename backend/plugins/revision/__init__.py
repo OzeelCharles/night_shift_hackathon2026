@@ -25,7 +25,8 @@ def setup(app: Flask) -> None:
 feature = Feature(
     "revision",
     blueprints=[bp],
-    nav=[NavItem("revision.index", "Réviser", order=25)],
+    # onglet de la barre du haut, à côté d'« Encadrement » : l'atelier est un espace à part entière
+    nav=[NavItem("revision.index", "Réviser", order=2, section="site", opens="revision")],
     subject_panels=["revision/panel.html"],
     setup=setup,
 )
