@@ -1,18 +1,31 @@
 {# Styles propres à l'atelier : ils réutilisent les variables du thème (clair et sombre) de style.css #}
 <style>
   .rv-tabs { margin-bottom: 20px; }
-  .rv-quote { margin: 8px 0 14px; padding: 10px 16px; border-left: 3px solid var(--margin); background: var(--ink-soft); border-radius: 0 8px 8px 0; max-width: 80ch; }
+  .rv-quote { margin: 8px 0 14px; padding: 12px 18px; border-left: 3px solid var(--margin); background: var(--surface-2); border-radius: 0 var(--r) var(--r) 0; max-width: 80ch; }
   .rv-q { border-top: 1px solid var(--line); padding: 20px 0 8px; }
   .rv-q:first-of-type { border-top: 0; }
   .rv-q h3 { margin: 0 0 4px; }
-  .rv-opts { display: grid; gap: 8px; max-width: 720px; }
-  .rv-opt { flex-direction: row; align-items: center; gap: 12px; margin: 0; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 8px; font-weight: 400; cursor: pointer; }
-  .rv-opt:has(input:checked) { border-color: var(--ink); background: var(--ink-soft); }
-  .rv-opt.is-right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, transparent); }
-  .rv-opt.is-wrong { border-color: var(--margin); background: color-mix(in srgb, var(--margin) 10%, transparent); }
-  .rv-opt .rv-mark { margin-left: auto; font-weight: 700; font-size: .85rem; }
+  .rv-opts { display: grid; gap: 10px; max-width: 720px; counter-reset: opt; }
+  .rv-opt { position: relative; flex-direction: row; align-items: center; gap: 12px; margin: 0; padding: 12px 16px; min-height: 52px; border: 1.5px solid var(--line); border-radius: 12px; font-weight: 400; cursor: pointer; background: var(--surface);
+           transition: border-color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
+  .rv-opt::before { counter-increment: opt; content: counter(opt, upper-alpha); display: grid; place-items: center; width: 28px; height: 28px; flex-shrink: 0; border-radius: 8px;
+                    background: var(--surface-2); color: var(--muted); font-weight: 700; font-size: .85rem; transition: background-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out); }
+  .rv-opt input { position: absolute; opacity: 0; pointer-events: none; }
+  .rv-opt:hover { border-color: color-mix(in srgb, var(--ink) 50%, var(--line)); box-shadow: var(--shadow-1); }
+  .rv-opt:active { transform: scale(.99); }
+  .rv-opt:has(input:focus-visible) { outline: 3px solid var(--ink); outline-offset: 2px; }
+  .rv-opt:has(input:checked)::before { background: var(--ink); color: var(--on-ink); }
+  .rv-opt:has(input:checked) { border-color: var(--ink); background: var(--ink-soft); box-shadow: 0 0 0 1px var(--ink); }
+  .rv-opt.is-right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--surface)); }
+  .rv-opt.is-right::before { background: var(--ok); color: var(--surface); }
+  .rv-opt.is-wrong { border-color: var(--margin); background: color-mix(in srgb, var(--margin) 10%, var(--surface)); animation: shake .32s var(--ease-out); }
+  .rv-opt.is-wrong::before { background: var(--margin); color: var(--surface); }
+  @keyframes shake { 25% { transform: translateX(-4px); } 75% { transform: translateX(4px); } }
+  .rv-opt .rv-mark { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: .85rem; white-space: nowrap; }
+  .rv-mark.is-right { color: var(--ok); }
+  .rv-mark.is-wrong { color: var(--margin); }
   .rv-explain { font-size: .92rem; color: var(--muted); margin-top: 8px; }
-  .rv-big { font-size: 3rem; font-weight: 700; color: var(--ink); line-height: 1; }
+  .rv-big { font-family: var(--font-display); font-size: 3.4rem; font-weight: 700; color: var(--ink); line-height: 1; font-variant-numeric: tabular-nums; }
   .rv-chart { display: block; width: 100%; height: auto; max-width: 760px; }
   .rv-chart .grid line { stroke: var(--line); stroke-width: 1; }
   .rv-chart .grid line.mid { stroke: var(--seyes-strong); stroke-dasharray: 4 4; }
@@ -27,13 +40,15 @@
   .rv-bars { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; }
   .rv-bars li { display: grid; grid-template-columns: minmax(120px, 1fr) 2fr auto; gap: 12px; align-items: center; font-size: .92rem; }
   .rv-bar { height: 10px; border-radius: 4px; background: var(--line); overflow: hidden; }
-  .rv-bar span { display: block; height: 100%; background: var(--ink); border-radius: 4px; }
+  .rv-bar span { display: block; height: 100%; background: var(--ink); border-radius: 4px; transform-origin: left; animation: grow .9s var(--ease-out) both; }
   .rv-bar.is-weak span { background: var(--margin); }
   .rv-sheet dt { font-weight: 700; margin-top: 10px; }
   .rv-sheet dd { margin: 2px 0 0; }
   .rv-sheet code { display: inline-block; padding: 4px 10px; margin: 0 6px 6px 0; border-radius: 6px; background: var(--ink-soft); font-size: .95rem; }
-  .rv-card-flip { border: 1.5px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; }
-  .rv-card-flip summary { cursor: pointer; font-weight: 700; }
+  .rv-card-flip { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 16px; margin-bottom: 10px; background: var(--surface); transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
+  .rv-card-flip:hover { border-color: var(--line-strong); box-shadow: var(--shadow-1); }
+  .rv-card-flip[open] { border-color: var(--ink); }
+  .rv-card-flip summary { cursor: pointer; font-weight: 700; min-height: 32px; }
   .rv-ex { border-top: 1px solid var(--line); padding: 14px 0; }
   .rv-text { white-space: pre-wrap; margin: 8px 0; }
   .rv-text .katex-display { white-space: normal; margin: .6em 0; }
@@ -44,7 +59,7 @@
   @media (max-width: 720px) { .rv-bars li { grid-template-columns: 1fr; gap: 4px; } }
   @media print {
     .topbar, .rv-noprint, .flashes, .notice { display: none !important; }
-    .card { border: 0; padding: 0; break-inside: avoid; }
+    .card { border: 0; padding: 0; break-inside: avoid; box-shadow: none; }
     .rv-card-flip[open] summary ~ *, .rv-card-flip summary ~ * { display: block; }
   }
 </style>

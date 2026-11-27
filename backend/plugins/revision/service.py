@@ -21,7 +21,7 @@ from . import ai, sources, store
 from . import generator as gen
 
 MIN_QUESTIONS = 3
-GENERATED = "Généré par Claude d'après ton cours"
+GENERATED = "Généré par IA d'après ton cours"
 # Mots qui signalent un cours de data science : on y propose des notebooks d'exercices
 DATA_WORDS = ("data", "donnee", "python", "statisti", "regression", "apprentissage", "learning", "machine",
               "gaussi", "bayes", "classification", "neurone", "neural", "noyau", "kernel", "optimisation",
@@ -209,7 +209,7 @@ def hub(user, subject_id) -> dict:
     ex = [dict(e) for e in store.exercises(subject_id)]
     return {"s": s, "topics": topics_of(s), "levels": lv, "asked": "" in lv, "difficulty": difficulty_of(lv),
             "suggested": gen.suggested_difficulty(s["comfort"]), "chapters": list(chs), "origin": origin,
-            "register": register(s, lv), "exercises": ex, "web_enabled": web_enabled(), "ai_enabled": ai.available(),
+            "register": register(s, lv), "exercises": ex, "web_enabled": web_enabled(), "ai_enabled": ai.available(), "ai_name": ai.name(),
             "n_docs": len(documents_dao.list_for_subject(subject_id)),
             "data_science": is_data_science(s),
             "notebooks": [dict(n, colab=sources.colab_url(n["url"])) for n in store.notebooks(subject_id)]}
@@ -281,16 +281,16 @@ def collect_exercises(user, s, chapter: str, difficulty: str) -> Report:
     if added:
         return report
     if not ai.available():
-        return report.info("Aucun nouvel exercice trouvé. Avec une clé d'API Claude, "
+        return report.info("Aucun nouvel exercice trouvé. Avec une clé d'API Claude ou Groq, "
                            "des exercices seraient rédigés d'après ton cours.")
     try:
         made = ai.exercises(course_for_ai(s), topics, chapter, difficulty)
     except ai.AIError as e:
-        return report.warning(f"Aucun exercice trouvé, et Claude n'a pas pu en rédiger : {e}")
+        return report.warning(f"Aucun exercice trouvé, et {ai.name()} n'a pas pu en rédiger : {e}")
     n = sum(store.add_exercise(s["id"], e["chapter"] if e["chapter"] in topics else chapter, e["title"],
                                e["statement"], e["solution"], difficulty, GENERATED, "", gen.fingerprint(e["statement"]))
             for e in made)
-    return report.success(f"Aucun exercice trouvé ailleurs : Claude en a rédigé {n} d'après ton cours.")
+    return report.success(f"Aucun exercice trouvé ailleurs : {ai.name()} en a rédigé {n} d'après ton cours.")
 
 
 def _collect_online(user, s, topics, chapter, difficulty, report) -> int:
@@ -343,14 +343,14 @@ def find_notebooks(s, chapter: str, difficulty: str) -> Report:
         if added:
             return report.success(f"{added} notebook(s) trouvé(s) en ligne.")
     if not ai.available():
-        return report.info("Aucun nouveau notebook trouvé en ligne. Avec une clé d'API Claude, "
+        return report.info("Aucun nouveau notebook trouvé en ligne. Avec une clé d'API Claude ou Groq, "
                            "un notebook serait rédigé d'après ton cours.")
     try:
         nb = ai.notebook(course_for_ai(s), s["name"], topics, chapter, difficulty)
     except ai.AIError as e:
-        return report.error(f"Aucun notebook trouvé en ligne, et Claude n'a pas pu en rédiger : {e}")
+        return report.error(f"Aucun notebook trouvé en ligne, et {ai.name()} n'a pas pu en rédiger : {e}")
     store.add_notebook(s["id"], chapter, difficulty, nb["title"], content=ai.to_ipynb(nb), source=GENERATED)
-    return report.success(f"Aucun notebook trouvé en ligne : Claude en a rédigé un, « {nb['title']} » "
+    return report.success(f"Aucun notebook trouvé en ligne : {ai.name()} en a rédigé un, « {nb['title']} » "
                           f"({len(nb['exercises'])} exercices).")
 
 

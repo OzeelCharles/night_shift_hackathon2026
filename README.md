@@ -103,6 +103,12 @@ La clé d'API n'est **jamais** dans le code ni dans git. Au choix :
 - ou fichier `instance/anthropic_api_key` contenant seulement la clé : le dossier `instance/` est ignoré par git
   (comme la clé secrète du site), et `.gitignore` exclut aussi tout fichier `anthropic_api_key` et `.env`.
 
+**Alternative Groq** (offre gratuite) : une clé `gsk_…` dans `GROQ_API_KEY`, dans `instance/groq_api_key`, ou même
+rangée dans `instance/anthropic_api_key`, est reconnue et prioritaire. QCM, exercices et notebooks passent alors par
+Groq (`openai/gpt-oss-120b`, modifiable par `REVISION_GROQ_MODEL`). Groq ne lit pas les PDF : il reçoit un extrait du
+texte des supports, limité à ~9 000 caractères pour tenir dans le quota gratuit (8 000 jetons par minute) ; compter
+une minute entre deux générations.
+
 **Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de
 `FEATURES` dans `backend/config.py` ; supprimer cette ligne retire la fonctionnalité sans rien casser.

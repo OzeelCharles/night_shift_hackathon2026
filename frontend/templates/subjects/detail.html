@@ -116,7 +116,7 @@
         <form method="post" action="{{ url_for('planning.toggle', session_id=se.id) }}">
           {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.path }}#horaires">
-          <button class="tick" aria-label="{{ 'Marquer comme à faire' if se.done else 'Marquer comme faite' }}">{% if se.done %}✓{% endif %}</button>
+          <button class="tick" aria-label="{{ 'Marquer comme à faire' if se.done else 'Marquer comme faite' }}">{% if se.done %}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}</button>
         </form>
         <div>
           <a class="when" href="{{ url_for('planning.week', semaine=se.start[:10]) }}">{{ se.start|jour }}, {{ se.start|hm }} à {{ se.end|hm }}</a>

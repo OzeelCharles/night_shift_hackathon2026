@@ -105,6 +105,7 @@ class RevisionPagesTests(unittest.TestCase):
         self.app = create_app({"TESTING": True, "WTF_CSRF_DISABLED": True, "ENABLE_WEB": False,
                                "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
                                "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up")})
+        self.app.instance_path = self.tmp.name  # jamais les vraies clés d'API de instance/
         self.client = self.app.test_client()
         self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
                                                "password2": "motdepasse1", "level": "licence", "school": "ENSAI"})
@@ -285,6 +286,7 @@ class RevisionWebTests(unittest.TestCase):
         self.app = create_app({"TESTING": True, "WTF_CSRF_DISABLED": True, "ENABLE_WEB": True,
                                "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
                                "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up")})
+        self.app.instance_path = self.tmp.name  # jamais les vraies clés d'API de instance/
         self.client = self.app.test_client()
         from backend.services import resource_service
         with mock.patch.object(resource_service, "refresh_async", return_value=False):
@@ -341,6 +343,27 @@ class RevisionWebTests(unittest.TestCase):
             with open(os.path.join(self.tmp.name, "anthropic_api_key"), "w", encoding="utf-8") as f:
                 f.write("cle-de-test\n")  # le retour à la ligne final est ignoré
             self.assertEqual(ai.api_key(), "cle-de-test")
+
+    def test_groq_key_writes_exercises_from_extracted_text(self):
+        self.app.instance_path = self.tmp.name
+        env = {"ANTHROPIC_API_KEY": "", "GROQ_API_KEY": ""}
+        with mock.patch.dict(os.environ, env), self.app.app_context():
+            self.assertEqual(ai.provider(), "claude")
+            with open(os.path.join(self.tmp.name, "anthropic_api_key"), "w", encoding="utf-8") as f:
+                f.write("gsk_cle-groq\n")  # une clé Groq rangée à la place de celle de Claude est reconnue
+            self.assertEqual((ai.provider(), ai.groq_key()), ("groq", "gsk_cle-groq"))
+            course = ai.course_blocks([{"id": 1, "filename": "cours.pdf", "stored_path": "absent.pdf"}],
+                                      {"doc:1": COURSE})
+            answer = mock.Mock(status_code=200)
+            answer.json.return_value = {"choices": [{"message": {"content": (
+                '{"exercises": [{"title": "Dés", "chapter": "Variables aléatoires", '
+                '"statement": "Loi de la somme de deux dés.", "solution": "$P(S=k)=(6-|k-7|)/36$"}]}')}}]}
+            with mock.patch("requests.Session.post", return_value=answer) as post:
+                made = ai.exercises(course, TOPICS, "", "facile", n=1)
+            self.assertEqual(made[0]["title"], "Dés")
+            sent = post.call_args.kwargs
+            self.assertEqual(sent["headers"]["Authorization"], "Bearer gsk_cle-groq")
+            self.assertIn("Variables aléatoires", sent["json"]["messages"][1]["content"], "le texte du cours est envoyé")
 
     def test_downloads_refuse_private_addresses(self):
         from backend.plugins.revision import sources

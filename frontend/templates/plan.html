@@ -99,7 +99,7 @@
         <form method="post" action="{{ url_for('planning.toggle', session_id=r.id) }}">
           {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.full_path }}">
-          <button class="tick" aria-label="{{ 'Marquer comme à faire' if r.done else 'Marquer comme faite' }}">{% if r.done %}✓{% endif %}</button>
+          <button class="tick" aria-label="{{ 'Marquer comme à faire' if r.done else 'Marquer comme faite' }}">{% if r.done %}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>{% endif %}</button>
         </form>
       </div>
       {% endif %}

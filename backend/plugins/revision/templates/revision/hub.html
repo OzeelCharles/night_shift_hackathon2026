@@ -75,7 +75,7 @@
 {% endif %}
 
 {% if not ai_enabled %}
-<div class="notice"><p>Claude n'est pas activé sur ce serveur (clé ANTHROPIC_API_KEY absente) : les QCM sont fabriqués à partir du texte extrait du cours, et les formules des PDF peuvent y être mal lues.</p></div>
+<div class="notice"><p>L'IA n'est pas activée sur ce serveur (aucune clé Claude ou Groq) : les QCM sont fabriqués à partir du texte extrait du cours, et les formules des PDF peuvent y être mal lues.</p></div>
 {% endif %}
 {% if origin == 'none' and not ai_enabled %}
 <div class="notice notice-warn"><p>Aucun texte n'a pu être extrait de tes supports (PDF scannés ?) : <a href="{{ url_for('subjects.detail', subject_id=s.id) }}#supports">dépose des supports</a> contenant du texte pour obtenir fiches et QCM.</p></div>
@@ -102,7 +102,7 @@
 
   <section class="card" id="qcm">
     <h2>QCM noté</h2>
-    <form method="post" action="{{ url_for('revision.new_quiz', subject_id=s.id) }}" data-busy="{{ 'Claude lit ton cours et rédige le QCM…' if ai_enabled else 'Préparation du QCM…' }}">
+    <form method="post" action="{{ url_for('revision.new_quiz', subject_id=s.id) }}" data-busy="{{ ai_name ~ ' lit ton cours et rédige le QCM…' if ai_enabled else 'Préparation du QCM…' }}">
       {{ csrf_field() }}
       <label>Sur quoi ?
         <select name="chapitre" id="qcm-chapitre">
@@ -119,7 +119,7 @@
       <ul class="small muted">
         {% for k, c in settings.items() %}<li><strong>{{ difficulties[k] }}</strong> : {{ c.questions }} questions, {{ c.options }} choix{% if c.penalty %}, −{{ "%g"|format(c.penalty)|replace(".", ",") }} par erreur{% endif %}</li>{% endfor %}
       </ul>
-      {% if ai_enabled %}<p class="small muted">Questions rédigées par Claude après lecture de tes supports (formules en LaTeX). Compte jusqu'à une minute.</p>{% endif %}
+      {% if ai_enabled %}<p class="small muted">Questions rédigées par {{ ai_name }} après lecture de tes supports (formules en LaTeX). Compte jusqu'à une minute.</p>{% endif %}
       <button class="btn btn-block" {% if not chapters and not ai_enabled %}disabled{% endif %}>Lancer le QCM</button>
     </form>
   </section>
@@ -191,7 +191,7 @@
   <div class="page-head">
     <div>
       <h2>Exercices</h2>
-      <p class="small muted">Repérés dans tes supports (« Exercice 1… ») et dans des PDF d'exercices corrigés trouvés en ligne{% if ai_enabled %} ; si la recherche ne donne rien, Claude en rédige d'après ton cours{% endif %}.</p>
+      <p class="small muted">Repérés dans tes supports (« Exercice 1… ») et dans des PDF d'exercices corrigés trouvés en ligne{% if ai_enabled %} ; si la recherche ne donne rien, {{ ai_name }} en rédige d'après ton cours{% endif %}.</p>
     </div>
     <div class="segmented" role="group" aria-label="Filtrer par difficulté">
       <a href="?exos=toutes#exercices" {% if only not in difficulties %}aria-current="true" style="background: var(--ink); color: #fff"{% endif %}>Toutes</a>
@@ -239,7 +239,7 @@
 {% if data_science %}
 <section class="card" id="notebooks">
   <h2>Notebooks d'exercices</h2>
-  <p class="small muted">Notebooks Jupyter d'exercices trouvés en ligne (GitHub, Kaggle, Colab){% if ai_enabled %} ; si la recherche ne donne rien, Claude en rédige un d'après ton cours (énoncés, code à compléter, corrigés à la fin){% endif %}. À ouvrir dans Jupyter, VS Code ou Google Colab.</p>
+  <p class="small muted">Notebooks Jupyter d'exercices trouvés en ligne (GitHub, Kaggle, Colab){% if ai_enabled %} ; si la recherche ne donne rien, {{ ai_name }} en rédige un d'après ton cours (énoncés, code à compléter, corrigés à la fin){% endif %}. À ouvrir dans Jupyter, VS Code ou Google Colab.</p>
   {% if web_enabled or ai_enabled %}
   <form method="post" action="{{ url_for('revision.new_notebook', subject_id=s.id) }}" class="add-link" data-busy="Recherche de notebooks (jusqu'à deux minutes)…">
     {{ csrf_field() }}
@@ -253,7 +253,7 @@
     <button class="btn btn-ghost">Chercher des notebooks</button>
   </form>
   {% else %}
-  <p class="muted">La recherche sur internet et Claude sont désactivés sur ce serveur.</p>
+  <p class="muted">La recherche sur internet et l'IA sont désactivées sur ce serveur.</p>
   {% endif %}
   {% for nb in notebooks %}
   <div class="rv-nb">

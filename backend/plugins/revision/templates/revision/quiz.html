@@ -60,8 +60,8 @@
       <label class="rv-opt {{ cls }}">
         <input type="radio" name="q{{ qi }}" value="{{ loop.index0 }}" {% if done %}disabled{% endif %} {% if given == loop.index0 %}checked{% endif %}>
         <span>{{ opt }}</span>
-        {% if done and loop.index0 == question.answer %}<span class="rv-mark" style="color: var(--ok)">✓ Bonne réponse</span>
-        {% elif done and loop.index0 == given %}<span class="rv-mark" style="color: var(--margin)">✗ Ta réponse</span>{% endif %}
+        {% if done and loop.index0 == question.answer %}<span class="rv-mark is-right"><svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>Bonne réponse</span>
+        {% elif done and loop.index0 == given %}<span class="rv-mark is-wrong"><svg class="icon icon-sm" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>Ta réponse</span>{% endif %}
       </label>
       {% endfor %}
     </div>
