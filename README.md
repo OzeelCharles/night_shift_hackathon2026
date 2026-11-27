@@ -32,7 +32,7 @@ $env:ADMIN_EMAIL = "admin@ecole.fr"; $env:ADMIN_PASSWORD = "un-mot-de-passe-soli
 ## Tests
 
 ```powershell
-python -m unittest discover -s tests -t .
+python -m unittest discover -s backend/tests -t .
 ```
 
 ## Fonctionnement du planning
@@ -49,9 +49,9 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 
 ## Agenda intelligent
 
-- **Rapprochement des noms** (`app/business/matching.py`) : « TD Proba B204 » est rattaché à la matière « Probabilités »
+- **Rapprochement des noms** (`backend/business/matching.py`) : « TD Proba B204 » est rattaché à la matière « Probabilités »
   par similarité cosinus sur les mots (racines, abréviations), seuil 0,75 calibré sur des cas réels.
-- **Suggestions de matières** (`app/business/embeddings.py`, `app/business/agenda_analysis.py`) : à la création d'une matière, les cours
+- **Suggestions de matières** (`backend/business/embeddings.py`, `backend/business/agenda_analysis.py`) : à la création d'une matière, les cours
   de l'agenda sans matière sont proposés, puis classés pendant la saisie par similarité cosinus entre embeddings.
   Les embeddings sont des vecteurs de 512 dimensions obtenus par hachage de traits (racines, débuts de mots,
   n-grammes de caractères), sans modèle à télécharger ; `embed()` est le seul point à remplacer pour brancher
@@ -70,7 +70,7 @@ Le planning s'exporte en `.ics` pour l'importer dans n'importe quel agenda.
 ## Établissements de France
 
 L'autocomplétion de l'école ou de l'université (inscription, profil, admin) cherche parmi environ 18 000 collèges,
-lycées et établissements du supérieur, dans `app/data/ecoles_france.json`. Ce fichier est construit à partir des
+lycées et établissements du supérieur, dans `backend/data/ecoles_france.json`. Ce fichier est construit à partir des
 données publiques de l'Éducation nationale et de l'Enseignement supérieur (annuaire de l'éducation, Parcoursup,
 Mon Master…). Pour le mettre à jour :
 
@@ -80,7 +80,7 @@ python scripts/build_schools.py
 
 ## Architecture en couches
 
-Chaque couche n'utilise que celles du dessous (vérifié par `tests/test_architecture.py`) :
+Chaque couche n'utilise que celles du dessous (vérifié par `backend/tests/test_architecture.py`) :
 
 ```
 controllers/   HTTP : lit la requête, appelle un service, affiche (flash + gabarit). Aucune règle métier.
@@ -94,7 +94,7 @@ core/          Transversal : sécurité (connexion, CSRF), filtres d'affichage, 
 ```
 
 ```
-app/
+backend/
   __init__.py            create_app : configuration, base, sécurité, chargement des fonctionnalités
   config.py              configuration par défaut, liste des fonctionnalités (FEATURES)
   core/                  security.py, filters.py, features.py (plugins), events.py (bus d'événements)
@@ -105,17 +105,17 @@ app/
   dao/                   db (schéma, migrations, transaction par requête), users, preferences, subjects,
                          documents, agenda, sessions, resources, schools, web
   data/                  liste des établissements de France
-  templates/, static/
+  tests/                 tests automatisés (et exemple de plugin : fake_feature.py)
+frontend/                interface : templates/ (gabarits Jinja) et static/ (CSS…), voir frontend/README.md
 scripts/build_schools.py
 run.py
-tests/
 ```
 
 Chaque requête HTTP est une transaction : tout ce qu'elle écrit est validé à la fin, ou annulé en cas d'erreur.
 
 ## Ajouter une fonctionnalité (plugin)
 
-Une fonctionnalité est un module qui expose une variable `feature`. Exemple complet : `tests/fake_feature.py`.
+Une fonctionnalité est un module qui expose une variable `feature`. Exemple complet : `backend/tests/fake_feature.py`.
 
 ```python
 from flask import Blueprint
@@ -142,7 +142,7 @@ feature = Feature(
 Pour l'activer sans toucher au cœur : variable d'environnement `EXTRA_FEATURES=mon_paquet.stats`
 (plusieurs modules séparés par des virgules), ou clé `EXTRA_FEATURES` passée à `create_app`.
 
-Événements disponibles (`app/core/events.py`) : `profile.changed`, `subject.created`, `subject.deleted`,
+Événements disponibles (`backend/core/events.py`) : `profile.changed`, `subject.created`, `subject.deleted`,
 `agenda.changed`, `plan.updated`. Les fonctionnalités du cœur utilisent le même mécanisme : par exemple, la
 recherche de ressources réagit à `subject.created` et `profile.changed`.
 

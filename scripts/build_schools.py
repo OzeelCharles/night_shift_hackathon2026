@@ -1,4 +1,4 @@
-"""Construit app/data/ecoles_france.json : la liste des établissements scolaires et
+"""Construit backend/data/ecoles_france.json : la liste des établissements scolaires et
 d'enseignement supérieur de France, pour l'autocomplétion du profil.
 
 Sources (données publiques, Licence Ouverte) :
@@ -22,7 +22,7 @@ import requests
 UA = {"User-Agent": "PlanificateurRevisions/1.0 (application educative)"}
 ESR = "https://data.enseignementsup-recherche.gouv.fr/api/explore/v2.1/catalog/datasets"
 EDU = "https://data.education.gouv.fr/api/explore/v2.1/catalog/datasets"
-OUT = os.path.join(os.path.dirname(__file__), "..", "app", "data", "ecoles_france.json")
+OUT = os.path.join(os.path.dirname(__file__), "..", "backend", "data", "ecoles_france.json")
 
 # Grandes écoles souvent absentes des jeux de données du ministère de l'Enseignement supérieur
 EXTRA = [

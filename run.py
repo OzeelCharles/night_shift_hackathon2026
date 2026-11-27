@@ -1,7 +1,7 @@
 """Lancement : python run.py  puis ouvrir http://127.0.0.1:5000"""
 import os
 
-from app import create_app
+from backend import create_app
 
 app = create_app()
 
