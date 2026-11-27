@@ -1,7 +1,7 @@
 {# Éléments communs à la barre du haut : marque, espaces, compte, thème. #}
 
 {% macro brand() %}
-<a class="brand" href="{{ url_for('main.index') }}"><span class="brand-mark" aria-hidden="true"></span>Rivezli</a>
+<a class="brand" href="{{ url_for('main.index') }}"><img class="brand-logo" src="{{ url_for('static', filename='logo.png') }}" alt="" width="34" height="34">Rivezli</a>
 {% endmacro %}
 
 {% macro account() %}

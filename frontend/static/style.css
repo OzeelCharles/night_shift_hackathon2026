@@ -106,9 +106,8 @@ button { touch-action: manipulation; }
           -webkit-backdrop-filter: saturate(1.4) blur(14px); border-radius: var(--r-pill); box-shadow: var(--shadow-2); }
 .brand { display: flex; align-items: center; gap: 9px; margin-right: var(--s-3); font-family: var(--font-display); font-weight: 800;
          font-size: 1.3rem; letter-spacing: -.04em; color: var(--graphite); text-decoration: none; }
-.brand-mark { width: 18px; height: 18px; border-radius: 6px 6px 6px 2px; background: var(--hl-0);
-              box-shadow: 7px 7px 0 -1px var(--hl-2); transition: transform var(--dur) var(--ease-spring); }
-.brand:hover .brand-mark { transform: rotate(-12deg); }
+.brand-logo { display: block; width: 34px; height: 34px; object-fit: contain; transition: transform var(--dur) var(--ease-spring); }
+.brand:hover .brand-logo { transform: rotate(-8deg) scale(1.06); }
 .topbar nav { display: flex; gap: 2px; align-items: center; flex: 1; flex-wrap: wrap; }
 .topbar nav a { color: var(--graphite); text-decoration: none; padding: 8px 14px; border-radius: var(--r-pill); min-height: 40px;
                 display: inline-flex; align-items: center; font-weight: 700; font-size: .96rem;
