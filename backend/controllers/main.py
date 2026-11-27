@@ -39,7 +39,9 @@ def index():
     """Page d'accueil de Rivezli : présentation des fonctionnalités pour les étudiants (frontend/templates/home.html)."""
     features = [dict(endpoint=e, icon=i, title=t, text=x, hl=c) for e, i, t, x, c in SHOWCASE
                 if e in current_app.view_functions]
-    return render_template("home.html", features=features)
+    donation_url = (current_app.config.get("DONATION_URL") or "").strip()
+    return render_template("home.html", features=features,
+                           donation_url=donation_url if donation_url.startswith("https://") else None)
 
 
 @bp.route("/encadrement")

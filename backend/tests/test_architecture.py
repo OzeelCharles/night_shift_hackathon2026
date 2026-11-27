@@ -171,6 +171,42 @@ class HomeTests(_Base):
         self.assertNotIn("topbar-guest", self.top(page))
 
 
+class DonationTests(_Base):
+    """Section « Soutenir Rivezli » : tout en bas de l'accueil, bouton seulement si une adresse https est configurée."""
+
+    def home(self):
+        return self.client.get("/").get_data(as_text=True)
+
+    def test_section_is_the_very_last_of_the_home_page(self):
+        page = self.home()
+        self.assertIn("Soutenir Rivezli", page)
+        self.assertGreater(page.index('id="donate-title"'), page.index('id="cta-title"'), "après l'appel à s'inscrire")
+        self.assertNotIn("<section", page[page.index('id="donate-title"'):], "aucune autre section après les dons")
+
+    def test_no_button_without_a_configured_link(self):
+        page = self.home()
+        self.assertNotIn("Faire un don", page)
+        self.assertIn("arrive bientôt", page)
+
+    def test_button_with_a_configured_https_link(self):
+        self.app.config["DONATION_URL"] = "https://ko-fi.com/rivezli"
+        page = self.home()
+        self.assertIn('href="https://ko-fi.com/rivezli"', page)
+        self.assertIn('rel="noopener noreferrer"', page)
+        self.assertNotIn("arrive bientôt", page)
+
+    def test_unsafe_links_are_ignored(self):
+        for bad in ("javascript:alert(1)", "http://pas-securise.example/don", "//evil.example", "ko-fi.com/x"):
+            self.app.config["DONATION_URL"] = bad
+            page = self.home()
+            self.assertNotIn("Faire un don", page, bad)
+            self.assertNotIn(bad, page.replace("&#39;", "'"), bad)
+
+    def test_logged_in_users_see_it_too(self):
+        self.register()
+        self.assertIn("Soutenir Rivezli", self.home())
+
+
 class LayeringTests(unittest.TestCase):
     """Chaque couche n'importe que les couches qui sont en dessous d'elle."""
     FORBIDDEN = {

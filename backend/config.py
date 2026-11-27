@@ -38,6 +38,7 @@ def defaults(instance_path: str) -> dict:
         "DATABASE": os.path.join(instance_path, "revision.sqlite"),
         "UPLOAD_FOLDER": os.path.join(instance_path, "uploads"),
         "MAX_CONTENT_LENGTH": 25 * 1024 * 1024,
+        "DONATION_URL": os.environ.get("DONATION_URL", "").strip(),  # page de don (https://…) ; vide = pas de bouton
         "ENABLE_WEB": True,  # recherche de ressources sur internet
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",

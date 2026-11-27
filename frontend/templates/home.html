@@ -67,4 +67,18 @@
   </p>
   {% endif %}
 </section>
+
+<section class="donate" aria-labelledby="donate-title">
+  <span class="donate-icon" aria-hidden="true">💛</span>
+  <div class="donate-text">
+    <h2 id="donate-title">Soutenir Rivezli</h2>
+    <p>Rivezli est un projet d'étudiants. Si l'application t'aide, tu peux contribuer à la faire vivre et à l'améliorer avec un don libre.
+      C'est entièrement facultatif : rien n'est payant, et tout reste accessible sans donner.</p>
+  </div>
+  {% if donation_url %}
+  <a class="btn btn-lg" href="{{ donation_url }}" target="_blank" rel="noopener noreferrer">Faire un don<span class="visually-hidden"> (s'ouvre dans un nouvel onglet)</span></a>
+  {% else %}
+  <p class="donate-soon small muted">Le lien de don arrive bientôt.</p>
+  {% endif %}
+</section>
 {% endblock %}
