@@ -73,6 +73,21 @@ CREATE TABLE IF NOT EXISTS resources (
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON sessions(user_id, start);
 CREATE INDEX IF NOT EXISTS idx_events_user_start ON events(user_id, start);
+-- Dossier scolaire : notes privées de l'utilisateur. Une note survit à la suppression de sa
+-- matière (subject_id passe à NULL, le nom reste dans `course`) : c'est un historique.
+CREATE TABLE IF NOT EXISTS grades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    subject_id INTEGER REFERENCES subjects(id) ON DELETE SET NULL,
+    course TEXT NOT NULL,
+    value REAL NOT NULL,
+    out_of REAL NOT NULL DEFAULT 20,
+    coefficient REAL NOT NULL DEFAULT 1,
+    label TEXT NOT NULL DEFAULT '',
+    day TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_grades_user ON grades(user_id);
 """
 
 

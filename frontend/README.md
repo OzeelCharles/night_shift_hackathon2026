@@ -18,6 +18,7 @@ frontend/
     subjects/            création / modification et page d'une matière
     auth/                inscription, connexion, profil
     admin/               espace administrateur
+    dossier/             espace « Dossier scolaire » : notes privées, moyennes, courbes de progression
     error.html           pages d'erreur
   static/      fichiers servis tels quels sous /static/ (style.css…)
 ```
