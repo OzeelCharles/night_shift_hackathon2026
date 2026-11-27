@@ -4,8 +4,67 @@
 {% block title %}Accueil{% endblock %}
 
 {% block content %}
-{# Page d'accueil volontairement presque vide : seulement le nom de l'application. #}
-<section class="home">
-  <h1 class="home-name">Rivezli</h1>
+<section class="welcome">
+  <div class="welcome-text">
+    <p class="eyebrow">Pour les élèves et les étudiants</p>
+    <h1>Ton année d'étudiant, <mark>enfin organisée</mark>.</h1>
+    <p class="lead">Rivezli rassemble au même endroit ton planning de révision, tes cours, tes notes, la bibliothèque, le resto U et tes recherches de stage. Moins de temps à t'organiser, plus de temps pour apprendre.</p>
+    <p class="actions">
+      {% if g.user %}
+      <a class="btn btn-lg" href="{{ url_for('main.dashboard') }}">Reprendre où j'en étais</a>
+      {% else %}
+      <a class="btn btn-lg" href="{{ url_for('auth.register') }}">Créer mon compte</a>
+      <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Se connecter</a>
+      {% endif %}
+    </p>
+    <p class="small muted">{% if g.user %}Bon retour, {{ g.user.full_name or g.user.username }} !{% else %}Un seul compte pour tout. Il suffit de quelques secondes.{% endif %}</p>
+  </div>
+  {# Aperçu décoratif : des exemples, pas des données. #}
+  <div class="welcome-art" aria-hidden="true">
+    <div class="art-card art-1 hl-0"><span class="art-label">Aujourd'hui</span><strong>14h · Probabilités</strong><span>Chapitre 3, révision espacée</span></div>
+    <div class="art-card art-2 hl-1"><span class="art-label">Resto U</span><strong>Ouvert ce midi</strong><span>Menu du jour affiché</span></div>
+    <div class="art-card art-3 hl-4"><span class="art-label">Bibliothèque</span><strong>Plutôt calme</strong><span>Signalé par des étudiants</span></div>
+  </div>
+</section>
+
+<section class="features" aria-labelledby="features-title">
+  <h2 id="features-title">Tout ce qu'il te faut, au même endroit</h2>
+  <p class="lead">Chaque outil sert à un moment précis de ta semaine. Ils se parlent entre eux : tes matières et ton école comptent partout.</p>
+  <ul class="feature-grid">
+    {% for f in features %}
+    <li class="feature hl-{{ f.hl }}">
+      {% if g.user %}<a class="feature-body" href="{{ url_for(f.endpoint) }}">{% else %}<div class="feature-body">{% endif %}
+        <span class="feature-icon" aria-hidden="true">{{ f.icon }}</span>
+        <h3>{{ f.title }}</h3>
+        <p>{{ f.text }}</p>
+        {% if g.user %}<span class="feature-go">Ouvrir <span aria-hidden="true">→</span></span>{% endif %}
+      {% if g.user %}</a>{% else %}</div>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+<section class="how" aria-labelledby="how-title">
+  <h2 id="how-title">Comment ça marche</h2>
+  <ol class="steps">
+    <li><h3>Crée ton compte</h3><p>Ton niveau et ton école suffisent : ils adaptent les ressources, ta bibliothèque et les restos U proches.</p></li>
+    <li><h3>Dis ce que tu étudies</h3><p>Le nom d'une matière, ou tes cours en PDF et diaporamas : les chapitres sont repérés tout seuls.</p></li>
+    <li><h3>Avance jour après jour</h3><p>Ton planning, tes révisions et tes notes t'attendent. Un imprévu ? Tout se réorganise.</p></li>
+  </ol>
+</section>
+
+<section class="final-cta" aria-labelledby="cta-title">
+  {% if g.user %}
+  <h2 id="cta-title">Tout est prêt pour toi</h2>
+  <p>Retrouve ton planning du jour et tes outils.</p>
+  <p class="actions"><a class="btn btn-lg" href="{{ url_for('main.dashboard') }}">Aller à mon tableau de bord</a></p>
+  {% else %}
+  <h2 id="cta-title">Prêt à t'y mettre ?</h2>
+  <p>Crée ton compte en quelques secondes, ou reconnecte-toi pour retrouver ton planning.</p>
+  <p class="actions">
+    <a class="btn btn-lg" href="{{ url_for('auth.register') }}">Créer mon compte</a>
+    <a class="btn btn-ghost btn-lg" href="{{ url_for('auth.login') }}">Se connecter</a>
+  </p>
+  {% endif %}
 </section>
 {% endblock %}

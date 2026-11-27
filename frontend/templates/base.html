@@ -22,7 +22,7 @@
 {% set space = space | default('encadrement') %}
 {% from "_topbar.html" import brand, account, nav_links, theme_toggle with context %}
 {# Barre du haut : les espaces de Rivezli (Encadrement, et ceux qui viendront) #}
-<header class="topbar">
+<header class="topbar{% if not g.user %} topbar-guest{% endif %}">
   {{ brand() }}
   <button class="icon-btn menu-toggle" type="button" aria-expanded="false" aria-label="Ouvrir le menu">
     <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>

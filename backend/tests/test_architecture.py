@@ -64,12 +64,12 @@ class PluginTests(_Base):
 class PagesTests(_Base):
     def test_home_topbar_and_encadrement_topbar(self):
         def topbar(html):
-            return html[html.index('<header class="topbar">'):html.index("</header>")]
+            return html[html.index('<header class="topbar'):html.index("</header>")]
 
-        # visiteur : page de départ = nom de l'app + « Encadrement »
+        # visiteur : page de départ = présentation de Rivezli + « Encadrement »
         page = self.client.get("/").get_data(as_text=True)
-        self.assertIn('<h1 class="home-name">Rivezli</h1>', page, "l'accueil n'affiche que le nom de l'application")
-        self.assertNotIn("Un planning de révision qui tient", page)
+        self.assertIn("Ton année d'étudiant", page, "l'accueil présente Rivezli aux étudiants")
+        self.assertNotIn("Un planning de révision qui tient", page, "la présentation du planificateur reste sur /encadrement")
         self.assertIn('href="/encadrement"', topbar(page))
         self.assertIn("Se connecter", topbar(page))
         self.assertIn("Un planning de révision qui tient", self.client.get("/encadrement").get_data(as_text=True),
@@ -117,6 +117,45 @@ class PagesTests(_Base):
         for url in ["/admin/", "/admin/matieres", "/admin/utilisateurs/nouveau", "/admin/utilisateurs/2"]:
             self.assertEqual(self.client.get(url).status_code, 200, url)
         self.assertIn(">Administration</a>", self.client.get("/admin/").get_data(as_text=True))
+
+
+class HomeTests(_Base):
+    """Page d'accueil : présentation des fonctionnalités, boutons de connexion et d'inscription."""
+
+    def top(self, html):
+        return html[html.index('<header class="topbar'):html.index("</header>")]
+
+    def test_visitor_sees_features_and_sign_in_buttons(self):
+        page = self.client.get("/").get_data(as_text=True)
+        top = self.top(page)
+        self.assertIn('href="/connexion"', top, "« Se connecter » en haut à droite")
+        self.assertIn('href="/inscription"', top, "« Créer un compte » en haut à droite")
+        self.assertLess(top.index("Se connecter"), top.index("Créer un compte"))
+        self.assertIn("topbar-guest", top)
+        for title in ("Un planning qui tient dans ta semaine", "Un atelier de révision", "Ton dossier scolaire",
+                      "La BU et le resto U", "Ta recherche de stage", "Le compteur de caféine"):
+            self.assertIn(title, page)
+        self.assertIn('class="feature-body"', page)
+        self.assertNotIn('<a class="feature-body"', page, "un visiteur ne voit pas des liens qui le renverraient à la connexion")
+        after_features = page[page.index('id="cta-title"'):]
+        self.assertIn('href="/inscription"', after_features, "fin de page : proposer de s'inscrire")
+        self.assertIn('href="/connexion"', after_features, "… ou de se connecter")
+        self.assertEqual(self.client.get("/").status_code, 200)
+
+    def test_only_enabled_features_are_shown(self):
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertNotIn("La communauté", page, "la carte n'apparaît que si la fonctionnalité est activée")
+        self.assertEqual(page.count('class="feature hl-'), len([f for f in self.app.extensions["features"] if f.name in
+                                                              ("planning", "revision", "dossier", "campus", "stages", "cafeine")]))
+
+    def test_logged_in_user_gets_links_and_dashboard_shortcut(self):
+        self.register()
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn('<a class="feature-body" href="/campus/"', page)
+        self.assertIn('<a class="feature-body" href="/dossier/"', page)
+        self.assertIn("Aller à mon tableau de bord", page)
+        self.assertNotIn("Créer mon compte", page)
+        self.assertNotIn("topbar-guest", self.top(page))
 
 
 class LayeringTests(unittest.TestCase):
