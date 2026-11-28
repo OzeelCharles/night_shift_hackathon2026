@@ -14,7 +14,16 @@ from datetime import date, timedelta
 from ._outils import ADMIN_EMAIL, ADMIN_MDP, AppSecuTestCase
 
 # Routes à <int:...> qui ne désignent pas une donnée d'utilisateur
-HORS_PERIMETRE = {"campus.resto", "campus.resto_menu", "static"}
+HORS_PERIMETRE = {"campus.resto", "campus.resto_menu", "static",
+                  # Forum de la Communauté : partagé entre tous les inscrits par conception. B lit le sujet de A,
+                  # y répond et signale un message : c'est l'usage prévu, pas une fuite (le contenu est public).
+                  "community.topic", "community.reply", "community.report_post",
+                  # Suppression d'un message du forum par un autre que l'auteur : 403 et non 404, ce qui ne révèle
+                  # rien (le message est public). Vérifié à part : le message de A existe toujours après l'essai de B.
+                  "community.delete_post",
+                  # /communaute/messages/<user_id> : <user_id> désigne l'interlocuteur, pas une donnée de A ; écrire à
+                  # un autre membre est légitime. Vérifié à part : B ne lit ni ne modifie la conversation A <-> C.
+                  "community.conversation"}
 # Champs envoyés avec chaque POST de B : plausibles, pour ne pas être arrêté par une simple validation
 FORMULAIRE = {"name": "PIRATE", "title": "PIRATE", "content": "PIRATE", "status": "refuse", "subject": "auto",
               "url": "https://exemple.fr/pirate", "difficulte": "moyen", "chapitre": "", "goal": "a_jour",
@@ -69,6 +78,20 @@ class IsolationEntreUtilisateursTests(AppSecuTestCase):
             actions_dao.create(uid, reschedule_service.KIND, {"note": MARQUEUR_A})
             from backend.dao.db import get_db
             get_db().commit()
+        # Communauté : un tiers C ; sujet de forum de A (public), réponse de C signalée par A,
+        # message privé de A à C avec une pièce jointe PDF (privé : B ne doit rien en voir)
+        self.client_c = self.app.test_client()
+        self.inscrire("c@test.fr", client=self.client_c)
+        self.c_id = self.q("SELECT id FROM users WHERE email = 'c@test.fr'")[0]["id"]
+        sujet = c.post("/communaute/forum/nouveau", data={"category": "libre", "title": "Sujet public de A",
+                                                         "body": "Premier message de A"}).headers["Location"]
+        self.client_c.post(sujet + "/repondre", data={"body": "Réponse de C"})
+        self.c_post_id = self.q("SELECT id FROM forum_posts WHERE author_id = ?", self.c_id)[0]["id"]
+        c.post(f"/communaute/forum/messages/{self.c_post_id}/signaler", data={"reason": "spam"})
+        c.post(f"/communaute/messages/{self.c_id}", data={
+            "body": f"Message privé {MARQUEUR_A}",
+            "files": (io.BytesIO(f"%PDF-1.4 {MARQUEUR_A}".encode()), "prive-a.pdf")},
+            content_type="multipart/form-data")
 
         def un(sql):
             rows = self.q(sql, uid)
@@ -92,6 +115,11 @@ class IsolationEntreUtilisateursTests(AppSecuTestCase):
             "offer_id": offer_id,
             "letter_id": un("SELECT id FROM stg_letters WHERE user_id = ?"),
             "action_id": un("SELECT id FROM chat_actions WHERE user_id = ?"),
+            "topic_id": un("SELECT id FROM forum_topics WHERE author_id = ?"),
+            "post_id": un("SELECT id FROM forum_posts WHERE author_id = ?"),
+            "message_id": un("SELECT id FROM dm_messages WHERE sender_id = ?"),
+            "file_id": un("SELECT id FROM shared_files WHERE owner_id = ? AND message_id IS NOT NULL"),
+            "report_id": un("SELECT id FROM reports WHERE reporter_id = ?"),
             "user_id": uid,
         }
         self.client.post("/deconnexion")
@@ -181,6 +209,39 @@ class IsolationEntreUtilisateursTests(AppSecuTestCase):
             self.assertNotIn(self.a["subject_id"], [r["subject_id"] for r in rows], f"{table} rattachée à A")
         self.assertEqual(avant, self._instantane())
 
+    def test_b_ne_supprime_pas_les_messages_du_forum_d_autrui(self):
+        """Forum public (hors périmètre du 404) : B le lit, mais ne supprime ni le message de A ni celui de C."""
+        self.assertEqual(self.client_b.get(f"/communaute/forum/{self.a['topic_id']}").status_code, 200,
+                         "témoin : le forum est partagé entre inscrits")
+        avant = self.q("SELECT * FROM forum_posts ORDER BY id"), self.q("SELECT * FROM forum_topics ORDER BY id")
+        for post_id in (self.a["post_id"], self.c_post_id):
+            with self.subTest(post_id=post_id):
+                r = self.client_b.post(f"/communaute/forum/messages/{post_id}/supprimer", data=dict(FORMULAIRE))
+                self.assertIn(r.status_code, (403, 404), f"suppression du message {post_id} : {r.status_code}")
+        self.assertEqual(avant, (self.q("SELECT * FROM forum_posts ORDER BY id"),
+                                 self.q("SELECT * FROM forum_topics ORDER BY id")), "B a supprimé un message d'autrui")
+
+    def test_b_ne_lit_ni_ne_modifie_la_conversation_a_c(self):
+        """/communaute/messages/<user_id> désigne l'interlocuteur : B peut écrire à A ou à C, jamais lire A <-> C."""
+        prives = ("SELECT * FROM dm_messages WHERE id = ?", self.a["message_id"])
+        avant = self.q(*prives), self.q("SELECT * FROM shared_files WHERE message_id IS NOT NULL ORDER BY id")
+        for autre in (self.a["user_id"], self.c_id):
+            with self.subTest(interlocuteur=autre):
+                for r in (self.client_b.get(f"/communaute/messages/{autre}"),
+                          self.client_b.post(f"/communaute/messages/{autre}", data={"body": "Bonjour"},
+                                             follow_redirects=True),
+                          self.client_b.get("/communaute/messages")):
+                    self.assertEqual(r.status_code, 200)
+                    page = r.get_data(as_text=True)
+                    self.assertNotIn(MARQUEUR_A, page, "message privé de A à C visible par B")
+                    self.assertNotIn("prive-a.pdf", page, "pièce jointe de A à C visible par B")
+        self.assertEqual(avant[0], self.q(*prives), "message de A à C modifié (lu ?) par B")
+        fichiers = self.q("SELECT * FROM shared_files WHERE message_id IS NOT NULL ORDER BY id")
+        self.assertEqual(avant[1], [f for f in fichiers if f["owner_id"] != self.b_id])
+        # les messages de B partent bien dans ses propres conversations, pas dans celle de A et C
+        for m in self.q("SELECT sender_id, recipient_id FROM dm_messages WHERE id != ?", self.a["message_id"]):
+            self.assertIn(self.b_id, (m["sender_id"], m["recipient_id"]))
+
 
 class AccesAdministrationTests(AppSecuTestCase):
     def setUp(self):
@@ -251,6 +312,8 @@ class VariantesIsolationTests(IsolationEntreUtilisateursTests):
     test_b_ne_lit_ni_ne_modifie_les_donnees_de_a = None
     test_b_recoit_404_sur_chaque_route_a_identifiant = None
     test_identifiants_de_a_dans_les_formulaires_de_b = None
+    test_b_ne_supprime_pas_les_messages_du_forum_d_autrui = None
+    test_b_ne_lit_ni_ne_modifie_la_conversation_a_c = None
 
     def test_identifiant_inexistant_renvoie_404(self):
         for rule, args in self._routes_a_identifiant():
@@ -264,7 +327,8 @@ class VariantesIsolationTests(IsolationEntreUtilisateursTests):
 
     def test_telechargements_de_a_par_b(self):
         for url in (f"/documents/{self.a['doc_id']}?telecharger=1", f"/stages/lettres/{self.a['letter_id']}/telecharger",
-                    f"/reviser/notebooks/{self.a['notebook_id']}.ipynb", f"/documents/{self.a['doc_id']}"):
+                    f"/reviser/notebooks/{self.a['notebook_id']}.ipynb", f"/documents/{self.a['doc_id']}",
+                    f"/communaute/fichiers/{self.a['file_id']}"):
             with self.subTest(url=url):
                 r = self.client_b.get(url)
                 self.assertEqual(r.status_code, 404)

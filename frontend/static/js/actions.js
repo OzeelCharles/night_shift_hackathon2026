@@ -5,6 +5,7 @@
 //   <input data-sync-form="goal">                recopie la valeur dans form.dataset.goal (affichage conditionnel)
 //   <select data-sync-body="goal">               recopie la valeur dans document.body.dataset.goal
 //   <button data-confirm-unanswered="Question ?"> confirmation si une question (fieldset) est restée sans réponse
+//   <button data-confirm-click="Question ?">     confirmation avant l'envoi par ce bouton-là (un formulaire, plusieurs choix)
 //   <button data-print-cards>                    déplie toutes les fiches puis imprime
 (function () {
   'use strict';
@@ -27,6 +28,11 @@
   });
 
   document.addEventListener('click', function (event) {
+    var risky = event.target.closest ? event.target.closest('[data-confirm-click]') : null;
+    if (risky && !window.confirm(risky.dataset.confirmClick)) {
+      event.preventDefault();
+      return;
+    }
     var button = event.target.closest ? event.target.closest('[data-confirm-unanswered], [data-print-cards]') : null;
     if (!button) return;
     if (button.dataset.confirmUnanswered !== undefined) {

@@ -12,9 +12,10 @@ from backend.business.accounts import (LEVELS, clean_details, password_errors, v
                                       validate_username)
 from backend.core import events, journal
 from backend.dao import auth_attempts, banned_words, passwords
+from backend.dao import community as community_dao
 from backend.dao import users as dao
 
-from . import subject_service
+from . import community_service, subject_service
 from .report import Report
 
 # Messages neutres (SEC-03) : ils ne disent ni si l'adresse existe, ni si le compte est désactivé.
@@ -121,6 +122,7 @@ def erase_account(user) -> None:
     """Supprime le compte et tout ce qui s'y rattache (BDD-04) : lignes en cascade, fichiers déposés et
     tentatives de connexion enregistrées pour son adresse."""
     subject_service.remove_user_folder(user["id"])
+    community_service.remove_files(community_dao.paths_for_user(user["id"]))  # forum et messages privés
     auth_attempts.clear("login_account", user["email"].strip().lower())
     dao.delete(user["id"])
 

@@ -72,6 +72,17 @@ def _internal_path(value: str) -> bool:
     return "//" not in path and not any(seg in (".", "..") for seg in path.split("/"))
 
 
+def moderator_required(view):
+    """Administrateurs et modérateurs nommés ; pour les autres, l'espace de modération n'existe pas (404)."""
+    @functools.wraps(view)
+    @login_required
+    def wrapped(**kwargs):
+        if g.user["role"] != "admin" and not g.user["is_moderator"]:
+            abort(404)
+        return view(**kwargs)
+    return wrapped
+
+
 def safe_next(value: str | None, default: str) -> str:
     """N'accepte qu'un chemin interne simple (SEC-04) : il commence par un seul « / », sans antislash, sans caractère
     de contrôle, sans « // » ni segment « . » / « .. ». La valeur est aussi vérifiée une fois décodée (%5C, %09,

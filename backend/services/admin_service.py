@@ -88,6 +88,18 @@ def update_user(user_id, form, current_user_id=None) -> list[str]:
     return []
 
 
+def set_moderator(user_id, on: bool) -> str | None:
+    """Nomme ou retire un modérateur de la communauté ; renvoie un message d'erreur si refusé."""
+    u = get_user(user_id)
+    if u["role"] == "admin":
+        return "Un administrateur modère déjà : il n'a pas besoin d'être nommé."
+    if on and not u["is_active"]:
+        return "Ce compte est désactivé."
+    dao.update(user_id, is_moderator=1 if on else 0)
+    _audit("moderateur", user_id, u["email"], on=bool(on))
+    return None
+
+
 def delete_user(user_id, current_user_id) -> str | None:
     """Supprime un utilisateur et toutes ses données ; renvoie un message d'erreur si refusé."""
     u = get_user(user_id)

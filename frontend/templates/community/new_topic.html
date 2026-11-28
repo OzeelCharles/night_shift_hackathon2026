@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% from "community/_macros.html" import file_fields %}
+{% block title %}Nouvelle discussion{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Nouvelle discussion</h1>
+  <p class="muted">Sois précis dans le titre : c'est ce que les autres verront en premier.</p></div></div>
+<form method="post" enctype="multipart/form-data" class="card com-form">
+  {{ csrf_field() }}
+  <label>Catégorie
+    <select name="category" required>
+      <option value="">Choisir…</option>
+      {% for key, (label, _d) in categories.items() %}
+      <option value="{{ key }}" {% if (request.form.get('category') or selected) == key %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Titre <input name="title" value="{{ request.form.get('title', '') }}" minlength="{{ limits.TITLE_RANGE[0] }}" maxlength="{{ limits.TITLE_RANGE[1] }}" required></label>
+  <label>Message <textarea name="body" rows="8" maxlength="{{ limits.BODY_RANGE[1] }}" required>{{ request.form.get('body', '') }}</textarea></label>
+  {{ file_fields(documents, limits) }}
+  <div class="actions"><button class="btn">Publier</button><a class="btn btn-ghost" href="{{ url_for('community.forum') }}">Annuler</a></div>
+</form>
+{% endblock %}

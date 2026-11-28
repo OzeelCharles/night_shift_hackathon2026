@@ -26,11 +26,18 @@
     {% for u in users %}
     <tr>
       <td>{{ u.username }}</td><td>{{ u.email }}</td><td>{{ levels.get(u.level, '') }}</td><td>{{ u.school }}</td>
-      <td><span class="tag {% if u.role == 'admin' %}tag-hot{% endif %}">{{ u.role }}</span></td>
+      <td><span class="tag {% if u.role == 'admin' %}tag-hot{% endif %}">{{ u.role }}</span>{% if u.is_moderator and u.role != 'admin' %}<span class="tag">modérateur</span>{% endif %}</td>
       <td>{{ "actif" if u.is_active else "désactivé" }}</td>
       <td>{{ u.n_subjects }}</td><td>{{ u.n_sessions }}</td><td class="small">{{ u.created_at[:10]|datefr }}</td>
       <td class="row-actions">
         <a href="{{ url_for('admin.user_edit', user_id=u.id) }}">modifier</a>
+        {% if u.role != 'admin' and u.is_active %}
+        <form method="post" action="{{ url_for('admin.user_moderator', user_id=u.id) }}" class="inline">
+          {{ csrf_field() }}
+          <input type="hidden" name="on" value="{{ 0 if u.is_moderator else 1 }}">
+          <button class="btn-link">{{ 'retirer modérateur' if u.is_moderator else 'nommer modérateur' }}</button>
+        </form>
+        {% endif %}
         {% if u.id != g.user.id %}
         <form method="post" action="{{ url_for('admin.user_delete', user_id=u.id) }}" class="inline"
               data-confirm="Supprimer cet utilisateur et toutes ses données ?">

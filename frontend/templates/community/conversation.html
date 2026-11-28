@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% from "community/_macros.html" import attachments, file_fields, badge, report_form, muted_notice with context %}
+{% block title %}{{ other.username }}{% endblock %}
+{% block content %}
+<p class="small"><a href="{{ url_for('community.inbox') }}">← Messages</a></p>
+<div class="page-head"><div><h1>{{ other.username }}</h1>
+  <p class="muted">{{ badge(other.level) }} {{ other.school }}</p></div></div>
+
+<section class="card" aria-label="Conversation">
+  <div id="thread" class="com-thread" aria-live="polite">
+    {% for m in messages %}
+    <div class="com-msg {{ 'mine' if m.sender_id == g.user.id else 'theirs' }}">
+      {% if m.body %}<div class="com-body">{{ m.body }}</div>{% endif %}
+      {{ attachments(m.files) }}
+      <div class="small muted">{{ m.created_at[:10] | datefr }} à {{ m.created_at[11:16] }}</div>
+      {% if m.recipient_id == g.user.id %}{{ report_form(url_for('community.report_message', message_id=m.id), m.reported, limits) }}{% endif %}
+    </div>
+    {% else %}<p class="muted">Aucun message. Dis bonjour !</p>{% endfor %}
+  </div>
+</section>
+
+{% if muted %}{{ muted_notice() }}{% else %}
+<form method="post" enctype="multipart/form-data" class="card com-form" id="fin">
+  {{ csrf_field() }}
+  <label class="visually-hidden" for="msg-body">Ton message</label>
+  <textarea id="msg-body" name="body" rows="3" maxlength="{{ limits.BODY_RANGE[1] }}" placeholder="Ton message…"></textarea>
+  {{ file_fields(documents, limits) }}
+  <div class="actions"><button class="btn">Envoyer</button></div>
+</form>
+{% endif %}
+
+<script nonce="{{ csp_nonce() }}">
+  // Actualise la conversation sans toucher à ce que tu es en train d'écrire.
+  const thread = document.getElementById('thread');
+  thread.scrollTop = thread.scrollHeight;
+  setInterval(async () => {
+    if (document.hidden) return;
+    try {
+      const html = await (await fetch(location.pathname, {headers: {'X-Requested-With': 'fetch'}})).text();
+      const fresh = new DOMParser().parseFromString(html, 'text/html').getElementById('thread');
+      // nœuds DOM analysés par DOMParser (gabarit échappé par le serveur), déplacés tels quels : aucune chaîne HTML insérée
+      if (fresh && !fresh.isEqualNode(thread)) {
+        const atEnd = thread.scrollHeight - thread.scrollTop - thread.clientHeight < 40;
+        thread.replaceChildren(...document.adoptNode(fresh).childNodes);
+        if (atEnd) thread.scrollTop = thread.scrollHeight;
+      }
+    } catch (e) { /* hors ligne : on réessaie au prochain tour */ }
+  }, 8000);
+</script>
+{% endblock %}

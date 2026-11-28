@@ -205,7 +205,6 @@ sans clé, la bulle explique comment la configurer.
 - **Pour une fonctionnalité** : un outil peut renvoyer `links` (liens affichés sous la réponse) et `action` (carte
   à valider) ; l'application de la carte se déclare avec `Feature(actions=[Action(kind, apply, message)])`
   (`backend/core/tools.py`).
-- À venir : forums.
 
 ### Recherche dans les supports de cours (RAG)
 
@@ -230,6 +229,23 @@ liste « Sources » sous la réponse ouvre le support à la bonne page.
   support supprime ses passages. Environ 100 s pour un diaporama de 300 pages.
 - Code : `backend/services/rag_service.py`, `backend/dao/rag.py` (tables `doc_chunks`, `doc_chunks_fts`, `doc_index`).
 - En test, le modèle est remplacé par les embeddings par hachage du projet (`RAG_EMBEDDINGS=False`).
+
+## Communauté
+
+Espace **Communauté** de la barre du haut : un **forum** par catégories (exercices, astuces, retours d'expérience,
+lycée → supérieur, prépas et concours, écoles), des **messages privés** et le **partage de fichiers** (polys, diapos,
+photos, ou copie d'un support déjà déposé dans une matière). L'e-mail des membres n'est jamais affiché ; les fichiers
+d'une conversation privée ne sont téléchargeables que par ses deux participants.
+
+**Modération** :
+- tout message du forum, ou message privé reçu, peut être **signalé** (haine, harcèlement, triche, document sans droit,
+  spam…) ; la page `/communaute/regles` rappelle les règles ;
+- les signalements arrivent dans l'onglet **Modération**, réservé aux administrateurs et aux **modérateurs**, un
+  élément par message signalé (le contenu est copié : il reste traitable si l'auteur le supprime) ;
+- décisions : rejeter, supprimer le contenu, ou supprimer et **suspendre** l'auteur (il garde la lecture, mais ne peut
+  plus publier ni écrire ; un membre de la modération le rétablit). Un modérateur ne peut pas suspendre un autre
+  modérateur, personne ne suspend un administrateur ;
+- l'administrateur **nomme ou retire** les modérateurs depuis la page Administration.
 
 ## Établissements de France
 
