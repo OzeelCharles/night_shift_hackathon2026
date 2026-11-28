@@ -90,6 +90,7 @@
       {% if where %}<p class="small">{{ where }}</p>{% endif %}
       {% if o.source %}<p class="small muted">Vue sur {{ o.source }}</p>{% endif %}
       {% if o.description %}<details class="small"><summary>Texte de l'offre</summary><p class="pre">{{ o.description }}</p></details>{% endif %}
+      {% for p in panels.get("stages_offer", []) %}{% include p %}{% endfor %}
       <div class="tile-foot">
         <form method="post" action="{{ url_for('stages.offer_status', offer_id=o.id) }}" class="stg-status">
           {{ csrf_field() }}

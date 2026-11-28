@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+{% set space = "stages" %}
+{% block title %}Vérifier mon CV{% endblock %}
+{% block content %}
+<style>
+  .vcv-drop { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: var(--s-4); }
+  .vcv-drop input[type=file] { flex: 1 1 280px; }
+  .vcv-alerts { list-style: none; margin: var(--s-4) 0 0; padding: 0; display: grid; gap: 12px; }
+  .vcv-alerts li { padding: 14px 18px; border-radius: var(--r-tile); background: var(--paper); }
+  .vcv-alerts .vcv-haute { box-shadow: inset 4px 0 0 var(--hl-2); }
+  .vcv-alerts .vcv-moyenne { box-shadow: inset 4px 0 0 var(--hl-3); }
+  .vcv-alerts .vcv-basse { box-shadow: inset 4px 0 0 var(--hl-4); }
+  .vcv-alerts strong { display: block; }
+  .vcv-alerts p { margin: 4px 0 0; }
+  .vcv-score { font-family: var(--font-display); font-size: clamp(2rem, 1.6rem + 2vw, 3rem); line-height: 1; margin: var(--s-3) 0; }
+  .vcv-words { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 var(--s-4); padding: 0; list-style: none; }
+  .vcv-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: var(--s-3); }
+  .vcv-actions form { margin: 0; }
+  .vcv-pick { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .vcv-pick select { flex: 1 1 280px; }
+</style>
+
+<p><a href="{{ url_for('stages.index') }}#offres">← Mes offres</a></p>
+<div class="page-head">
+  <div>
+    <h1>Vérifier mon CV</h1>
+    <p class="lead">Beaucoup d'entreprises trient les candidatures avec un logiciel (un ATS). On regarde si le tien peut lire ton CV, et s'il y retrouve les mots de tes offres.</p>
+  </div>
+</div>
+
+<section class="sheet" id="depot" aria-labelledby="h-depot">
+  <h2 id="h-depot">Ton CV</h2>
+  <div class="notice">
+    <p><strong>Ta vie privée :</strong> Rivezli lit le texte de ton CV puis supprime le fichier aussitôt. Seul le texte est gardé, dans ton compte, et tu peux l'effacer à tout moment. Rien n'est envoyé à une IA sans que tu le demandes.</p>
+  </div>
+  {% if resume %}
+  <p>{{ resume.filename }} : {{ resume.words }} mots, {{ resume.pages }} page{{ "s" if resume.pages > 1 }}{% if resume.tables %}, {{ resume.tables }} tableau{{ "x" if resume.tables > 1 }}{% endif %}. <span class="muted small">Déposé le {{ resume.uploaded_at[:10]|datefr }}.</span></p>
+  {% endif %}
+  <form method="post" action="{{ url_for('verif_cv.page') }}" enctype="multipart/form-data" class="vcv-drop" data-busy="Lecture du CV…">
+    {{ csrf_field() }}
+    <input type="file" name="cv" accept=".pdf,.docx,.odt" required aria-label="Fichier du CV">
+    <button class="btn">{{ "Remplacer mon CV" if resume else "Analyser mon CV" }}</button>
+  </form>
+  <p class="muted small">PDF, DOCX ou ODT, {{ max_mb }} Mo au plus. Un nouveau dépôt remplace l'ancien.</p>
+  {% if resume %}
+  <form method="post" action="{{ url_for('verif_cv.delete') }}" onsubmit="return confirm('Supprimer le texte de ton CV de Rivezli ?')">
+    {{ csrf_field() }}<button class="btn-link danger small">Supprimer mon CV</button>
+  </form>
+  {% endif %}
+</section>
+
+{% if resume %}
+<section class="sheet" id="lisibilite" aria-labelledby="h-lisibilite">
+  <h2 id="h-lisibilite">Lisibilité par un logiciel de recrutement</h2>
+  {% if alerts %}
+  <p class="muted">Du plus gênant au moins gênant. Ces vérifications sont indicatives : chaque logiciel lit un peu différemment.</p>
+  <ul class="vcv-alerts">
+    {% for a in alerts %}
+    <li class="vcv-{{ a.gravity }}">
+      <span class="tag tag-quiet">{{ a.label }}</span>
+      <strong>{{ a.title }}</strong>
+      <p>{{ a.advice }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Aucune alerte : texte lisible, rubriques standard, coordonnées présentes, une seule colonne et une bonne longueur.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="sheet" id="offre" aria-labelledby="h-offre">
+  <h2 id="h-offre">Correspondance avec une offre</h2>
+  {% if offers %}
+  <form method="get" action="{{ url_for('verif_cv.page') }}" class="vcv-pick">
+    <select name="offre" aria-label="Offre suivie">
+      {% for o in offers %}<option value="{{ o.id }}" {% if offer and offer.id == o.id %}selected{% endif %}>{{ o.title }}{% if o.company %} · {{ o.company }}{% endif %}</option>{% endfor %}
+    </select>
+    <button class="btn btn-ghost">Comparer</button>
+  </form>
+  {% else %}
+  <p class="muted">Garde d'abord une offre dans <a href="{{ url_for('stages.index') }}#offres">Mes offres</a> : on comparera ton CV à son texte.</p>
+  {% endif %}
+
+  {% if offer and not resume %}
+  <p>Dépose ton CV ci-dessus pour le comparer à « {{ offer.title }} ».</p>
+  {% elif offer and match %}
+  <h3>{{ offer.title }}{% if offer.company %} · {{ offer.company }}{% endif %}</h3>
+  <p class="vcv-score">{{ match.score }} / 100</p>
+  <p class="small muted">Part des mots-clés de l'offre que l'on retrouve dans ton CV. C'est une estimation de Rivezli, pas le score d'un vrai logiciel de recrutement : n'ajoute que ce que tu sais faire.</p>
+
+  {% if match.found %}
+  <h4>Mots-clés trouvés</h4>
+  <ul class="vcv-words" aria-label="Mots-clés trouvés">{% for k in match.found %}<li class="tag tag-school">{{ k }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if match.missing %}
+  <h4>Mots-clés manquants</h4>
+  <ul class="vcv-words" aria-label="Mots-clés manquants">{% for k in match.missing %}<li class="tag tag-pdf">{{ k }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% for t in tips %}<p class="small">{{ t }}</p>{% endfor %}
+
+  <div class="vcv-actions">
+    {% if match.missing %}
+    <button class="btn btn-ghost" type="button" id="vcv-copy" data-copy="{{ match.missing|join(', ') }}">Copier les mots-clés manquants</button>
+    {% endif %}
+    <form method="post" action="{{ url_for('stages.generate') }}" data-busy="Rédaction…">
+      {{ csrf_field() }}<input type="hidden" name="offer_id" value="{{ offer.id }}">
+      <button class="btn btn-sm">Écrire la lettre</button>
+    </form>
+    <span class="muted small" id="vcv-copied" aria-live="polite"></span>
+  </div>
+  {% endif %}
+
+  {% if resume %}
+  <h3 id="ia">Conseils de rédaction</h3>
+  {% if not ai %}
+  <p class="muted">Conseils de l'IA indisponibles sur ce serveur.</p>
+  {% elif offer %}
+  {% if advice %}
+  <div class="tile"><p class="pre">{{ advice }}</p></div>
+  <p class="small muted">Proposé par Groq : complète ou retire ce qui est [entre crochets], et n'ajoute que ce que tu as vraiment fait.</p>
+  {% endif %}
+  <p class="small">Le texte de ton CV et celui de l'offre seront envoyés à Groq.</p>
+  <form method="post" action="{{ url_for('verif_cv.advice') }}" data-busy="Groq rédige…">
+    {{ csrf_field() }}<input type="hidden" name="offer_id" value="{{ offer.id }}">
+    <button class="btn btn-ghost">Demander des conseils de rédaction à l'IA</button>
+  </form>
+  {% else %}
+  <p class="muted small">Choisis une offre ci-dessus pour demander des conseils de rédaction à l'IA.</p>
+  {% endif %}
+  {% endif %}
+</section>
+
+<script>
+  (function () {
+    const btn = document.getElementById("vcv-copy");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const out = document.getElementById("vcv-copied");
+      try { await navigator.clipboard.writeText(btn.dataset.copy); out.textContent = "Mots-clés copiés : colle-les dans ta lettre si tu as ces compétences."; }
+      catch (e) { out.textContent = "Copie impossible : " + btn.dataset.copy; }
+    });
+  })();
+</script>
+{% endblock %}
