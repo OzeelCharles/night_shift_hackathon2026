@@ -440,9 +440,16 @@ class AssistantAppTests(unittest.TestCase):
         with mock.patch("backend.dao.llm.groq_key", return_value=""):
             data = self.client.get("/assistant/conversation").get_json()
             self.assertFalse(data["available"])
-            self.assertIn("ANTHROPIC_API_KEY=", data["notice"])
-            self.assertIn("fichier .env", data["notice"])
-            self.assertEqual(self.client.post("/assistant/messages", json={"text": "Salut"}).status_code, 422)
+            self.assertEqual(data["notice"], "", "rien d'alarmant à l'ouverture : l'accueil invite à poser sa question")
+            reply = self.client.post("/assistant/messages", json={"text": "Salut"})
+            self.assertEqual(reply.status_code, 422)
+            self.assertIn("ANTHROPIC_API_KEY=", reply.get_data(as_text=True), "le guide de configuration n'apparaît qu'à l'envoi")
+            self.assertIn("fichier .env", reply.get_data(as_text=True))
+    def test_welcome_asks_what_the_student_needs(self):
+        self.login_as("lea@test.fr")
+        page = self.client.get("/").get_data(as_text=True)
+        self.assertIn("De quoi as-tu besoin", page)
+        self.assertNotIn("pas encore branché", page)
 
 
 if __name__ == "__main__":
