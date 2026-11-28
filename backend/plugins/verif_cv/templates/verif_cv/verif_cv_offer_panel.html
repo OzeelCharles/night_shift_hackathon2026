@@ -1,0 +1,10 @@
+{# Pastille du vérificateur de CV sur la carte d'une offre suivie (emplacement « stages_offer »).
+   Rien sans CV déposé, ni pour une offre trop pauvre (moins de 5 mots-clés). #}
+{% set vcv = vcv_offer_score(o) %}
+{% if vcv %}
+<p class="small" style="margin-top: 10px;">
+  <span class="tag {{ 'tag-school' if vcv.score >= 60 else 'tag-pdf' }}">CV : {{ vcv.score }} / 100</span>
+  {% if vcv.missing %}<span class="muted">Manque : {{ vcv.missing|join(", ") }}.</span>{% endif %}
+  <a href="{{ url_for('verif_cv.page', offre=o.id) }}#offre">Voir le détail</a>
+</p>
+{% endif %}
