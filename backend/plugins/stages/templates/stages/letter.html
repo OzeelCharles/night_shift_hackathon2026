@@ -31,10 +31,10 @@
   {{ csrf_field() }}<input type="hidden" name="offer_id" value="{{ letter.offer_id }}">
 </form>
 {% endif %}
-<form method="post" action="{{ url_for('stages.delete_letter', letter_id=letter.id) }}" onsubmit="return confirm('Supprimer cette lettre ?')">
+<form method="post" action="{{ url_for('stages.delete_letter', letter_id=letter.id) }}" data-confirm="Supprimer cette lettre ?">
   {{ csrf_field() }}<button class="btn-link danger">Supprimer cette lettre</button>
 </form>
-<script>
+<script nonce="{{ csp_nonce() }}">
   document.getElementById("copy").addEventListener("click", async () => {
     const text = document.getElementById("content").value, out = document.getElementById("copied");
     try { await navigator.clipboard.writeText(text); out.textContent = "Lettre copiée."; }

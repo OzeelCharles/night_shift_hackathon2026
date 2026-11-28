@@ -37,9 +37,9 @@ class LifeToolsTests(unittest.TestCase):
         self.client = self.app.test_client()
         self.key = mock.patch("backend.dao.llm.groq_key", return_value="gsk_test")
         self.key.start()
-        self.client.post("/inscription", data={"email": "lea@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
-        self.client.post("/connexion", data={"email": "lea@test.fr", "password": "motdepasse1"})
+        self.client.post("/inscription", data={"email": "lea@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
+        self.client.post("/connexion", data={"email": "lea@test.fr", "password": "Carnet-Revision-2026"})
 
     def tearDown(self):
         self.key.stop()

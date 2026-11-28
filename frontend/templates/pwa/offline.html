@@ -15,7 +15,8 @@
   <h1>Tu es hors ligne</h1>
   <p>Rivezli a besoin d'une connexion pour afficher ton planning, tes notes et tes révisions. Rien n'est perdu : tout est
     gardé sur ton compte, et reviendra dès que le réseau sera de retour.</p>
-  <p class="actions"><button class="btn btn-lg" type="button" onclick="location.reload()">Réessayer</button></p>
+  <p class="actions"><button class="btn btn-lg" type="button" id="retry">Réessayer</button></p>
 </main>
+<script nonce="{{ csp_nonce() }}">document.getElementById("retry").addEventListener("click", () => location.reload());</script>
 </body>
 </html>

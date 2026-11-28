@@ -113,9 +113,9 @@ class RagAppTests(unittest.TestCase):
 
     def login_as(self, email):
         self.client.post("/deconnexion")
-        self.client.post("/inscription", data={"email": email, "username": email.split("@")[0], "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
-        self.client.post("/connexion", data={"email": email, "password": "motdepasse1"})
+        self.client.post("/inscription", data={"email": email, "username": email.split("@")[0], "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
+        self.client.post("/connexion", data={"email": email, "password": "Carnet-Revision-2026"})
 
     def add_course(self, name="Séries temporelles", text=COURSE, filename="cours.md"):
         self.client.post("/matieres/nouvelle", data={"name": name, "goal": "a_jour", "weekly_hours": "2",

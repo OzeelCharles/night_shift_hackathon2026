@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% from "community/_macros.html" import attachments, file_fields, badge, report_form, staff_tag, muted_notice with context %}
+{% block title %}{{ topic.title }}{% endblock %}
+{% block content %}
+<p class="small"><a href="{{ url_for('community.forum') }}">← Forum</a> ·
+  <a href="{{ url_for('community.forum', categorie=topic.category) }}">{{ category_label }}</a></p>
+<div class="page-head"><h1>{{ topic.title }}</h1></div>
+
+{% for p in posts %}
+<article class="card com-post" id="m{{ p.id }}">
+  <header class="com-post-head">
+    <strong>{{ p.author }}</strong> {{ staff_tag(p) }} {{ badge(p.author_level) }}
+    {% if p.author_school %}<span class="muted small">{{ p.author_school }}</span>{% endif %}
+    <span class="muted small com-date">{{ p.created_at[:10] | datefr }} à {{ p.created_at[11:16] }}</span>
+  </header>
+  <div class="com-body">{{ p.body }}</div>
+  {{ attachments(p.files) }}
+  {% if p.author_id != g.user.id %}{{ report_form(url_for('community.report_post', post_id=p.id), p.reported, limits) }}{% endif %}
+  {% if g.user.role == 'admin' or g.user.is_moderator or g.user.id == p.author_id %}
+  <form method="post" action="{{ url_for('community.delete_post', post_id=p.id) }}" class="inline"
+        data-confirm="{{ 'Supprimer toute la discussion ?' if loop.first else 'Supprimer cette réponse ?' }}">
+    {{ csrf_field() }}<button class="btn-link danger small">Supprimer</button>
+  </form>
+  {% endif %}
+</article>
+{% endfor %}
+
+{% if muted %}{{ muted_notice() }}{% else %}
+<form method="post" action="{{ url_for('community.reply', topic_id=topic.id) }}" enctype="multipart/form-data" class="card com-form" id="fin">
+  {{ csrf_field() }}
+  <h2>Répondre</h2>
+  <label class="visually-hidden" for="reply-body">Ta réponse</label>
+  <textarea id="reply-body" name="body" rows="5" maxlength="{{ limits.BODY_RANGE[1] }}" required placeholder="Ta réponse…"></textarea>
+  {{ file_fields(documents, limits) }}
+  <div class="actions"><button class="btn">Publier la réponse</button></div>
+</form>
+{% endif %}
+{% endblock %}

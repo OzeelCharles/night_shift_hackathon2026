@@ -167,14 +167,83 @@ CREATE TABLE IF NOT EXISTS chat_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_chat_conv_user ON chat_conversations(user_id, updated_at);
 CREATE INDEX IF NOT EXISTS idx_chat_msg_conv ON chat_messages(conversation_id, id);
+-- Communauté : messages privés, forum et fichiers échangés. Les messages et sujets d'un utilisateur
+-- supprimé disparaissent avec lui.
+CREATE TABLE IF NOT EXISTS dm_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    read_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_dm_pair ON dm_messages(sender_id, recipient_id);
+CREATE INDEX IF NOT EXISTS idx_dm_recipient ON dm_messages(recipient_id, read_at);
+CREATE TABLE IF NOT EXISTS forum_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    category TEXT NOT NULL,
+    title TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+    last_activity TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_topics_category ON forum_topics(category, last_activity);
+CREATE TABLE IF NOT EXISTS forum_posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    topic_id INTEGER NOT NULL REFERENCES forum_topics(id) ON DELETE CASCADE,
+    author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_posts_topic ON forum_posts(topic_id);
+CREATE TABLE IF NOT EXISTS shared_files (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    stored_path TEXT NOT NULL,
+    size INTEGER NOT NULL DEFAULT 0,
+    message_id INTEGER REFERENCES dm_messages(id) ON DELETE CASCADE,
+    post_id INTEGER REFERENCES forum_posts(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_files_message ON shared_files(message_id);
+CREATE INDEX IF NOT EXISTS idx_files_post ON shared_files(post_id);
+-- Modération : un signalement garde une copie du contenu (il reste traitable si l'auteur le supprime).
+-- Il survit à la suppression du contenu, de l'auteur et de celui qui signale.
+CREATE TABLE IF NOT EXISTS reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    target_type TEXT NOT NULL CHECK (target_type IN ('post', 'message')),
+    target_id INTEGER NOT NULL,
+    author_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    content TEXT NOT NULL DEFAULT '',
+    context TEXT NOT NULL DEFAULT '',
+    topic_id INTEGER,
+    reason TEXT NOT NULL,
+    details TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+    decision TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    handled_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    handled_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_reports_status ON reports(status, target_type, target_id);
+-- Un utilisateur ne peut pas signaler deux fois le même contenu tant que le premier signalement est ouvert.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_reports_once ON reports(reporter_id, target_type, target_id) WHERE status = 'open';
 """
+
+
+BUSY_TIMEOUT_S = 10
 
 
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"])
+        # BDD-03 : attente de 10 s au plus sur un verrou d'écriture (busy_timeout) plutôt que « database is locked »
+        g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=BUSY_TIMEOUT_S)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
+        g.db.execute("PRAGMA busy_timeout = 10000")  # = BUSY_TIMEOUT_S
     return g.db
 
 
@@ -193,6 +262,8 @@ def close_db(exc=None):
 def init_app(app):
     app.teardown_appcontext(close_db)
     with app.app_context():
+        # BDD-03 : WAL (lectures pendant une écriture) ; réglage enregistré dans le fichier de la base
+        get_db().execute("PRAGMA journal_mode = WAL")
         get_db().executescript(SCHEMA)
         migrate(get_db())
 
@@ -233,6 +304,12 @@ def rolled_back():
         db.execute("RELEASE simulation")
 
 
+def rollback() -> None:
+    """Annule les écritures de la requête en cours (rien n'est enregistré)."""
+    if "db" in g:
+        g.db.rollback()
+
+
 def commit() -> None:
     """Validation anticipée (avant de lancer un traitement en arrière-plan qui lit la base)."""
     get_db().commit()
@@ -253,7 +330,9 @@ MIGRATIONS = {
               # informations personnelles facultatives (préremplissent lettres de motivation et stages)
               **{c: "TEXT NOT NULL DEFAULT ''" for c in (
                   "full_name", "birth_date", "phone", "home_city", "study_city", "driving_license",
-                  "wants_internship", "field", "program", "languages", "website")}},
+                  "wants_internship", "field", "program", "languages", "website")},
+              # modération de la communauté : nommé par un administrateur ; suspendu = lecture seule
+              "is_moderator": "INTEGER NOT NULL DEFAULT 0", "community_muted": "INTEGER NOT NULL DEFAULT 0"},
     "subjects": {"resources_status": "TEXT NOT NULL DEFAULT 'ok'", "resources_sig": "TEXT NOT NULL DEFAULT ''",
                  # date d'examen choisie par l'utilisateur (prioritaire) et origine de la date retenue :
                  # manuel, agenda (épreuve de l'emploi du temps) ou derniere_seance (par défaut)
@@ -296,4 +375,61 @@ def migrate(db: sqlite3.Connection):
         db.execute("UPDATE subjects SET exam_manual = exam_date, exam_source = 'manuel' "
                    "WHERE exam_source = '' AND exam_date IS NOT NULL")
         db.execute("PRAGMA user_version = 1")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 2:
+        # SEC-03 — migration 2, additive et réversible :
+        #  - users.session_version : compteur incrémenté au changement de mot de passe ou à la désactivation ;
+        #    une session dont la version diffère est refusée (annulation : ALTER TABLE users DROP COLUMN
+        #    session_version) ;
+        #  - auth_attempts : tentatives de connexion et d'inscription récentes, pour la limitation par compte et
+        #    par IP (données éphémères, clés hachées ; annulation : DROP TABLE auth_attempts).
+        add_columns(db, {"users": {"session_version": "INTEGER NOT NULL DEFAULT 0"}})
+        db.execute("CREATE TABLE IF NOT EXISTS auth_attempts (kind TEXT NOT NULL, key TEXT NOT NULL, at REAL NOT NULL)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_auth_attempts ON auth_attempts(kind, key, at)")
+        db.execute("PRAGMA user_version = 2")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 3:
+        # SEC-08 — migration 3, additive et réversible (DROP TABLE llm_usage) : générations par l'IA
+        # comptées par utilisateur et par jour, pour le quota quotidien.
+        db.execute("CREATE TABLE IF NOT EXISTS llm_usage (user_id INTEGER NOT NULL REFERENCES users(id) "
+                   "ON DELETE CASCADE, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))")
+        db.execute("PRAGMA user_version = 3")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 4:
+        # SEC-10 — migration 4, additive et réversible (DROP TABLE audit_log) : actions des administrateurs.
+        # actor_id sans clé étrangère : la trace survit à la suppression du compte de l'administrateur.
+        db.execute("CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                   "at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), actor_id INTEGER, action TEXT NOT NULL, "
+                   "target_id INTEGER, target_email TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '{}')")
+        db.execute("PRAGMA user_version = 4")
+    # BDD-01 — contraintes d'intégrité. SQLite ne sait pas ajouter un CHECK à une table existante : ce sont des
+    # déclencheurs (CREATE TRIGGER IF NOT EXISTS, rejoués à chaque démarrage, sans reconstruire les tables ni
+    # toucher aux données). Annulation : DROP TRIGGER <nom> ; DROP INDEX idx_users_email_nocase.
+    db.executescript(CONSTRAINTS)
+    try:  # une adresse ne peut exister qu'une fois, quelle que soit la casse
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_nocase ON users(lower(email))")
+    except sqlite3.IntegrityError:  # base ancienne avec des doublons de casse : à fusionner à la main
+        current_app.logger.warning("BDD-01 : adresses e-mail en double (casse) ; index unique non créé")
     db.commit()
+
+
+def _guard(table: str, name: str, condition: str, message: str) -> str:
+    """Déclencheurs qui refusent (IntegrityError) une ligne insérée ou modifiée qui ne respecte pas `condition`."""
+    return "".join(
+        f"CREATE TRIGGER IF NOT EXISTS chk_{table}_{name}_{op[:3].lower()} BEFORE {op} ON {table} "
+        f"WHEN NOT ({condition}) BEGIN SELECT RAISE(ABORT, '{message}'); END;\n"
+        for op in ("INSERT", "UPDATE"))
+
+
+# Dates et heures ISO valides, entre 1900 et 2200, fin strictement après le début
+_PERIOD = ("julianday(new.start) IS NOT NULL AND julianday(new.end) IS NOT NULL "
+           "AND julianday(new.end) > julianday(new.start) "
+           "AND substr(new.start, 1, 4) BETWEEN '1900' AND '2200' AND substr(new.end, 1, 4) BETWEEN '1900' AND '2200'")
+
+CONSTRAINTS = "".join((
+    _guard("grades", "values", "new.out_of > 0 AND new.out_of <= 1000 AND new.value >= 0 AND new.value <= new.out_of "
+           "AND new.coefficient > 0 AND new.coefficient <= 100", "note hors bornes"),
+    _guard("events", "period", _PERIOD, "créneau invalide"),
+    _guard("sessions", "period", _PERIOD, "séance invalide"),
+    _guard("preferences", "bounds", "new.session_minutes BETWEEN 10 AND 240 AND new.break_minutes BETWEEN 0 AND 60 "
+           "AND new.daily_max_minutes BETWEEN 30 AND 960 AND new.horizon_weeks BETWEEN 1 AND 26 "
+           "AND new.buffer_minutes BETWEEN 0 AND 240", "préférences hors bornes"),
+    _guard("users", "active", "new.is_active IN (0, 1)", "is_active invalide"),
+))

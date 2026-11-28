@@ -139,6 +139,11 @@ def _ask_groq(course: list[dict], task: str, schema: dict) -> dict:
 def _ask_claude(course: list[dict], task: str, schema: dict) -> dict:
     import anthropic
 
+    try:
+        groq.charge_quota()  # même quota quotidien que les appels à Groq
+    except groq.GroqError as e:
+        raise AIError(str(e)) from e
+
     client = anthropic.Anthropic(api_key=api_key())
     try:
         with client.beta.messages.stream(
@@ -177,6 +182,40 @@ def _obj(props: dict) -> dict:
 
 STR = {"type": "string"}
 
+# ---------------------------------------------------------------- validation stricte des réponses (SEC-08)
+# Longueur maximale de chaque champ texte : une réponse qui dépasse, ou dont la forme diffère du schéma,
+# est rejetée en bloc (AIError) et l'appelant retombe sur le générateur par règles.
+QUIZ_LIMITS = {"chapter": 200, "prompt": 1_500, "quote": 1_500, "explanation": 3_000, "options": 400}
+EXERCISE_LIMITS = {"title": 200, "chapter": 200, "statement": 6_000, "solution": 8_000}
+NOTEBOOK_LIMITS = {"title": 200, "intro": 6_000, "setup_code": 8_000}
+NOTEBOOK_EXERCISE_LIMITS = {"title": 200, "instructions": 6_000, "starter_code": 8_000, "solution_code": 8_000}
+MAX_ITEMS = 60  # éléments au plus dans une liste de réponse (au-delà : réponse hors consigne)
+MAX_OPTIONS = 12
+
+
+def _valid_fields(obj, limits: dict, what: str) -> dict:
+    """Vérifie qu'`obj` est un objet dont chaque champ attendu est une chaîne (ou, pour « options », une liste
+    de chaînes) de longueur bornée. Lève AIError sinon."""
+    if not isinstance(obj, dict):
+        raise AIError(f"Réponse de {name()} hors format ({what}).")
+    for key, limit in limits.items():
+        value = obj.get(key)
+        if key == "options":
+            if (not isinstance(value, list) or not 2 <= len(value) <= MAX_OPTIONS
+                    or not all(isinstance(o, str) and len(o) <= limit for o in value)):
+                raise AIError(f"Réponse de {name()} hors format (propositions).")
+        elif not isinstance(value, str) or len(value) > limit:
+            raise AIError(f"Réponse de {name()} hors format ({what} : {key}).")
+    return obj
+
+
+def _valid_items(out, key: str, limits: dict) -> list[dict]:
+    """Liste `out[key]` d'objets conformes à `limits`, ou AIError."""
+    items = out.get(key) if isinstance(out, dict) else None
+    if not isinstance(items, list) or not items or len(items) > MAX_ITEMS:
+        raise AIError(f"Réponse de {name()} hors format ({key}).")
+    return [_valid_fields(item, limits, key) for item in items]
+
 
 def _scope(chapters: list[str], chapter: str, difficulty: str) -> str:
     where = f"le chapitre « {chapter} »" if chapter else "l'ensemble du cours"
@@ -205,11 +244,13 @@ def quiz(course, chapters: list[str], chapter: str, difficulty: str, n: int, n_o
     schema = _obj({"questions": {"type": "array", "items": _obj({
         "chapter": STR, "prompt": STR, "quote": STR, "options": {"type": "array", "items": STR}, "explanation": STR,
     })}})
+    raw = _valid_items(_ask(course, task, schema), "questions", QUIZ_LIMITS)
     out = []
-    for q in _ask(course, task, schema)["questions"]:
+    for q in raw:
         options = [o.strip() for o in q["options"] if o.strip()]
-        if len(options) < 2 or len(set(options)) != len(options):
-            continue
+        if len(set(options)) != len(options) or len(options) < n_options:
+            continue  # la consigne demande exactement n_options propositions distinctes
+        options = options[:n_options]  # bonne réponse en premier, puis les premières fausses
         right = options[0]
         rng.shuffle(options)
         out.append({"type": "ia", "chapter": q["chapter"] if q["chapter"] in chapters else (chapter or "Vue d'ensemble"),
@@ -228,7 +269,8 @@ def exercises(course, chapters: list[str], chapter: str, difficulty: str, n: int
     )
     schema = _obj({"exercises": {"type": "array", "items": _obj(
         {"title": STR, "chapter": STR, "statement": STR, "solution": STR})}})
-    return [e for e in _ask(course, task, schema)["exercises"] if e["statement"].strip()][:n]
+    return [e for e in _valid_items(_ask(course, task, schema), "exercises", EXERCISE_LIMITS)
+            if e["statement"].strip()][:n]
 
 
 # ---------------------------------------------------------------- notebooks
@@ -247,9 +289,11 @@ def notebook(course, subject_name: str, chapters: list[str], chapter: str, diffi
     schema = _obj({"title": STR, "intro": STR, "setup_code": STR, "exercises": {"type": "array", "items": _obj(
         {"title": STR, "instructions": STR, "starter_code": STR, "solution_code": STR})}})
     nb = _ask(course, task, schema)
+    _valid_fields(nb, NOTEBOOK_LIMITS, "notebook")
+    nb["exercises"] = _valid_items(nb, "exercises", NOTEBOOK_EXERCISE_LIMITS)
     if not nb["exercises"]:
-        raise AIError("Claude n'a proposé aucun exercice pour ce notebook.")
-    return nb
+        raise AIError(f"{name()} n'a proposé aucun exercice pour ce notebook.")
+    return {k: nb[k] for k in (*NOTEBOOK_LIMITS, "exercises")}
 
 
 def to_ipynb(nb: dict) -> str:

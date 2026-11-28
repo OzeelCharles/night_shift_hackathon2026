@@ -41,8 +41,8 @@ class StagesRoutesTests(unittest.TestCase):
                                "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
                                "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up")})
         self.client = self.app.test_client()
-        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "licence", "school": "Université Lyon 3"})
+        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "licence", "school": "Université Lyon 3"})
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -79,8 +79,8 @@ class StagesRoutesTests(unittest.TestCase):
     def test_offer_read_from_link(self):
         self.app.config["ENABLE_WEB"] = True
         with mock.patch.object(service, "_fetch", wraps=service._fetch) as fetch, \
-                mock.patch("backend.dao.web.secure_session") as session:
-            session.return_value.get.return_value = mock.Mock(status_code=200, text=JOB_PAGE)
+                mock.patch("backend.dao.safe_http.get") as get:  # tout lien d'utilisateur passe par safe_http
+            get.return_value = mock.Mock(status_code=200, text=JOB_PAGE)
             self.client.post("/stages/offres", data={"url": "https://www.welcometothejungle.com/fr/jobs/1"})
             fetch.assert_called_once()
         offer = self.q("SELECT * FROM stg_offers")[0]
@@ -151,8 +151,8 @@ class StagesRoutesTests(unittest.TestCase):
         self.client.post("/stages/lettres", data={"title": "Graphiste"})
         lid = self.q("SELECT id FROM stg_letters")[0]["id"]
         self.client.post("/deconnexion")
-        self.client.post("/inscription", data={"email": "b@test.fr", "username": "Bobby", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "b@test.fr", "username": "Bobby", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
         self.assertEqual(self.client.get(f"/stages/lettres/{lid}").status_code, 404)
 
 

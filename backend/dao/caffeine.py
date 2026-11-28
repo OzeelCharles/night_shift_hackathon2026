@@ -1,5 +1,5 @@
 """Prises de caféine (boissons énergisantes, café…) : une ligne par boisson consommée."""
-from .db import execute, query
+from .db import execute, one, query
 
 
 def add(user_id, label: str, mg: int, taken_at_iso: str) -> int:
@@ -10,6 +10,10 @@ def add(user_id, label: str, mg: int, taken_at_iso: str) -> int:
 def since(user_id, from_iso: str):
     return query("SELECT * FROM caffeine_intakes WHERE user_id = ? AND taken_at >= ? ORDER BY taken_at",
                  user_id, from_iso)
+
+
+def get_owned(intake_id, user_id):
+    return one("SELECT * FROM caffeine_intakes WHERE id = ? AND user_id = ?", intake_id, user_id)
 
 
 def delete(intake_id, user_id) -> None:

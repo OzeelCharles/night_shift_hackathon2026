@@ -127,8 +127,8 @@ class AppTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def register(self, email="e@test.fr", level="licence"):
-        self.client.post("/inscription", data={"email": email, "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": level, "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": email, "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": level, "school": "ENSAI"})
 
     def rows(self):
         with self.app.app_context():
@@ -200,7 +200,7 @@ class AppTests(unittest.TestCase):
         self.client.post(f"/cafeine/{intake_id}/supprimer")
         self.assertEqual(len(self.rows()), 1, "on ne supprime pas la prise d'un autre")
         self.client.post("/deconnexion")
-        self.client.post("/connexion", data={"email": "e@test.fr", "password": "motdepasse1"})
+        self.client.post("/connexion", data={"email": "e@test.fr", "password": "Carnet-Revision-2026"})
         r = self.client.post(f"/cafeine/{intake_id}/supprimer", follow_redirects=True)
         self.assertIn("Prise supprimée", r.get_data(as_text=True))
         self.assertEqual(self.rows(), [])

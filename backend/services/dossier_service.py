@@ -10,7 +10,7 @@ from datetime import date
 
 from backend.business import agenda_analysis, matching
 from backend.business import grades as rules
-from backend.business.text import date_fr, number_fr
+from backend.business.text import date_fr, number_fr, parse_id
 from backend.dao import grades as dao
 from backend.dao import subjects as subjects_dao
 
@@ -63,7 +63,7 @@ def add(user_id, form) -> Report:
     if not course:
         return Report().error("Choisis la matière de la note.")
     subject_id = form.get("subject_id") or ""
-    subject_id = owned(subjects_dao.get_owned(int(subject_id), user_id))["id"] if subject_id.isdigit() else None
+    subject_id = owned(subjects_dao.get_owned(parse_id(subject_id) or 0, user_id))["id"] if subject_id.isdigit() else None
     data, errors = rules.validate(form)
     if errors:
         report = Report()

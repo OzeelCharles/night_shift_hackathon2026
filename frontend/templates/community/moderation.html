@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% block title %}Modération{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Modération</h1>
+  <p class="muted">{{ queue | length }} contenu{{ 's' if queue | length > 1 }} à examiner. Une décision s'applique à tous les signalements du même message.</p></div></div>
+
+{% for item in queue %}
+{% set r = item.report %}
+<article class="card com-report-card" id="r{{ r.id }}">
+  <header class="com-post-head">
+    <span class="tag tag-hot">{{ item.all | length }} signalement{{ 's' if item.all | length > 1 }}</span>
+    <span class="tag">{{ 'Forum' if r.target_type == 'post' else 'Message privé' }}</span>
+    <span class="small muted">{{ r.context }}</span>
+  </header>
+  <p class="small">Écrit par <strong>{{ r.author or 'un compte supprimé' }}</strong>
+    {% if r.author_role == 'admin' %}<span class="tag tag-hot">Admin</span>{% elif r.author_is_moderator %}<span class="tag">Modérateur</span>{% endif %}
+    {% if r.author_muted %}<span class="tag">déjà suspendu</span>{% endif %}</p>
+  <blockquote class="com-quote">{{ r.content }}</blockquote>
+  {% if r.target_type == 'post' and r.topic_id %}<p class="small"><a href="{{ url_for('community.topic', topic_id=r.topic_id) }}#m{{ r.target_id }}">Voir dans la discussion</a></p>{% endif %}
+  <ul class="com-reasons">
+    {% for x in item.all %}
+    <li><strong>{{ reasons.get(x.reason, x.reason) }}</strong> <span class="muted small">par {{ x.reporter or 'un compte supprimé' }}, le {{ x.created_at[:10] | datefr }}</span>
+      {% if x.details %}<div class="small">« {{ x.details }} »</div>{% endif %}</li>
+    {% endfor %}
+  </ul>
+  <form method="post" action="{{ url_for('community.decide', report_id=item.id) }}" class="com-form">
+    {{ csrf_field() }}
+    <label>Note interne (facultatif) <input name="note" maxlength="{{ limits.NOTE_MAX }}"></label>
+    <div class="actions">
+      <button class="btn btn-ghost" name="decision" value="dismiss">{{ decisions.dismiss }}</button>
+      <button class="btn btn-danger" name="decision" value="remove" data-confirm-click="Supprimer définitivement ce contenu ?">{{ decisions.remove }}</button>
+      {% if item.may_mute %}
+      <button class="btn btn-danger" name="decision" value="remove_mute" data-confirm-click="Supprimer le contenu et suspendre son auteur ?">{{ decisions.remove_mute }}</button>
+      {% endif %}
+    </div>
+  </form>
+</article>
+{% else %}
+<div class="empty-state"><p>Aucun signalement à traiter. 🎉</p></div>
+{% endfor %}
+
+<div class="grid2">
+  <section class="card" id="suspendus">
+    <h2>Membres suspendus</h2>
+    {% for m in muted %}
+    <div class="com-row"><span><strong>{{ m.username }}</strong> <span class="small muted">{{ m.school }}</span></span>
+      <form method="post" action="{{ url_for('community.restore', user_id=m.id) }}" class="inline">
+        {{ csrf_field() }}<button class="btn btn-ghost btn-sm">Rétablir</button></form></div>
+    {% else %}<p class="muted">Personne.</p>{% endfor %}
+  </section>
+  <section class="card">
+    <h2>Modérateurs</h2>
+    {% for m in moderators %}<div><strong>{{ m.username }}</strong> <span class="small muted">{{ m.school }}</span></div>
+    {% else %}<p class="muted">Aucun modérateur nommé.</p>{% endfor %}
+    {% if g.user.role == 'admin' %}<p class="small"><a href="{{ url_for('admin.index') }}">Nommer ou retirer un modérateur</a> (administration).</p>{% endif %}
+  </section>
+</div>
+
+<section class="card">
+  <h2>Décisions récentes</h2>
+  {% for item in handled %}
+  {% set r = item.report %}
+  <div class="com-handled">
+    <span class="tag">{{ decisions.get(r.decision, r.decision) }}</span>
+    <span class="small">{{ r.author or 'compte supprimé' }} · {{ reasons.get(r.reason, r.reason) }}</span>
+    <span class="small muted">par {{ r.handler or '—' }}, le {{ (r.handled_at or '')[:10] | datefr }}{% if r.note %} · « {{ r.note }} »{% endif %}</span>
+  </div>
+  {% else %}<p class="muted">Aucune décision pour l'instant.</p>{% endfor %}
+</section>
+{% endblock %}

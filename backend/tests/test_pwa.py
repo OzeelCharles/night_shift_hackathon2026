@@ -150,7 +150,7 @@ class PwaTests(unittest.TestCase):
         for path in ("/", "/connexion", "/sw.js", "/static/style.css"):
             h = self.client.get(path).headers
             self.assertEqual(h["X-Content-Type-Options"], "nosniff", path)
-            self.assertEqual(h["X-Frame-Options"], "SAMEORIGIN", path)
+            self.assertEqual(h["X-Frame-Options"], "DENY", path)
             self.assertIn("Referrer-Policy", h, path)
             self.assertNotIn("Strict-Transport-Security", h, "HSTS seulement en production")
 

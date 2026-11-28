@@ -9,7 +9,7 @@
     <p class="small muted">{% if chapter %}Chapitre « {{ chapter }} ». {% endif %}Générées à partir de tes supports de cours. Vérifie-les avec ton cours : elles sont extraites automatiquement.</p>
   </div>
   <div class="actions rv-noprint">
-    <button class="btn btn-ghost" type="button" onclick="document.querySelectorAll('.rv-card-flip').forEach(d => d.open = true); window.print()">Imprimer</button>
+    <button class="btn btn-ghost" type="button" data-print-cards>Imprimer</button>
     <a class="btn btn-ghost" href="{{ url_for('revision.hub', subject_id=s.id) }}#fiches">Retour</a>
   </div>
 </div>

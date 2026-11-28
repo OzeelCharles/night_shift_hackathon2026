@@ -35,8 +35,8 @@ class ProfilePageTests(unittest.TestCase):
                                "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
                                "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up")})
         self.client = self.app.test_client()
-        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "licence", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "licence", "school": "ENSAI"})
 
     def tearDown(self):
         self.tmp.cleanup()

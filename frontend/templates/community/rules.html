@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% block title %}Règles de la communauté{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Règles de la communauté</h1>
+  <p class="muted">Un espace d'entraide entre élèves et étudiants : chacun doit s'y sentir à l'aise.</p></div></div>
+<ol class="card com-rules">
+  {% for title, text in rules %}<li><strong>{{ title }}.</strong> {{ text }}</li>{% endfor %}
+</ol>
+<section class="card">
+  <h2>Un message pose problème ?</h2>
+  <p>Utilise le bouton <strong>Signaler</strong> sous le message (forum ou message privé reçu). Raisons possibles :</p>
+  <ul>{% for label in reasons.values() %}<li>{{ label }}</li>{% endfor %}</ul>
+  <p>Les modérateurs examinent le signalement. Ils peuvent le rejeter, supprimer le message, ou suspendre l'auteur
+    (il garde la lecture, mais ne peut plus publier ni écrire). Les abus de signalement sont aussi sanctionnés.</p>
+</section>
+{% endblock %}

@@ -33,6 +33,7 @@
    hidden_if : entrée masquée selon le compte (ex. Stages pour qui ne cherche pas de stage). #}
 {% set ep = request.endpoint or '' %}
 {% for item in nav_items if item.section == section and (not item.admin or (g.user and g.user.role == 'admin'))
+   and (not item.moderator or (g.user and (g.user.role == 'admin' or g.user.is_moderator)))
      and not (item.hidden_if and g.user and g.user[item.hidden_if[0]] == item.hidden_if[1]) %}
 {% set prefix = item.endpoint.split('.')[0] ~ '.' %}
 <a href="{{ url_for(item.endpoint) }}" {% if item.admin %}class="admin-link"{% endif %}
