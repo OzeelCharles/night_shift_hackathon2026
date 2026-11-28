@@ -48,9 +48,64 @@ def site_name(url: str) -> str:
     return host
 
 
+# ---------------------------------------------------------------- encodage des pages d'offres
+# Un texte UTF-8 lu comme Latin-1 ou Windows-1252 devient « Ã© » au lieu de « é », « â€™ » au lieu de « ’ »
+# (« mojibake »). Une séquence abîmée = un caractère de tête (Â à ô) suivi de 1 à 3 octets de continuation,
+# lus comme caractères Latin-1 (U+0080 à U+00BF) ou leurs équivalents Windows-1252 (€, ™, ’, –…).
+_CP1252_CONT = "€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ"
+_MOJIBAKE = re.compile(f"[Â-ô][\u0080-¿{re.escape(_CP1252_CONT)}]{{1,3}}")
+
+
+def _as_bytes(run: str) -> bytes | None:
+    out = bytearray()
+    for ch in run:
+        try:
+            out += ch.encode("cp1252")
+        except UnicodeEncodeError:
+            if ord(ch) > 0xFF:
+                return None
+            out.append(ord(ch))   # octets 0x80-0x9F sans équivalent Windows-1252
+    return bytes(out)
+
+
+def _fix_run(m: re.Match) -> str:
+    raw = _as_bytes(m.group(0))
+    try:
+        return raw.decode("utf-8") if raw else m.group(0)
+    except UnicodeDecodeError:
+        return m.group(0)
+
+
+def fix_mojibake(text: str) -> str:
+    """Répare « Stage dâ€™Ã©tÃ© » en « Stage d’été ». Un texte correct reste identique : seules les séquences
+    qui redonnent de l'UTF-8 valide sont remplacées (deux passes pour un texte encodé deux fois)."""
+    text = str(text or "")
+    for _ in range(2):
+        fixed = _MOJIBAKE.sub(_fix_run, text)
+        if fixed == text:
+            break
+        text = fixed
+    return text
+
+
+def decode_page(content: bytes, content_type: str = "", apparent: str | None = None) -> str:
+    """Texte d'une page web : charset annoncé par le serveur, sinon celui de la balise <meta>, sinon UTF-8.
+    (Sans charset annoncé, `requests` suppose Latin-1, d'où les intitulés illisibles.)"""
+    declared = re.search(r"charset=[\"']?([\w-]+)", content_type or "", re.I)
+    meta = re.search(rb"<meta[^>]+charset=[\"']?([\w-]+)", content[:4096], re.I)
+    candidates = [declared.group(1) if declared else None, meta.group(1).decode("ascii", "ignore") if meta else None,
+                  "utf-8"]
+    for enc in filter(None, candidates):
+        try:
+            return content.decode(enc)
+        except (LookupError, UnicodeDecodeError):
+            continue
+    return content.decode(apparent or "utf-8", errors="replace")
+
+
 def _text(v) -> str:
     v = re.sub(r"<(br|/p|/li|/h\d)\s*/?>", "\n", str(v or ""), flags=re.I)
-    v = html.unescape(re.sub(r"<[^>]+>", " ", v))
+    v = fix_mojibake(html.unescape(re.sub(r"<[^>]+>", " ", v)))
     return "\n".join(" ".join(line.split()) for line in v.splitlines() if line.strip())
 
 

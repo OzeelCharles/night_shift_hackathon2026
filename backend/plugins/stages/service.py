@@ -62,7 +62,14 @@ def skill_suggestions(field: str, current: str) -> list[str]:
 
 
 def _clean(v, limit: int) -> str:
-    return "\n".join(" ".join(line.split()) for line in str(v or "").splitlines() if line.strip())[:limit]
+    v = sources.fix_mojibake(v)   # texte recopié depuis une page mal décodée
+    return "\n".join(" ".join(line.split()) for line in v.splitlines() if line.strip())[:limit]
+
+
+def repair_saved_texts() -> int:
+    """Répare les offres et lettres déjà enregistrées avec un texte mal décodé (« Ã© »). Renvoie le nombre de
+    lignes corrigées ; un texte correct n'est jamais modifié."""
+    return store.repair_texts(sources.fix_mojibake)
 
 
 def _owned(row):
@@ -119,7 +126,10 @@ def _fetch(url: str) -> dict | None:
         r = web.secure_session().get(url, headers=web.BROWSER, timeout=10)
     except requests.RequestException:
         return None
-    return sources.parse_offer(r.text) if r.status_code == 200 else None
+    if r.status_code != 200:
+        return None
+    # décodé à partir des octets : sans charset annoncé, r.text supposerait Latin-1 (« Ã© » au lieu de « é »)
+    return sources.parse_offer(sources.decode_page(r.content, r.headers.get("Content-Type", ""), r.apparent_encoding))
 
 
 def add_offer(user, form) -> Report:
