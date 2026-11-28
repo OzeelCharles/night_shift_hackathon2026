@@ -12,33 +12,43 @@ from . import flash_report
 bp = Blueprint("main", __name__)
 
 
-# Vitrine de la page d'accueil : (route de la fonctionnalité, icône, titre, texte, couleur de surligneur 0-5).
-# Une carte n'apparaît que si la fonctionnalité est activée (backend/config.py) : retirer une fonctionnalité,
-# ou en brancher une nouvelle (ajouter sa ligne ici), met la page à jour sans autre changement.
+# Vitrine de la page d'accueil : (route de la fonctionnalité, icône, titre, texte, la carte mène-t-elle à une page ?).
+# Neuf outils = une grille de 3 × 3. Une carte n'apparaît que si la fonctionnalité est activée (backend/config.py).
+# Pour en ajouter un dixième, en retirer un autre : la grille doit rester à 9 cartes, sinon une ligne reste incomplète.
 SHOWCASE = [
+    ("main.dashboard", "☀️", "Ta journée en un coup d'œil",
+     "Ce qui t'attend aujourd'hui, les prochains jours et tes matières, sur une seule page.", True),
     ("planning.week", "📅", "Un planning qui tient dans ta semaine",
-     "Importe ton agenda ou saisis tes cours, ajoute tes matières : Rivezli répartit tes révisions jusqu'à l'examen "
-     "et se réorganise après un imprévu.", 0),
+     "Rivezli répartit tes révisions jusqu'à l'examen et se réorganise après un imprévu.", True),
+    ("agenda.index", "🗓️", "Ton emploi du temps, importé",
+     "Importe ton agenda ou saisis tes cours : chaque créneau est rattaché tout seul à la bonne matière.", True),
     ("revision.index", "🧠", "Un atelier de révision",
-     "Fiches, QCM notés sur 20, exercices corrigés et carnet de notes, à partir de tes propres cours.", 4),
+     "Fiches, QCM notés sur 20, exercices corrigés et carnet de notes, à partir de tes propres cours.", True),
     ("dossier.index", "📊", "Ton dossier scolaire",
-     "Tes notes, tes moyennes et ta progression matière par matière. Elles restent privées : toi seul les vois.", 1),
+     "Tes notes, tes moyennes et ta progression matière par matière. Elles restent privées : toi seul les vois.", True),
+    ("assistant.conversation", "✨", "Un assistant sur chaque page",
+     "Pose une question sur tes cours, ton planning ou tes notes, joins une photo ou un PDF : il te répond.", False),
     ("campus.index", "🏛️", "La BU et le resto U",
-     "L'affluence de la bibliothèque de ton école et des restos U autour de toi, avec le menu du jour.", 3),
+     "L'affluence de la bibliothèque de ton école et des restos U autour de toi, avec le menu du jour.", True),
     ("stages.index", "💼", "Ta recherche de stage",
-     "Des recherches prêtes à l'emploi sur les grands sites, le suivi des offres repérées et des lettres de motivation.", 5),
-    ("community.index", "💬", "La communauté",
-     "Un forum d'entraide (exercices, concours, orientation), des messages privés et le partage de polys et de diapos.", 2),
+     "Des recherches prêtes à l'emploi sur les grands sites, le suivi des offres repérées et des lettres de motivation.", True),
     ("caffeine.index", "☕", "Le compteur de caféine",
-     "Café, boissons énergisantes : suis ta dose du jour et ce qu'il en reste au coucher, pour réviser sans te cramer.", 0),
+     "Café, boissons énergisantes : suis ta dose du jour et ce qu'il en reste au coucher, pour réviser sans te cramer.", True),
 ]
+
+
+def _logo_color(position):
+    """Jaune, menthe ou rose (0, 1, 2) : décalés d'une teinte à chaque ligne de 3, aucune couleur ne se répète
+    dans une même ligne ni dans une même colonne."""
+    return (position + position // 3) % 3
 
 
 @bp.route("/")
 def index():
     """Page d'accueil de Rivezli : présentation des fonctionnalités pour les étudiants (frontend/templates/home.html)."""
-    features = [dict(endpoint=e, icon=i, title=t, text=x, hl=c) for e, i, t, x, c in SHOWCASE
-                if e in current_app.view_functions]
+    shown = [row for row in SHOWCASE if row[0] in current_app.view_functions]
+    features = [dict(endpoint=e, icon=i, title=t, text=x, link=link, hl=_logo_color(n))
+                for n, (e, i, t, x, link) in enumerate(shown)]
     donation_url = (current_app.config.get("DONATION_URL") or "").strip()
     return render_template("home.html", features=features,
                            donation_url=donation_url if donation_url.startswith("https://") else None)

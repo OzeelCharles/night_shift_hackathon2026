@@ -145,9 +145,10 @@ class HomeTests(_Base):
         self.assertIn('href="/inscription"', top, "« Créer un compte » en haut à droite")
         self.assertLess(top.index("Se connecter"), top.index("Créer un compte"))
         self.assertIn("topbar-guest", top)
-        for title in ("Un planning qui tient dans ta semaine", "Un atelier de révision", "Ton dossier scolaire",
+        for title in ("Ta journée en un coup d'œil", "Un planning qui tient dans ta semaine", "Ton emploi du temps, importé",
+                      "Un atelier de révision", "Ton dossier scolaire", "Un assistant sur chaque page",
                       "La BU et le resto U", "Ta recherche de stage", "Le compteur de caféine"):
-            self.assertIn(title, page)
+            self.assertIn(title, __import__("html").unescape(page))
         self.assertIn('class="feature-body"', page)
         self.assertNotIn('<a class="feature-body"', page, "un visiteur ne voit pas des liens qui le renverraient à la connexion")
         after_features = page[page.index('id="cta-title"'):]
@@ -158,14 +159,29 @@ class HomeTests(_Base):
     def test_only_enabled_features_are_shown(self):
         page = self.client.get("/").get_data(as_text=True)
         self.assertNotIn("La communauté", page, "la carte n'apparaît que si la fonctionnalité est activée")
-        self.assertEqual(page.count('class="feature hl-'), len([f for f in self.app.extensions["features"] if f.name in
-                                                              ("planning", "revision", "dossier", "campus", "stages", "cafeine")]))
+        self.assertEqual(page.count('class="feature hl-'), 9, "neuf outils : une grille de 3 × 3")
+
+    def test_tools_are_laid_out_3_by_3_with_the_three_logo_colors(self):
+        import re
+        page = self.client.get("/").get_data(as_text=True)
+        hues = [int(h) for h in re.findall(r'class="feature hl-(\d)', page)]
+        grid = [hues[i:i + 3] for i in range(0, 9, 3)]
+        for row in grid:
+            self.assertEqual(sorted(row), [0, 1, 2], f"une ligne a les trois teintes : {grid}")
+        for col in zip(*grid):
+            self.assertEqual(sorted(col), [0, 1, 2], f"une colonne a les trois teintes : {grid}")
+        css = open(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "static", "style.css"), encoding="utf-8").read()
+        self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }   /* 3 × 3 */", css)
+        for logo_color in ("#fcd464", "#ace4c4", "#fc9cc4"):
+            self.assertIn(logo_color, css, "surligneurs aux couleurs du logo")
 
     def test_logged_in_user_gets_links_and_dashboard_shortcut(self):
         self.register()
         page = self.client.get("/").get_data(as_text=True)
         self.assertIn('<a class="feature-body" href="/campus/"', page)
         self.assertIn('<a class="feature-body" href="/dossier/"', page)
+        self.assertEqual(page.count('<a class="feature-body"'), 8, "huit cartes mènent à une page")
+        self.assertIn("Un assistant sur chaque page", page, "la carte de l'assistant n'est pas un lien : il est dans la bulle")
         self.assertIn("Aller à mon tableau de bord", page)
         self.assertNotIn("Créer mon compte", page)
         self.assertNotIn("topbar-guest", self.top(page))

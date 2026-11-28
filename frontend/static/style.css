@@ -1,5 +1,6 @@
 /* Rivezli : un carnet qui se remplit tout seul.
-   Fond brume lilas, feuilles blanches sans bordure, encre stylo bille pour les liens, surligneurs pour classer.
+   Fond crème rosé, feuilles blanches sans bordure, accent framboise pour les liens ; les surligneurs jaune, menthe
+   et rose reprennent les couleurs du logo pour classer.
    Les formulaires sont des phrases à trous : une case remplie se surligne, comme une réponse dans un cahier.
    Titres en Bricolage Grotesque, texte en Atkinson Hyperlegible (lisibilité).
    Rayons hiérarchisés : feuille 28 px, tuile 20 px, champ 14 px, pastille ronde. Ombres réservées à ce qui flotte. */
@@ -7,28 +8,29 @@
 /* ================================================================ jetons */
 :root {
   color-scheme: light;
-  --paper: #eeedf3;          /* fond */
+  --paper: #fcf4f1;          /* fond */
   --surface: #ffffff;        /* feuille */
-  --surface-2: #f5f4f9;      /* champ */
+  --surface-2: #fcf1f1;      /* champ */
+  --btn-soft: #f7e3e6;       /* bouton discret : se détache du fond crème */
   --graphite: #26233a;       /* texte */
   --muted: #625d75;
-  --ink: #2f49d1;            /* stylo bille : liens, focus */
-  --ink-strong: #2238a8;
-  --ink-soft: #e4e8fb;
+  --ink: #b3266a;            /* framboise (le rose du logo, foncé) : liens, focus */
+  --ink-strong: #8f1b52;
+  --ink-soft: #ffe3ee;
   --on-ink: #ffffff;
   --btn: #26233a; --on-btn: #ffffff;
-  --seyes: #ebe9f2;
-  --seyes-strong: #d6d3e3;
-  --margin: #c9305d;         /* rouge : examens, suppression, maintenant */
-  --line: #e6e4ee;
-  --line-strong: #cfcbdc;
+  --seyes: #f4e9ea;
+  --seyes-strong: #e4d6da;
+  --margin: #c63a1e;         /* vermillon : examens, suppression, maintenant (distinct de l'accent framboise) */
+  --line: #f0e4e4;
+  --line-strong: #dccdd1;
   --ok: #1d7a4b;
   --warn: #965800;
-  --up: #1d7a4b; --down: #c9305d;
-  --hl-0: #ffd84d; --hl-1: #7edda0; --hl-2: #ff9ec4; --hl-3: #ffb77a; --hl-4: #8cc8ff; --hl-5: #b9a2ff;
+  --up: #1d7a4b; --down: #c63a1e;
+  --hl-0: #fcd464; --hl-1: #ace4c4; --hl-2: #fc9cc4; --hl-3: #ffb77a; --hl-4: #8cc8ff; --hl-5: #b9a2ff;
   --hl-alpha: .42;
   --on-hl: #1d1b29;
-  --wash-0: #fff3c4; --wash-1: #ddf5e6; --wash-2: #ffe1ec; --wash-3: #ffe7d6; --wash-4: #dfedff; --wash-5: #eae3ff;
+  --wash-0: #fff1c7; --wash-1: #e1f5ea; --wash-2: #ffe3ee; --wash-3: #ffe7d6; --wash-4: #dfedff; --wash-5: #eae3ff;
   --mark: #ffe58a;           /* surligneur des cases remplies */
 
   --shadow-1: 0 1px 2px rgb(38 35 58 / .05);
@@ -52,25 +54,25 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper: #17161f; --surface: #211f2c; --surface-2: #2a2837; --graphite: #edebf5; --muted: #aaa5bd;
-    --ink: #9db0ff; --ink-strong: #c3ceff; --ink-soft: #2b2f52; --on-ink: #12121c; --btn: #edebf5; --on-btn: #17161f;
+    --paper: #17161f; --surface: #211f2c; --surface-2: #2a2837; --btn-soft: #2a2837; --graphite: #edebf5; --muted: #aaa5bd;
+    --ink: #ffa9cd; --ink-strong: #ffc9df; --ink-soft: #43243a; --on-ink: #1b1220; --btn: #edebf5; --on-btn: #17161f;
     --seyes: rgb(255 255 255 / .05); --seyes-strong: rgb(255 255 255 / .13);
-    --margin: #ff7fa3; --line: #312e40; --line-strong: #454157; --ok: #7fd8a4; --warn: #f2b860;
-    --up: #7fd8a4; --down: #ff7fa3; --hl-alpha: .3; --on-hl: #edebf5;
+    --margin: #ff8a6a; --line: #312e40; --line-strong: #454157; --ok: #7fd8a4; --warn: #f2b860;
+    --up: #7fd8a4; --down: #ff8a6a; --hl-alpha: .3; --on-hl: #edebf5;
     --wash-0: #3a331c; --wash-1: #1f3529; --wash-2: #3c2230; --wash-3: #3d2a1d; --wash-4: #1f2c42; --wash-5: #2c2547;
-    --mark: #4d3f8f;
+    --mark: #5b4a17;
     --shadow-1: 0 1px 2px rgb(0 0 0 / .3); --shadow-2: 0 14px 34px -18px rgb(0 0 0 / .7); --shadow-3: 0 26px 60px -24px rgb(0 0 0 / .8);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper: #17161f; --surface: #211f2c; --surface-2: #2a2837; --graphite: #edebf5; --muted: #aaa5bd;
-  --ink: #9db0ff; --ink-strong: #c3ceff; --ink-soft: #2b2f52; --on-ink: #12121c; --btn: #edebf5; --on-btn: #17161f;
+  --paper: #17161f; --surface: #211f2c; --surface-2: #2a2837; --btn-soft: #2a2837; --graphite: #edebf5; --muted: #aaa5bd;
+  --ink: #ffa9cd; --ink-strong: #ffc9df; --ink-soft: #43243a; --on-ink: #1b1220; --btn: #edebf5; --on-btn: #17161f;
   --seyes: rgb(255 255 255 / .05); --seyes-strong: rgb(255 255 255 / .13);
-  --margin: #ff7fa3; --line: #312e40; --line-strong: #454157; --ok: #7fd8a4; --warn: #f2b860;
-  --up: #7fd8a4; --down: #ff7fa3; --hl-alpha: .3; --on-hl: #edebf5;
+  --margin: #ff8a6a; --line: #312e40; --line-strong: #454157; --ok: #7fd8a4; --warn: #f2b860;
+  --up: #7fd8a4; --down: #ff8a6a; --hl-alpha: .3; --on-hl: #edebf5;
   --wash-0: #3a331c; --wash-1: #1f3529; --wash-2: #3c2230; --wash-3: #3d2a1d; --wash-4: #1f2c42; --wash-5: #2c2547;
-  --mark: #4d3f8f;
+  --mark: #5b4a17;
   --shadow-1: 0 1px 2px rgb(0 0 0 / .3); --shadow-2: 0 14px 34px -18px rgb(0 0 0 / .7); --shadow-3: 0 26px 60px -24px rgb(0 0 0 / .8);
 }
 
@@ -177,7 +179,7 @@ main:focus { outline: none; }
        transition: transform var(--dur-fast) var(--ease-out), box-shadow var(--dur) var(--ease-out), background-color var(--dur-fast) var(--ease-out); }
 .btn:hover { box-shadow: var(--shadow-2); transform: translateY(-1px); }
 .btn:active { transform: scale(.97); box-shadow: none; }
-.btn-ghost { background: var(--surface-2); color: var(--graphite); }
+.btn-ghost { background: var(--btn-soft); color: var(--graphite); }
 .sheet .btn-ghost, .card .btn-ghost { background: var(--paper); }
 .btn-ghost:hover { background: var(--ink-soft); color: var(--ink); box-shadow: none; }
 .btn-danger { background: color-mix(in srgb, var(--margin) 12%, transparent); color: var(--margin); }
@@ -416,7 +418,7 @@ details.more > summary { color: var(--muted); font-size: .95rem; }
 
 .features, .how { margin-top: var(--s-8); }
 .features > h2, .how > h2, .final-cta > h2 { font-size: clamp(1.8rem, 3.6vw, 2.6rem); margin-bottom: .3em; }
-.feature-grid { list-style: none; padding: 0; margin: var(--s-5) 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(265px, 1fr)); gap: 14px; }
+.feature-grid { list-style: none; padding: 0; margin: var(--s-5) 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }   /* 3 × 3 */
 .feature { border-radius: var(--r-lg); background: color-mix(in srgb, var(--hl) 24%, var(--surface)); transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
 .feature-body { display: flex; flex-direction: column; align-items: flex-start; height: 100%; padding: 26px; color: var(--graphite); text-decoration: none; }
 .feature-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; font-size: 1.6rem; background: var(--hl); }
@@ -434,7 +436,9 @@ a.feature-body:hover .feature-go { text-decoration: underline; }
   .welcome { grid-template-columns: 1fr; gap: var(--s-5); padding-top: var(--s-4); }
   .welcome-art { min-height: 300px; max-width: 420px; }
   .features, .how, .final-cta { margin-top: var(--s-7); }
+  .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+@media (max-width: 560px) { .feature-grid { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .feature { transition: none; } .feature:has(a.feature-body):hover { transform: none; } }
 
 /* Dons : la toute dernière section de l'accueil */
