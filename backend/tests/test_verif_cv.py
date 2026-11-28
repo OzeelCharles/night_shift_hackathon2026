@@ -9,7 +9,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from backend import create_app
+from backend import config, create_app
 from backend.dao import groq
 from backend.dao.db import get_db
 from backend.plugins.verif_cv import verif_cv_rules as rules
@@ -200,15 +200,19 @@ class RulesTests(unittest.TestCase):
 # ================================================================ pages
 class _AppCase(unittest.TestCase):
     extra = ["backend.plugins.verif_cv"]
+    features = None   # None : FEATURES de config tel quel
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.upload_dir = os.path.join(self.tmp.name, "up")
         self.vcv_tmp = os.path.join(self.tmp.name, "vcv_tmp")
-        self.app = create_app({"TESTING": True, "WTF_CSRF_DISABLED": True, "ENABLE_WEB": False,
-                               "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
-                               "UPLOAD_FOLDER": self.upload_dir, "VERIF_CV_TMP": self.vcv_tmp,
-                               "EXTRA_FEATURES": self.extra})
+        overrides = {"TESTING": True, "WTF_CSRF_DISABLED": True, "ENABLE_WEB": False,
+                     "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
+                     "UPLOAD_FOLDER": self.upload_dir, "VERIF_CV_TMP": self.vcv_tmp,
+                     "EXTRA_FEATURES": self.extra}
+        if self.features is not None:
+            overrides["FEATURES"] = self.features
+        self.app = create_app(overrides)
         self.client = self.app.test_client()
         self.register("e@test.fr", "Léa")
 
@@ -350,6 +354,8 @@ class StagesIntegrationTests(_AppCase):
 
 
 class WithoutPluginTests(_AppCase):
+    # Retire explicitement le plugin, qu'il soit dans FEATURES (après fusion) ou non.
+    features = [f for f in config.FEATURES if f != "backend.plugins.verif_cv"]
     extra = []
 
     def test_stages_unchanged_without_plugin(self):
@@ -359,6 +365,15 @@ class WithoutPluginTests(_AppCase):
         self.assertNotIn("Vérifier mon CV", html)
         self.assertNotIn("CV : ", html)
         self.assertEqual(self.client.get("/stages/cv").status_code, 404)
+
+
+class DuplicateFeatureTests(_AppCase):
+    # Cas d'après fusion : le plugin est à la fois dans FEATURES et dans EXTRA_FEATURES.
+    features = [f for f in config.FEATURES if f != "backend.plugins.verif_cv"] + ["backend.plugins.verif_cv"]
+
+    def test_plugin_listed_twice_is_loaded_once(self):
+        self.assertIn("verif_cv", self.app.blueprints)
+        self.assertEqual(self.client.get("/stages/cv").status_code, 200)
 
 
 class GroqTests(_AppCase):
