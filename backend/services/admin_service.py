@@ -2,6 +2,8 @@
 from werkzeug.security import generate_password_hash
 
 from backend.business.accounts import LEVELS, validate_account
+from backend.core import journal
+from backend.dao import audit
 from backend.dao import documents as documents_dao
 from backend.dao import banned_words, passwords
 from backend.dao import subjects as subjects_dao
@@ -19,6 +21,16 @@ def overview(search: str = "") -> dict:
     return {"users": dao.list_with_counts(search), "stats": dao.global_stats(), "q": search}
 
 
+def _audit(action: str, target_id=None, target_email: str = "", **details) -> None:
+    """SEC-10 : action d'un administrateur, dans le journal JSON et dans la table audit_log (jamais de mot de passe)."""
+    entry = journal.log("admin." + action, target_id=target_id, target_email=target_email, **details)
+    audit.record(entry.get("actor_id"), action, target_id, target_email, details)
+
+
+def audit_log(limit: int = 100) -> list:
+    return audit.recent(limit)
+
+
 def get_user(user_id):
     return owned(dao.get(user_id))
 
@@ -30,8 +42,10 @@ def create_user(form) -> list[str]:
     if not errors and dao.email_taken(email):
         errors.append("Cette adresse est déjà utilisée.")
     if not errors:
-        auth_service.create_user(email, username, form["password"], "admin" if form.get("role") == "admin" else "user",
-                                 level=form.get("level", "autre"), school=form.get("school", ""))
+        role = "admin" if form.get("role") == "admin" else "user"
+        uid = auth_service.create_user(email, username, form["password"], role,
+                                       level=form.get("level", "autre"), school=form.get("school", ""))
+        _audit("creation", uid, email, role=role)
     return errors
 
 
@@ -60,6 +74,17 @@ def update_user(user_id, form, current_user_id=None) -> list[str]:
         dao.update(user_id, password_hash=generate_password_hash(password))
     if password or (u["is_active"] and not active):
         dao.bump_session_version(user_id)  # SEC-03 : les sessions ouvertes (cookies volés compris) tombent
+    changes = {k: v for k, v in (("email", email), ("username", username), ("role", role), ("is_active", active))
+               if u[k] != v}
+    if password:
+        _audit("reinitialisation_mot_de_passe", user_id, email)
+    if u["is_active"] and not active:
+        _audit("desactivation", user_id, email)
+    elif not u["is_active"] and active:
+        _audit("reactivation", user_id, email)
+    changes.pop("is_active", None)
+    if changes:
+        _audit("modification", user_id, email, champs=sorted(changes))
     return []
 
 
@@ -71,7 +96,8 @@ def delete_user(user_id, current_user_id) -> str | None:
     if u["role"] == "admin" and dao.active_admin_count() <= 1:
         return "Impossible de supprimer le dernier administrateur."
     subject_service.remove_files(documents_dao.paths_for_user(user_id))
-    dao.delete(user_id)
+    auth_service.erase_account(u)  # lignes, dossier de dépôts, tentatives de connexion
+    _audit("suppression", user_id, u["email"])
     return None
 
 
@@ -86,3 +112,4 @@ def user_subjects(user_id):
 def delete_subject(subject_id) -> None:
     subject_service.remove_files(documents_dao.paths_for_subject(subject_id))
     subjects_dao.delete(subject_id)
+    _audit("suppression_matiere", details_id=subject_id)

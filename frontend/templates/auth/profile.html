@@ -40,4 +40,16 @@
     <button class="btn btn-lg">Enregistrer</button>
   </div>
 </form>
+
+<section class="sheet" aria-labelledby="h-delete">
+  <h2 id="h-delete">Supprimer mon compte</h2>
+  <p class="small muted">Tes matières, supports de cours, notes, planning, conversations et recherches de stage sont
+    effacés définitivement. Cette action ne peut pas être annulée.</p>
+  <form method="post" action="{{ url_for('auth.delete_account') }}">
+    {{ csrf_field() }}
+    <label>Retape ton mot de passe pour confirmer
+      <input type="password" name="password" required autocomplete="current-password"></label>
+    <button class="btn btn-danger">Supprimer définitivement mon compte</button>
+  </form>
+</section>
 {% endblock %}

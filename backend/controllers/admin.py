@@ -59,6 +59,13 @@ def user_delete(user_id):
     return redirect(url_for("admin.index"))
 
 
+@bp.route("/journal")
+@admin_required
+def audit():
+    """SEC-10 : journal d'audit des actions des administrateurs."""
+    return render_template("admin/audit.html", entries=admin_service.audit_log())
+
+
 @bp.route("/matieres")
 @admin_required
 def subjects():

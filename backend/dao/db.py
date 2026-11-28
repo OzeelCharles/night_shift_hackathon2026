@@ -170,11 +170,16 @@ CREATE INDEX IF NOT EXISTS idx_chat_msg_conv ON chat_messages(conversation_id, i
 """
 
 
+BUSY_TIMEOUT_S = 10
+
+
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
-        g.db = sqlite3.connect(current_app.config["DATABASE"])
+        # BDD-03 : attente de 10 s au plus sur un verrou d'écriture (busy_timeout) plutôt que « database is locked »
+        g.db = sqlite3.connect(current_app.config["DATABASE"], timeout=BUSY_TIMEOUT_S)
         g.db.row_factory = sqlite3.Row
         g.db.execute("PRAGMA foreign_keys = ON")
+        g.db.execute("PRAGMA busy_timeout = 10000")  # = BUSY_TIMEOUT_S
     return g.db
 
 
@@ -193,6 +198,8 @@ def close_db(exc=None):
 def init_app(app):
     app.teardown_appcontext(close_db)
     with app.app_context():
+        # BDD-03 : WAL (lectures pendant une écriture) ; réglage enregistré dans le fichier de la base
+        get_db().execute("PRAGMA journal_mode = WAL")
         get_db().executescript(SCHEMA)
         migrate(get_db())
 
@@ -231,6 +238,12 @@ def rolled_back():
     finally:
         db.execute("ROLLBACK TO simulation")
         db.execute("RELEASE simulation")
+
+
+def rollback() -> None:
+    """Annule les écritures de la requête en cours (rien n'est enregistré)."""
+    if "db" in g:
+        g.db.rollback()
 
 
 def commit() -> None:
@@ -313,4 +326,44 @@ def migrate(db: sqlite3.Connection):
         db.execute("CREATE TABLE IF NOT EXISTS llm_usage (user_id INTEGER NOT NULL REFERENCES users(id) "
                    "ON DELETE CASCADE, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))")
         db.execute("PRAGMA user_version = 3")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 4:
+        # SEC-10 — migration 4, additive et réversible (DROP TABLE audit_log) : actions des administrateurs.
+        # actor_id sans clé étrangère : la trace survit à la suppression du compte de l'administrateur.
+        db.execute("CREATE TABLE IF NOT EXISTS audit_log (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                   "at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')), actor_id INTEGER, action TEXT NOT NULL, "
+                   "target_id INTEGER, target_email TEXT NOT NULL DEFAULT '', details TEXT NOT NULL DEFAULT '{}')")
+        db.execute("PRAGMA user_version = 4")
+    # BDD-01 — contraintes d'intégrité. SQLite ne sait pas ajouter un CHECK à une table existante : ce sont des
+    # déclencheurs (CREATE TRIGGER IF NOT EXISTS, rejoués à chaque démarrage, sans reconstruire les tables ni
+    # toucher aux données). Annulation : DROP TRIGGER <nom> ; DROP INDEX idx_users_email_nocase.
+    db.executescript(CONSTRAINTS)
+    try:  # une adresse ne peut exister qu'une fois, quelle que soit la casse
+        db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_nocase ON users(lower(email))")
+    except sqlite3.IntegrityError:  # base ancienne avec des doublons de casse : à fusionner à la main
+        current_app.logger.warning("BDD-01 : adresses e-mail en double (casse) ; index unique non créé")
     db.commit()
+
+
+def _guard(table: str, name: str, condition: str, message: str) -> str:
+    """Déclencheurs qui refusent (IntegrityError) une ligne insérée ou modifiée qui ne respecte pas `condition`."""
+    return "".join(
+        f"CREATE TRIGGER IF NOT EXISTS chk_{table}_{name}_{op[:3].lower()} BEFORE {op} ON {table} "
+        f"WHEN NOT ({condition}) BEGIN SELECT RAISE(ABORT, '{message}'); END;\n"
+        for op in ("INSERT", "UPDATE"))
+
+
+# Dates et heures ISO valides, entre 1900 et 2200, fin strictement après le début
+_PERIOD = ("julianday(new.start) IS NOT NULL AND julianday(new.end) IS NOT NULL "
+           "AND julianday(new.end) > julianday(new.start) "
+           "AND substr(new.start, 1, 4) BETWEEN '1900' AND '2200' AND substr(new.end, 1, 4) BETWEEN '1900' AND '2200'")
+
+CONSTRAINTS = "".join((
+    _guard("grades", "values", "new.out_of > 0 AND new.out_of <= 1000 AND new.value >= 0 AND new.value <= new.out_of "
+           "AND new.coefficient > 0 AND new.coefficient <= 100", "note hors bornes"),
+    _guard("events", "period", _PERIOD, "créneau invalide"),
+    _guard("sessions", "period", _PERIOD, "séance invalide"),
+    _guard("preferences", "bounds", "new.session_minutes BETWEEN 10 AND 240 AND new.break_minutes BETWEEN 0 AND 60 "
+           "AND new.daily_max_minutes BETWEEN 30 AND 960 AND new.horizon_weeks BETWEEN 1 AND 26 "
+           "AND new.buffer_minutes BETWEEN 0 AND 240", "préférences hors bornes"),
+    _guard("users", "active", "new.is_active IN (0, 1)", "is_active invalide"),
+))

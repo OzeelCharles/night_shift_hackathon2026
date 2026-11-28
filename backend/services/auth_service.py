@@ -8,11 +8,13 @@ from datetime import date
 from flask import current_app
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from backend.business.accounts import LEVELS, clean_details, validate_account, validate_profile, validate_username
-from backend.core import events
+from backend.business.accounts import (LEVELS, clean_details, password_errors, validate_account, validate_profile,
+                                      validate_username)
+from backend.core import events, journal
 from backend.dao import auth_attempts, banned_words, passwords
 from backend.dao import users as dao
 
+from . import subject_service
 from .report import Report
 
 # Messages neutres (SEC-03) : ils ne disent ni si l'adresse existe, ni si le compte est désactivé.
@@ -98,6 +100,7 @@ def login(email: str, password: str, ip: str = ""):
     ip_ok, ip_attempt = _take("login_ip", ip, "LOGIN_MAX_FAILURES", window, now)
     if not (account_ok and ip_ok):
         auth_attempts.forget(account_attempt, ip_attempt)  # refusée sans essai : ne compte pas comme un échec
+        journal.log("connexion.bloquee", email=account, limite="compte" if not account_ok else "ip")
         return None, TOO_MANY_LOGINS, TOO_MANY
     started = time.monotonic()
     user, error = authenticate(email, password)
@@ -105,11 +108,32 @@ def login(email: str, password: str, ip: str = ""):
         # Durée plancher d'un échec : l'écart restant (charge du serveur, accès à la base) disparaît derrière
         # une attente fixe, identique pour un e-mail inconnu, un mauvais mot de passe ou un compte désactivé.
         time.sleep(max(0.0, float(current_app.config["LOGIN_FAILURE_MIN_SECONDS"]) - (time.monotonic() - started)))
+        journal.log("connexion.echec", email=account)  # SEC-10 : jamais le mot de passe essayé
         return None, error, 200  # les deux tentatives réservées restent : ce sont des échecs
     # réussite : le compteur du compte repart de zéro ; celui de l'IP garde ses échecs passés
     auth_attempts.clear("login_account", account)
     auth_attempts.forget(ip_attempt)
+    journal.log("connexion.reussie", email=account, user_id=user["id"])
     return user, None, 200
+
+
+def erase_account(user) -> None:
+    """Supprime le compte et tout ce qui s'y rattache (BDD-04) : lignes en cascade, fichiers déposés et
+    tentatives de connexion enregistrées pour son adresse."""
+    subject_service.remove_user_folder(user["id"])
+    auth_attempts.clear("login_account", user["email"].strip().lower())
+    dao.delete(user["id"])
+
+
+def delete_own_account(user, password: str) -> str | None:
+    """BDD-08 : l'utilisateur supprime son compte lui-même, après avoir retapé son mot de passe."""
+    if not check_password_hash(user["password_hash"], password or ""):
+        return "Mot de passe incorrect : ton compte n'a pas été supprimé."
+    if user["role"] == "admin" and dao.active_admin_count() <= 1:
+        return "Impossible de supprimer le dernier administrateur."
+    erase_account(user)
+    journal.log("compte.suppression_par_l_utilisateur", user_id=user["id"])
+    return None
 
 
 def update_profile(user, form) -> tuple[Report, list[str]]:
@@ -140,17 +164,31 @@ def ensure_admin() -> None:
     """Crée un compte administrateur au premier lancement s'il n'en existe aucun."""
     if dao.any_admin():
         return
-    email = os.environ.get("ADMIN_EMAIL", "admin@revision.local")
-    password = os.environ.get("ADMIN_PASSWORD") or secrets.token_urlsafe(9)
-    existing = dao.by_email(email)
+    email = os.environ.get("ADMIN_EMAIL", "").strip().lower()
+    password = os.environ.get("ADMIN_PASSWORD", "")
+    production = current_app.config.get("PRODUCTION") and not current_app.config.get("TESTING")
+    if production:  # DEP-02 / F-07 : ni adresse prévisible, ni mot de passe faible pour le premier administrateur
+        problems = [] if email else ["ADMIN_EMAIL est obligatoire pour créer le premier administrateur."]
+        problems += (password_errors(password, email, "Administrateur", common=passwords.common())
+                     if password else ["ADMIN_PASSWORD est obligatoire pour créer le premier administrateur."])
+        if problems:
+            raise RuntimeError("Démarrage en production refusé :\n- " + "\n- ".join(problems))
+    existing = dao.by_email(email) if email else None
     if existing:
         dao.update(existing["id"], role="admin")
         return
+    if not email:  # développement : adresse locale, jamais utilisée en production
+        email = "admin@rivezli.local"
+    generated = not password
+    if generated:
+        password = secrets.token_urlsafe(18)
     create_user(email, "Administrateur", password, role="admin")
-    if not current_app.config.get("TESTING"):
-        print("=" * 60)
-        print(" Compte administrateur créé")
-        print(f"   e-mail       : {email}")
-        print(f"   mot de passe : {password}")
-        print(" Changez-le depuis l'espace admin (ou via ADMIN_PASSWORD).")
-        print("=" * 60)
+    if generated and not current_app.config.get("TESTING"):
+        # F-07 : le mot de passe n'est jamais affiché (journaux d'un hébergeur) ; il est écrit dans un fichier
+        # lisible par le seul propriétaire, à supprimer après la première connexion.
+        path = os.path.join(current_app.instance_path, "admin_initial_password")
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(password + "\n")
+        current_app.logger.warning("Compte administrateur %s créé ; mot de passe initial dans %s "
+                                   "(change-le, puis supprime ce fichier).", email, path)

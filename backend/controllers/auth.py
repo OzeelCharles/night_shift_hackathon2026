@@ -64,6 +64,19 @@ def profile():
     return render_template("auth/profile.html", u=g.user)
 
 
+@bp.route("/profil/supprimer", methods=("POST",))
+@login_required
+def delete_account():
+    """BDD-08 : suppression du compte par l'utilisateur, confirmée par son mot de passe."""
+    error = auth_service.delete_own_account(g.user, request.form.get("password", ""))
+    if error:
+        flash(error, "error")
+        return redirect(url_for("auth.profile"))
+    session.clear()
+    flash("Ton compte et toutes tes données ont été supprimés.", "info")
+    return redirect(url_for("main.index"))
+
+
 @bp.route("/profil/infos", methods=("POST",))
 @login_required
 def details():

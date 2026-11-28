@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -14,7 +15,7 @@ from werkzeug.utils import secure_filename
 from backend.business import agenda_analysis, exams, extractor, matching, uploads
 from backend.business import subjects as rules
 from backend.business.planner import DEFAULT_TOPICS
-from backend.business.text import bounded_float, bounded_int, date_fr, iso, parse_date
+from backend.business.text import bounded_float, bounded_int, date_fr, iso, parse_date, parse_id
 from backend.core import events
 from backend.dao import agenda as agenda_dao
 from backend.dao import documents as documents_dao
@@ -23,7 +24,7 @@ from backend.dao import subjects as dao
 from backend.dao import vision
 
 from . import exam_service, planning_service, resource_service
-from .common import owned
+from .common import owned, track_written, user_lock
 from .report import Report
 
 
@@ -72,7 +73,7 @@ def resolve(user_id, title: str, explicit: str | None = "auto", goal: str = "exa
     explicit : id choisi par l'utilisateur, ou « auto ». Retourne (matière, statut, score) ;
     statut ∈ explicit / matched / created."""
     if explicit and explicit.isdigit():
-        return get(int(explicit), user_id), "explicit", 1.0
+        return get(parse_id(explicit) or 0, user_id), "explicit", 1.0  # 404 si inconnu ou hors bornes
     match, score = matching.best_match(title, list_for(user_id))
     if match is not None:
         return match, "matched", score
@@ -97,6 +98,13 @@ def remove_files(paths) -> None:
     for path in paths:
         if real := _inside_uploads(path):
             os.remove(real)
+
+
+def remove_user_folder(user_id) -> None:
+    """BDD-04 : suppression d'un compte, tous ses fichiers déposés (même ceux sans ligne en base)."""
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], str(int(user_id)))
+    if _inside_uploads(folder) and os.path.isdir(folder):
+        shutil.rmtree(folder, ignore_errors=True)
 
 
 def _stored_path(user_id, filename: str, default: str = "document") -> str:
@@ -134,12 +142,21 @@ def save_documents(user_id, subject_id, files) -> tuple[list[str], list[str]]:
         if not extractor.allowed_file(f.filename):
             messages.append(f"« {f.filename} » : format non pris en charge.")
             continue
-        if uploads.over_quota(_used_bytes(user_id), _stream_size(f), _quota()):
-            messages.append(f"« {f.filename} » : espace de stockage plein ({_quota() // (1024 * 1024)} Mo par "
-                            "compte). Supprime d'anciens documents pour en ajouter.")
-            continue
-        path = _stored_path(user_id, f.filename)
-        f.save(path)
+        full = (f"« {f.filename} » : espace de stockage plein ({_quota() // (1024 * 1024)} Mo par compte). "
+                "Supprime d'anciens documents pour en ajouter.")
+        # F-034 : lecture du quota et écriture d'un seul tenant (envois simultanés d'un même compte), puis
+        # recontrôle après écriture (plusieurs processus) : au-delà du quota, le fichier est retiré.
+        with user_lock(user_id):
+            if uploads.over_quota(_used_bytes(user_id), _stream_size(f), _quota()):
+                messages.append(full)
+                continue
+            path = _stored_path(user_id, f.filename)
+            f.save(path)
+            if _used_bytes(user_id) > _quota():
+                os.remove(path)
+                messages.append(full)
+                continue
+        track_written(path)
         refused = extractor.check_content(path)
         if refused:
             os.remove(path)
@@ -202,6 +219,7 @@ def save_photos(user_id, subject_id, files) -> tuple[list[str], list[str]]:
             continue
         name = _note_name(f.filename, n)
         path = _stored_path(user_id, name, "photo.md")
+        track_written(path)
         with open(path, "w", encoding="utf-8") as out:
             out.write(text + "\n")
         extracted, found = extractor.extract(path)

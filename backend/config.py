@@ -52,6 +52,20 @@ def _secret_key(instance_path: str) -> str:
         return f.read().strip()
 
 
+MIN_SECRET_KEY = 32
+
+
+def production_errors(config: dict) -> list[str]:
+    """DEP-02 / F-06 : réglages qui empêchent de démarrer en production (RIVEZLI_ENV=production)."""
+    errors = []
+    if len(os.environ.get("SECRET_KEY", "")) < MIN_SECRET_KEY:
+        errors.append(f"SECRET_KEY doit être définie dans l'environnement ({MIN_SECRET_KEY} caractères au moins ; "
+                      "par exemple : python -c \"import secrets; print(secrets.token_hex(32))\").")
+    if os.environ.get("FLASK_DEBUG", "").lower() in ("1", "true", "yes") or config.get("DEBUG"):
+        errors.append("FLASK_DEBUG doit être désactivé : le débogueur interactif permet d'exécuter du code.")
+    return errors
+
+
 def defaults(instance_path: str) -> dict:
     production = os.environ.get("RIVEZLI_ENV", "").lower() == "production"
     return {

@@ -151,7 +151,8 @@ RELUS = {
     ("dao/db.py", "query"), ("dao/db.py", "one"), ("dao/db.py", "scalar"),  # enveloppes : transmettent `sql`
     ("dao/db.py", "execute"), ("dao/db.py", "execute_many"),                # (chaque appelant est analysé)
     ("dao/db.py", "install"),                # executescript(schema) : SCHEMA des modules (constantes)
-    ("dao/db.py", "add_columns"),            # table / colonne / déclaration issues de MIGRATIONS (constante)
+    ("dao/db.py", "add_columns"),
+    ("dao/db.py", "migrate"),                # executescript(CONSTRAINTS) : déclencheurs écrits dans le code (BDD-01)            # table / colonne / déclaration issues de MIGRATIONS (constante)
     ("dao/occupancy.py", "recent"),          # autant de « ? » que de clés
     ("dao/preferences.py", "save"),          # FIELDS (constante)
     ("dao/sessions.py", "stats"),            # MINUTES (constante)

@@ -14,6 +14,7 @@ DAYS = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
 # Bornes (SEC-06) : un fichier piégé ne doit ni saturer la base ni occuper le serveur.
 MAX_BYTES = 2 * 1024 * 1024  # taille maximale d'un .ics importé
 MAX_EVENTS = 5000  # créneaux importés au plus (les suivants sont ignorés, avec un message)
+MIN_YEAR, MAX_YEAR = 1900, 2199  # dates plausibles (la base refuse les autres, BDD-06)
 MAX_EXPAND_DAYS = 800  # pas de calcul au plus par règle de récurrence (la fenêtre utile fait moins d'un an)
 
 
@@ -30,9 +31,14 @@ def _unfold(text: str) -> list[str]:
 def _parse_dt(value: str) -> datetime | date:
     value = value.strip()
     if re.fullmatch(r"\d{8}", value):
-        return datetime.strptime(value, "%Y%m%d").date()
+        d = datetime.strptime(value, "%Y%m%d").date()
+        if not MIN_YEAR <= d.year <= MAX_YEAR:
+            raise ValueError("année hors limites")
+        return d
     utc = value.endswith("Z")
     dt = datetime.strptime(value.rstrip("Z")[:15], "%Y%m%dT%H%M%S")
+    if not MIN_YEAR <= dt.year <= MAX_YEAR:  # F-035 : vérifié avant la conversion (OSError sous Windows en l'an 1)
+        raise ValueError("année hors limites")
     if utc:
         dt = dt.replace(tzinfo=timezone.utc).astimezone().replace(tzinfo=None)
     return dt
@@ -74,8 +80,11 @@ def _expand(start: datetime, rule: str, exdates: set[datetime], until_window: da
         count = _positive_int(parts.get("COUNT"), None)
         until = None
         if "UNTIL" in parts:
-            u = _parse_dt(parts["UNTIL"])
-            until = u if isinstance(u, datetime) else datetime.combine(u, datetime.max.time())
+            try:
+                u = _parse_dt(parts["UNTIL"])
+                until = u if isinstance(u, datetime) else datetime.combine(u, datetime.max.time())
+            except ValueError:  # fin en l'an 9999… : comme sans fin (la fenêtre d'import borne déjà la récurrence)
+                until = None
     except (ValueError, OverflowError):
         return [start]
     byday = sorted({DAYS[d[-2:]] for d in parts.get("BYDAY", "").split(",") if d[-2:] in DAYS})

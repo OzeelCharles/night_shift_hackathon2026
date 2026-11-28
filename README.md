@@ -22,12 +22,18 @@ python run.py
 
 Puis ouvrir http://127.0.0.1:5000.
 
-Au **premier lancement**, un compte administrateur est créé et ses identifiants s'affichent dans le terminal.
-On peut les fixer à l'avance :
+Au **premier lancement**, un compte administrateur est créé (`admin@rivezli.local` en développement). Son mot de
+passe n'est jamais affiché : il est écrit dans `instance/admin_initial_password`, lisible par toi seul ; change-le
+puis supprime ce fichier. On peut fixer les identifiants à l'avance :
 
 ```powershell
 $env:ADMIN_EMAIL = "admin@ecole.fr"; $env:ADMIN_PASSWORD = "un-mot-de-passe-solide"; python run.py
 ```
+
+**En production** (`RIVEZLI_ENV=production`), l'application refuse de démarrer sans `SECRET_KEY` (32 caractères
+au moins), avec `FLASK_DEBUG` actif, ou sans `ADMIN_EMAIL` et `ADMIN_PASSWORD` solides pour le premier
+administrateur. Elle se sert alors avec `waitress-serve --listen=127.0.0.1:8000 run:app` (Windows) ou
+`gunicorn -w 3 -t 60 -b 127.0.0.1:8000 run:app` (Linux), derrière un proxy HTTPS, jamais avec `python run.py`.
 
 ## Clés d'API (modèles de langage)
 

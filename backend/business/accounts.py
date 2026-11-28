@@ -49,8 +49,9 @@ def _common_forms(password: str) -> set[str]:
     substitutions classiques (p@ssw0rd)."""
     low = _fold(password)
     forms = set()
-    # séparateurs glissés au milieu (« mot de passe », « m.o.t-d_e »…) : on les retire aussi
-    for base in (low, re.sub(r"[\s._\-]+", "", low)):
+    # séparateurs glissés au milieu (« mot de passe », « m.o.t-d_e », « 1234*5678 », « 1qaz#2wsx »…) : on les
+    # retire aussi, tous sauf les symboles qui remplacent une lettre (@ $ !), traités par _LEET (F-036)
+    for base in (low, re.sub(r"[\s._\-]+", "", low), re.sub(r"[^a-z0-9@$!]+", "", low)):
         forms |= {base, _EDGES.sub("", base), base.translate(_LEET), _EDGES.sub("", base).translate(_LEET),
                   _EDGES.sub("", base.translate(_LEET))}
         leet = base.translate(_LEET)
