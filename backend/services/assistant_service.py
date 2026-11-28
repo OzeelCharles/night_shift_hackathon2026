@@ -186,7 +186,7 @@ def read_attachment(file) -> tuple[dict | None, str | None]:
 def conversation(user) -> dict:
     conv = _current(user)
     messages = dao.messages(conv["id"], user["id"]) if conv else []
-    return {"available": llm.available(), "notice": "" if llm.available() else NOT_CONFIGURED,
+    return {"available": llm.available(), "notice": "",
             "provider": {"anthropic": "Anthropic (Claude)", "groq": "Groq"}.get(llm.provider(), ""),
             "messages": [_public(m, user) for m in messages]}
 

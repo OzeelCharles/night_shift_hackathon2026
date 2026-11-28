@@ -23,8 +23,27 @@
   <div class="welcome-art" aria-hidden="true">
     <div class="art-card art-1 hl-0"><span class="art-label">Aujourd'hui</span><strong>14h · Probabilités</strong><span>Chapitre 3, révision espacée</span></div>
     <div class="art-card art-2 hl-1"><span class="art-label">Resto U</span><strong>Ouvert ce midi</strong><span>Menu du jour affiché</span></div>
-    <div class="art-card art-3 hl-4"><span class="art-label">Bibliothèque</span><strong>Plutôt calme</strong><span>Signalé par des étudiants</span></div>
+    <div class="art-card art-3 hl-2"><span class="art-label">Bibliothèque</span><strong>Plutôt calme</strong><span>Signalé par des étudiants</span></div>
   </div>
+</section>
+
+<section class="tuto" aria-labelledby="tuto-title">
+  <h2 id="tuto-title">Rivezli en 1 minute</h2>
+  <p class="lead">Un tour des neuf outils, pour voir comment ils s'enchaînent avant de te lancer.</p>
+  <div class="tuto-frame">
+    <video controls preload="metadata" playsinline aria-describedby="tuto-text"
+           poster="{{ url_for('static', filename='video/tuto-poster.jpg') }}">
+      <source src="{{ url_for('static', filename='video/tuto.mp4') }}" type="video/mp4">
+      Ton navigateur ne sait pas lire cette vidéo. <a href="{{ url_for('static', filename='video/tuto.mp4') }}">Télécharge-la</a>.
+    </video>
+  </div>
+  <details class="tuto-text" id="tuto-text">
+    <summary>Lire le texte de la vidéo</summary>
+    <ol>
+      {% for f in features %}<li><strong>{{ f.title }}</strong> : {{ f.text }}</li>
+      {% endfor %}
+    </ol>
+  </details>
 </section>
 
 <section class="features" aria-labelledby="features-title">
@@ -33,12 +52,12 @@
   <ul class="feature-grid">
     {% for f in features %}
     <li class="feature hl-{{ f.hl }}">
-      {% if g.user %}<a class="feature-body" href="{{ url_for(f.endpoint) }}">{% else %}<div class="feature-body">{% endif %}
+      {% if g.user and f.link %}<a class="feature-body" href="{{ url_for(f.endpoint) }}">{% else %}<div class="feature-body">{% endif %}
         <span class="feature-icon" aria-hidden="true">{{ f.icon }}</span>
         <h3>{{ f.title }}</h3>
         <p>{{ f.text }}</p>
-        {% if g.user %}<span class="feature-go">Ouvrir <span aria-hidden="true">→</span></span>{% endif %}
-      {% if g.user %}</a>{% else %}</div>{% endif %}
+        {% if g.user and f.link %}<span class="feature-go">Ouvrir <span aria-hidden="true">→</span></span>{% endif %}
+      {% if g.user and f.link %}</a>{% else %}</div>{% endif %}
     </li>
     {% endfor %}
   </ul>
