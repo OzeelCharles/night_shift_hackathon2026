@@ -10,15 +10,16 @@
      data-csrf="{{ csrf_token() }}"
      data-subject="{{ subject_id }}">
   <button class="assistant-fab" type="button" aria-expanded="false" aria-controls="assistant-panel">
-    <svg class="icon i-open" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01"/></svg>
+    <img class="i-open assistant-logo" src="{{ url_for('static', filename='logo.png') }}" alt="" width="34" height="34">
     <svg class="icon i-close" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     <span class="visually-hidden">Assistant Rivezli</span>
   </button>
 
   <section class="assistant-panel" id="assistant-panel" role="dialog" aria-labelledby="assistant-title" hidden>
     <header class="assistant-head">
+      <img class="assistant-head-logo" src="{{ url_for('static', filename='logo.png') }}" alt="" width="36" height="36">
       <div>
-        <h2 id="assistant-title">Assistant</h2>
+        <h2 id="assistant-title">Assistant Rivezli</h2>
         <p>Révisions, cours, campus, caféine et stages</p>
       </div>
       <button class="icon-btn assistant-expand" type="button" aria-pressed="false" title="Agrandir la fenêtre" aria-label="Agrandir la fenêtre">
