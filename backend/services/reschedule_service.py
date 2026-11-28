@@ -133,11 +133,3 @@ def apply(user, action_id: int, choice: str) -> tuple[str | None, str | None]:
     extra = f" Ton temps maximum par jour passe à {option['daily_max'] // 60} h {option['daily_max'] % 60:02d}." \
         if option.get("daily_max") else ""
     return f"C'est fait : {option['label'].lower()}. {details}{extra}".strip(), None
-
-
-def cancel(user, action_id: int) -> str | None:
-    action = actions_dao.get_owned(action_id, user["id"])
-    if action is None:
-        return "Proposition introuvable."
-    actions_dao.close(action_id, user["id"], "cancelled")
-    return None

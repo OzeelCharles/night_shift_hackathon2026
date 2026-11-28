@@ -185,6 +185,20 @@ sans clé, la bulle explique comment la configurer.
   changer ») ; une proposition ne s'applique qu'une fois et seulement par son auteur. Une séance ratée aujourd'hui
   est replacée à partir de demain. Code : `backend/business/rescheduling.py`, `backend/services/reschedule_service.py`,
   `backend/dao/actions.py` (table `chat_actions`).
+- **Campus et caféine** (outils `bibliotheque`, `restos_u`, `cafeine`, fournis par les fonctionnalités Campus et
+  Caféine, `backend/services/campus_tools.py`) : la BU est-elle ouverte, pleine (affluence signalée par les
+  étudiants, ou estimée, toujours annoncé comme tel), quand y aller ; restos U proches, ouverts aujourd'hui,
+  prochain service et menu du jour ; caféine bue, quand reprendre une boisson, effet sur le sommeil. Les
+  liens vers les pages de Rivezli s'affichent sous la réponse.
+- **Stages** (outils `ma_recherche_de_stage`, `proposer_stages`, `backend/plugins/stages/assistant.py`) : où en est
+  la recherche (offres suivies et leur statut). Quand l'étudiant décrit le stage qu'il cherche, l'assistant en tire
+  3 à 5 intitulés de postes adaptés à son profil, et les recherches préremplies (Indeed, LinkedIn, Welcome to the
+  Jungle, JobTeaser…) s'affichent sous la réponse ; un bouton « Choisir » les ajoute à la liste de la page Stages.
+  L'assistant ne voit pas les offres réelles (les sites l'interdisent) et n'en invente pas ; téléphone et e-mail ne
+  sont jamais envoyés au modèle.
+- **Pour une fonctionnalité** : un outil peut renvoyer `links` (liens affichés sous la réponse) et `action` (carte
+  à valider) ; l'application de la carte se déclare avec `Feature(actions=[Action(kind, apply, message)])`
+  (`backend/core/tools.py`).
 - À venir : forums.
 
 ### Recherche dans les supports de cours (RAG)

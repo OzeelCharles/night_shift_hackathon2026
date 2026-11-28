@@ -885,6 +885,12 @@ form[data-kind="autre"] .kind-school { display: none; }
 .msg-sources ol { margin: 2px 0 0; padding-left: 1.4em; }
 .msg-sources li { margin: 1px 0; }
 .msg-sources a { color: var(--ink); overflow-wrap: anywhere; }
+.msg-links { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--line); font-size: .8rem; display: grid; gap: 6px; }
+.links-title { display: block; font-weight: 700; color: var(--muted); margin-bottom: 3px; }
+.links-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.link-chip { display: inline-block; padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  color: var(--ink); text-decoration: none; line-height: 1.3; }
+.link-chip:hover, .link-chip:focus-visible { border-color: var(--ink); text-decoration: underline; }
 .msg-user { align-self: flex-end; background: var(--ink); color: var(--on-ink); border-bottom-right-radius: 4px; white-space: pre-wrap; }
 .msg-assistant { align-self: flex-start; background: var(--surface-2); color: var(--graphite); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
 .msg-typing { color: var(--muted); font-style: italic; animation: assistant-pulse 1.2s ease-in-out infinite; }

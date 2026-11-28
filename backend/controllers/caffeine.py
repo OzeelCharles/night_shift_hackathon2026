@@ -4,6 +4,7 @@ from flask import Blueprint, g, redirect, render_template, request, url_for
 from backend.core.features import Feature, NavItem
 from backend.core.security import login_required
 from backend.services import caffeine_service
+from backend.services.campus_tools import CAFFEINE_TOOLS
 
 from . import flash_report
 
@@ -37,4 +38,5 @@ def remove(intake_id):
     return redirect(url_for("caffeine.index"))
 
 
-feature = Feature("cafeine", blueprints=[bp], nav=[NavItem("caffeine.index", "Caféine", order=3, section="site", opens="cafeine")])
+feature = Feature("cafeine", blueprints=[bp], nav=[NavItem("caffeine.index", "Caféine", order=3, section="site", opens="cafeine")],
+                  tools=CAFFEINE_TOOLS)  # l'assistant répond sur la consommation de caféine
