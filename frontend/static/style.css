@@ -800,6 +800,11 @@ form[data-kind="autre"] .kind-school { display: none; }
   display: grid; place-items: center; border-radius: 50%; border: 0; background: var(--ink); color: var(--on-ink); cursor: pointer;
   box-shadow: var(--shadow-3); transition: transform var(--dur) var(--ease-spring), background-color var(--dur-fast) var(--ease-out); }
 .assistant-fab:hover { background: var(--ink-strong); transform: translateY(-2px) scale(1.04); }
+/* fermée : le logo de Rivezli sur fond clair ; ouverte : la croix sur fond encre */
+.assistant:not(.is-open) .assistant-fab { background: var(--surface); border: 1px solid var(--line); }
+.assistant:not(.is-open) .assistant-fab:hover { background: var(--surface); }
+.assistant-fab .assistant-logo { width: 36px; height: 36px; object-fit: contain; }
+.assistant-head-logo { width: 36px; height: 36px; object-fit: contain; flex-shrink: 0; }
 .assistant-fab:active { transform: scale(.95); }
 .assistant-fab:focus-visible { outline: 3px solid var(--graphite); outline-offset: 3px; }
 .assistant-fab .icon { width: 26px; height: 26px; }
@@ -882,6 +887,10 @@ form[data-kind="autre"] .kind-school { display: none; }
 .link-chip:hover, .link-chip:focus-visible { border-color: var(--ink); text-decoration: underline; }
 .msg-user { align-self: flex-end; background: var(--ink); color: var(--on-ink); border-bottom-right-radius: 4px; white-space: pre-wrap; }
 .msg-assistant { align-self: flex-start; background: var(--surface-2); color: var(--graphite); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+/* avatar : le logo de Rivezli devant chaque message de l'assistant */
+.msg-assistant { position: relative; margin-left: 32px; }
+.msg-assistant::before { content: ""; position: absolute; left: -32px; bottom: 0; width: 24px; height: 24px;
+  background: url("logo.png") center / contain no-repeat; }
 .msg-typing { color: var(--muted); font-style: italic; animation: assistant-pulse 1.2s ease-in-out infinite; }
 @keyframes assistant-pulse { 50% { opacity: .5; } }
 .msg-error { border-color: color-mix(in srgb, var(--margin) 55%, var(--line)); }
