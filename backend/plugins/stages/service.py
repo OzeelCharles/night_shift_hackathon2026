@@ -104,6 +104,7 @@ def add_wish(user, form) -> Report:
 
 
 def delete_wish(user, wish_id) -> Report:
+    _owned(store.wish(wish_id, user["id"]))
     store.delete_wish(wish_id, user["id"])
     return Report().success("Poste retiré de ta liste.")
 
@@ -112,12 +113,10 @@ def _fetch(url: str) -> dict | None:
     """Lit l'offre à partir de son lien (données JobPosting de la page). None si la page refuse ou est muette."""
     if not current_app.config.get("ENABLE_WEB"):
         return None
-    import requests
-
-    from backend.dao import web
-    try:
-        r = web.secure_session().get(url, headers=web.BROWSER, timeout=10)
-    except requests.RequestException:
+    from backend.dao import safe_http, web
+    try:  # URL fournie par l'utilisateur : uniquement via safe_http (adresses publiques, SEC-07)
+        r = safe_http.get(url, headers=web.BROWSER)
+    except safe_http.SafeHttpError:
         return None
     return sources.parse_offer(r.text) if r.status_code == 200 else None
 
@@ -154,6 +153,7 @@ def set_status(user, offer_id, status) -> Report:
 
 
 def delete_offer(user, offer_id) -> Report:
+    _owned(store.offer(offer_id, user["id"]))
     store.delete_offer(offer_id, user["id"])
     return Report().success("Offre retirée de ton suivi.")
 
@@ -206,5 +206,6 @@ def save_letter(user, letter_id, content) -> Report:
 
 
 def delete_letter(user, letter_id) -> Report:
+    letter(user, letter_id)  # 404 si la lettre n'est pas à l'utilisateur
     store.delete_letter(letter_id, user["id"])
     return Report().success("Lettre supprimée.")

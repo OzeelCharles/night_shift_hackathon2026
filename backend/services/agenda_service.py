@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 
 from backend.business import agenda_analysis as analysis
-from backend.business import calendar_ics, matching, timetable_photo
+from backend.business import calendar_ics, matching, timetable_photo, uploads
 from backend.business.planner import DEFAULT_TOPICS
 from backend.business.text import bounded_int, iso, parse_date, parse_time
 from backend.core import events
@@ -63,15 +63,20 @@ class _Linker:
         return sid, analysis.link_kind(title, sid)
 
 
-def import_ics(user, text: str, sync_mode: bool, create_missing: bool) -> Report:
+def import_ics(user, data: bytes | str, sync_mode: bool, create_missing: bool) -> Report:
     """Synchronise l'emploi du temps : seuls les cours ajoutés, déplacés ou supprimés changent.
 
     sync_mode (« Mettre à jour », recommandé) : les cours disparus du nouveau fichier sont retirés ;
     sinon on ne fait qu'ajouter / corriger, sans rien supprimer.
+    Fichier de 2 Mo au plus ; 5 000 créneaux au plus (SEC-06).
     """
     uid = user["id"]
+    if len(data) > calendar_ics.MAX_BYTES:
+        return Report().error(f"Fichier .ics trop volumineux ({calendar_ics.MAX_BYTES // (1024 * 1024)} Mo maximum).")
+    text = data.decode("utf-8", errors="ignore") if isinstance(data, bytes) else data
     parsed, skipped = calendar_ics.parse_ics(text, datetime.combine(date.today(), time()),
                                              keep_allday=analysis.is_exam)
+    truncated = len(parsed) >= calendar_ics.MAX_EVENTS
     # Un même cours répété pour chaque groupe de TD n'est gardé qu'une fois (le plus long).
     unique = analysis.dedupe(parsed, key=lambda e: (matching.normalize(e["title"]) or e["title"], e["start"]))
     duplicates = len(parsed) - len(unique)
@@ -115,7 +120,9 @@ def import_ics(user, text: str, sync_mode: bool, create_missing: bool) -> Report
     if duplicates:
         msg += f" {duplicates} doublon(s) (même cours répété pour plusieurs groupes) fusionné(s)."
     if skipped:
-        msg += f" {skipped} événement(s) « journée entière » ignoré(s)."
+        msg += f" {skipped} événement(s) « journée entière » ou illisible(s) ignoré(s)."
+    if truncated:
+        msg += f" Seuls les {calendar_ics.MAX_EVENTS} premiers créneaux ont été lus."
     report = Report()
     if link.created_ids:
         report.info(*events.emit(events.SUBJECT_CREATED, user_id=uid, subject_ids=link.created_ids))
@@ -125,6 +132,7 @@ def import_ics(user, text: str, sync_mode: bool, create_missing: bool) -> Report
 
 
 # ---------------------------------------------------------------- import d'une photo
+PHOTO_READ_LIMIT = uploads.MAX_PHOTO_BYTES + 1  # lecture bornée : un octet de plus suffit à savoir que c'est trop
 def photo_enabled() -> bool:
     return vision.available()
 
@@ -134,6 +142,8 @@ def import_photo(user, image: bytes, weeks: int, create_missing: bool) -> Report
     uid = user["id"]
     if not vision.available():
         return Report().error("La lecture de photos n'est pas disponible : il manque une clé Groq sur ce serveur.")
+    if len(image) > uploads.MAX_PHOTO_BYTES:  # SEC-06 : vérifié avant l'appel au modèle
+        return Report().error(f"Photo trop lourde ({uploads.MAX_PHOTO_BYTES // (1024 * 1024)} Mo maximum).")
     try:
         answer = vision.ask(image, timetable_photo.PROMPT)
     except vision.VisionError as e:
@@ -226,11 +236,13 @@ def link(user, event_id, choice: str) -> Report:
 
 
 def delete_event(user, event_id) -> Report:
+    owned(dao.get_owned(event_id, user["id"]))  # 404 si le créneau n'est pas à l'utilisateur
     dao.delete(event_id, user["id"])
     return _after_change(user["id"], "Créneau supprimé.")
 
 
 def delete_revision(user, session_id) -> Report:
+    owned(sessions_dao.get_owned(session_id, user["id"], manual_only=True))
     sessions_dao.delete_manual(session_id, user["id"])
     return planning_service.update(user["id"], "Créneau de révision supprimé.", repair=True)
 

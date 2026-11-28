@@ -30,6 +30,11 @@ def update(user_id, **fields) -> None:
             *[fields[c] for c in cols], user_id)
 
 
+def bump_session_version(user_id) -> None:
+    """Invalide toutes les sessions ouvertes de l'utilisateur (SEC-03)."""
+    execute("UPDATE users SET session_version = session_version + 1 WHERE id = ?", user_id)
+
+
 def delete(user_id) -> None:
     execute("DELETE FROM users WHERE id = ?", user_id)
 

@@ -9,7 +9,7 @@
   <label>Nom d'utilisateur <input name="username" required value="{{ u.username or '' }}"></label>
   <label>E-mail <input type="email" name="email" required value="{{ u.email or '' }}"></label>
   <label>{{ "Mot de passe" if new else "Nouveau mot de passe (laisser vide pour ne pas changer)" }}
-    <input type="password" name="password" minlength="8" {% if new %}required{% endif %}></label>
+    <input type="password" name="password" minlength="10" {% if new %}required{% endif %}></label>
   <label>Niveau d'études
     <select name="level">
       {% for key, label in levels.items() %}<option value="{{ key }}" {% if (u.level or 'autre') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
@@ -35,7 +35,7 @@
     <tbody>
     {% for s in subjects %}
     <tr><td>{{ s.name }}</td><td>{{ s.goal }}</td><td>{{ s.exam_date|datefr }}</td>
-      <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière ?')">
+      <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" data-confirm="Supprimer cette matière ?">
         {{ csrf_field() }}
         <input type="hidden" name="next" value="{{ request.path }}">
         <button class="btn-link danger">supprimer</button></form></td></tr>

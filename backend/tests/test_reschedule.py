@@ -63,9 +63,9 @@ class RescheduleAppTests(unittest.TestCase):
 
     def login_as(self, email):
         self.client.post("/deconnexion")
-        self.client.post("/inscription", data={"email": email, "username": email.split("@")[0], "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
-        self.client.post("/connexion", data={"email": email, "password": "motdepasse1"})
+        self.client.post("/inscription", data={"email": email, "username": email.split("@")[0], "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
+        self.client.post("/connexion", data={"email": email, "password": "Carnet-Revision-2026"})
 
     def missed_session(self):
         """Matière avec examen dans 12 jours ; sa première séance est déplacée à hier, non faite (ratée)."""
@@ -148,8 +148,7 @@ class RescheduleAppTests(unittest.TestCase):
         action_id = self.prepare()["action"]["id"]
         self.login_as("tom@test.fr")
         r = self.client.post(f"/assistant/actions/{action_id}", json={"choice": "replacer"})
-        self.assertEqual(r.status_code, 422)
-        self.assertIn("introuvable", r.get_json()["error"], "on ne peut pas valider la proposition d'un autre")
+        self.assertEqual(r.status_code, 404, "on ne peut pas valider la proposition d'un autre (SEC-02 : 404)")
         self.assertEqual(self.q("SELECT status FROM chat_actions")[0]["status"], "pending")
 
     def test_assistant_flow_with_buttons(self):

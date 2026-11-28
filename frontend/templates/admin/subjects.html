@@ -10,7 +10,7 @@
     {% for s in subjects %}
     <tr><td>{{ s.name }}</td><td><a href="{{ url_for('admin.user_edit', user_id=s.user_id) }}">{{ s.email }}</a></td>
       <td>{{ s.goal }}</td><td>{{ s.exam_date|datefr }}</td><td>{{ s.n_docs }}</td><td>{{ s.n_sessions }}</td>
-      <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière ?')">
+      <td><form method="post" action="{{ url_for('admin.subject_delete', subject_id=s.id) }}" data-confirm="Supprimer cette matière ?">
         {{ csrf_field() }}
         <button class="btn-link danger">supprimer</button></form></td></tr>
     {% else %}

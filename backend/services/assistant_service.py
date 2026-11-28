@@ -31,6 +31,7 @@ from backend.dao import chat as dao
 from backend.dao import llm, vision
 from backend.dao import subjects as subjects_dao
 from backend.dao.db import commit
+from backend.services.common import owned
 
 MAX_PDF_BYTES = 15 * 1024 * 1024
 MAX_ARGUMENT_CHARS = 1000   # ex. la description du stage recherché
@@ -100,8 +101,8 @@ def _public(m: dict, user=None) -> dict:
 
 def _pending(user, action_id: int):
     """(proposition, son Action) ou (None, message d'erreur). Seul son auteur peut la traiter, une seule fois."""
-    row = actions_dao.get_owned(action_id, user["id"])
-    handler = current_app.extensions.get("assistant_actions", {}).get(row["kind"]) if row else None
+    row = owned(actions_dao.get_owned(action_id, user["id"]))  # SEC-02 : 404 si elle n'est pas à l'utilisateur
+    handler = current_app.extensions.get("assistant_actions", {}).get(row["kind"])
     if handler is None:
         return None, "Proposition introuvable."
     if row["status"] != "pending":

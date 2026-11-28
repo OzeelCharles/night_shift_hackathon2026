@@ -107,8 +107,8 @@ class RevisionPagesTests(unittest.TestCase):
                                "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up")})
         self.app.instance_path = self.tmp.name  # jamais les vraies clés d'API de instance/
         self.client = self.app.test_client()
-        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "licence", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "licence", "school": "ENSAI"})
         self.client.post("/matieres/nouvelle", data={"name": "Probabilités", "goal": "a_jour", "weekly_hours": "2",
                                                      "comfort": "2", "topics": "\n".join(TOPICS)})
         self.client.post("/matieres/1/documents",
@@ -185,8 +185,8 @@ class RevisionPagesTests(unittest.TestCase):
         self.client.post("/reviser/1/niveau", data={"difficulte": "facile"})
         quiz_url = self.client.post("/reviser/1/qcm", data={"difficulte": "facile"}).headers["Location"]
         self.client.post("/deconnexion")
-        self.client.post("/inscription", data={"email": "f@test.fr", "username": "Tom", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "licence", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "f@test.fr", "username": "Tom", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "licence", "school": "ENSAI"})
         self.assertEqual(self.client.get("/reviser/1").status_code, 404)
         self.assertEqual(self.client.get(quiz_url).status_code, 404)
 
@@ -290,8 +290,8 @@ class RevisionWebTests(unittest.TestCase):
         self.client = self.app.test_client()
         from backend.services import resource_service
         with mock.patch.object(resource_service, "refresh_async", return_value=False):
-            self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                                   "password2": "motdepasse1", "level": "licence", "school": "ENSAI"})
+            self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                                   "password2": "Carnet-Revision-2026", "level": "licence", "school": "ENSAI"})
             self.client.post("/matieres/nouvelle", data={"name": "Probabilités", "goal": "a_jour", "weekly_hours": "2",
                                                          "comfort": "3", "topics": "\n".join(TOPICS)})
             self.client.post("/matieres/1/documents", content_type="multipart/form-data", data={

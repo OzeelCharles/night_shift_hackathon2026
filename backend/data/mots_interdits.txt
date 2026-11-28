@@ -1,0 +1,80 @@
+# Termes interdits dans les textes visibles par d'autres personnes (SEC-05) : insultes, propos haineux,
+# contenus sexuels. Une entrée par ligne, en minuscules, sans accents ; les variantes (casse, accents,
+# substitutions @/0/1/3/4/€, lettres répétées, séparateurs entre les lettres, pluriel en -s/-x) sont
+# reconnues par business/moderation.py.
+# Par défaut un terme doit former un mot entier (« con » refusé, « Concarneau » accepté).
+# Préfixe « * » : terme reconnu aussi à l'intérieur d'un mot (seulement s'il ne crée pas de faux positifs).
+con
+conne
+*connard
+*connasse
+conasse
+salope
+salop
+salaud
+pute
+putain
+pouffiasse
+*encule
+*enfoire
+batard
+abruti
+debile
+cretin
+gogol
+triso
+tapette
+pede
+pd
+gouine
+tarlouze
+*bougnoule
+negre
+negro
+bamboula
+youpin
+bicot
+nazi
+nazis
+hitler
+heil
+kkk
+bite
+chatte
+couille
+nique
+niquer
+ntm
+fdp
+tg
+ta gueule
+branleur
+branleuse
+*pedophile
+pedo
+viol
+violeur
+porno
+porn
+sexe
+cul
+suce
+suceuse
+merde
+*fuck
+fucker
+*motherfucker
+shit
+bitch
+cunt
+whore
+slut
+*nigger
+nigga
+*faggot
+fag
+dick
+cock
+pussy
+asshole
+bastard

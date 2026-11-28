@@ -140,7 +140,7 @@
             <td class="num">{{ g.value | nombre }} / {{ g.out_of | nombre }}</td>
             <td class="num">{{ g.coefficient | nombre }}</td>
             <td class="num">{{ (g.value / g.out_of * 20) | round(2) | nombre }}</td>
-            <td><form method="post" action="{{ url_for('dossier.delete', grade_id=g.id) }}" onsubmit="return confirm('Supprimer cette note ?')">
+            <td><form method="post" action="{{ url_for('dossier.delete', grade_id=g.id) }}" data-confirm="Supprimer cette note ?">
               {{ csrf_field() }}<button class="btn-link danger small">Supprimer</button></form></td>
           </tr>
           {% endfor %}
@@ -153,7 +153,7 @@
   </ul>
 </section>
 
-<script>
+<script nonce="{{ csp_nonce() }}">
   // Infobulle de la courbe : la ligne verticale suit le pointeur et se cale sur la date la plus proche.
   document.querySelectorAll('.chart').forEach(chart => {
     const points = JSON.parse(chart.dataset.points);
