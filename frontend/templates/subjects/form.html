@@ -28,7 +28,7 @@
     <div class="segmented segmented-full">
       {% for key, label in goals.items() %}
       <label><input type="radio" name="goal" value="{{ key }}" {% if (s.goal or 'exam') == key %}checked{% endif %}
-             onchange="document.body.dataset.goal=this.value"> {{ label }}</label>
+             data-sync-body="goal"> {{ label }}</label>
       {% endfor %}
     </div>
   </fieldset>
@@ -69,7 +69,7 @@
     <a class="btn btn-ghost btn-lg" href="{{ url_for('main.dashboard') if new else url_for('subjects.detail', subject_id=subject_id) }}">Annuler</a>
   </div>
 </form>
-<script>
+<script nonce="{{ csp_nonce() }}">
   document.body.dataset.goal = (document.querySelector('input[name=goal]:checked') || {}).value || 'exam';
 
   // Suggestions de matières tirées de l'agenda (classées côté serveur par similarité cosinus d'embeddings)

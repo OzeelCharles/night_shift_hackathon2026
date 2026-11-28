@@ -92,9 +92,9 @@ class AssistantAppTests(unittest.TestCase):
 
     def login_as(self, email):
         self.client.post("/deconnexion")
-        self.client.post("/inscription", data={"email": email, "username": email.split("@")[0], "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
-        self.client.post("/connexion", data={"email": email, "password": "motdepasse1"})
+        self.client.post("/inscription", data={"email": email, "username": email.split("@")[0], "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
+        self.client.post("/connexion", data={"email": email, "password": "Carnet-Revision-2026"})
 
     def ask(self, fake, text, **extra):
         with mock.patch("backend.dao.llm.chat", fake):
@@ -238,7 +238,7 @@ class AssistantAppTests(unittest.TestCase):
         self.assertEqual(self.q("SELECT COUNT(*) AS n FROM chat_messages")[0]["n"], 2)
         self.client.post("/deconnexion")
         self.assertEqual(self.q("SELECT COUNT(*) AS n FROM chat_conversations")[0]["n"], 0, "effacé à la déconnexion")
-        self.client.post("/connexion", data={"email": "lea@test.fr", "password": "motdepasse1"})
+        self.client.post("/connexion", data={"email": "lea@test.fr", "password": "Carnet-Revision-2026"})
         self.assertEqual(self.client.get("/assistant/conversation").get_json()["messages"], [])
 
     def test_history_is_erased_when_the_browser_was_closed(self):
@@ -248,7 +248,7 @@ class AssistantAppTests(unittest.TestCase):
                          "même session : l'historique reste d'une page à l'autre")
         # navigateur fermé : le cookie de session disparaît, l'étudiant se reconnecte
         browser = self.app.test_client()
-        browser.post("/connexion", data={"email": "lea@test.fr", "password": "motdepasse1"})
+        browser.post("/connexion", data={"email": "lea@test.fr", "password": "Carnet-Revision-2026"})
         self.assertEqual(browser.get("/assistant/conversation").get_json()["messages"], [])
         self.assertEqual(self.q("SELECT COUNT(*) AS n FROM chat_messages")[0]["n"], 0, "ancienne session effacée en base")
 

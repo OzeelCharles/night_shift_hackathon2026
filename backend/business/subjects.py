@@ -6,7 +6,7 @@ from datetime import date
 
 from . import extractor
 from .planner import DEFAULT_TOPICS
-from .text import bounded_float, bounded_int
+from .text import bounded_float, bounded_int, parse_date
 
 GOALS = {"exam": "Préparer un examen", "a_jour": "Être à jour dans le cours"}
 COMFORT = {1: "Très difficile", 2: "Difficile", 3: "Moyen", 4: "À l'aise", 5: "Très à l'aise"}
@@ -40,11 +40,11 @@ def validate(form) -> tuple[dict, list[str]]:
     goal = form.get("goal", "exam") if form.get("goal", "exam") in GOALS else "exam"
     exam_date = form.get("exam_date") or None
     if goal == "exam":
-        try:
-            if date.fromisoformat(exam_date) <= date.today():
-                errors.append("La date d'examen doit être dans le futur.")
-        except (TypeError, ValueError):
+        parsed = parse_date(exam_date)  # BDD-06 : année plausible (1900-2199)
+        if parsed is None:
             errors.append(MISSING_EXAM_DATE)
+        elif parsed <= date.today():
+            errors.append("La date d'examen doit être dans le futur.")
     else:
         exam_date = None
     return {

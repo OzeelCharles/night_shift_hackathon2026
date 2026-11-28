@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set space = "communaute" %}
+{% from "community/_macros.html" import badge with context %}
+{% block title %}Messages{% endblock %}
+{% block content %}
+<div class="page-head"><div><h1>Messages</h1>
+  <p class="muted">Écris à un autre utilisateur et échangez vos polys et diapos. Seul ton nom, ton niveau et ton établissement sont visibles : jamais ton e-mail.</p></div></div>
+
+<form method="get" class="com-search" role="search">
+  <input type="search" name="q" value="{{ q }}" placeholder="Trouver quelqu'un par son nom ou son établissement" aria-label="Trouver un utilisateur">
+  <button class="btn btn-ghost">Chercher</button>
+</form>
+
+{% if q %}
+<section class="card">
+  <h2>Résultats</h2>
+  {% if results %}
+  <ul class="com-people">
+    {% for u in results %}
+    <li><a href="{{ url_for('community.conversation', user_id=u.id) }}"><strong>{{ u.username }}</strong></a>
+      {{ badge(u.level) }} <span class="muted small">{{ u.school }}</span></li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">{% if q | length < 2 %}Tape au moins 2 lettres.{% else %}Personne ne correspond à « {{ q }} ».{% endif %}</p>{% endif %}
+</section>
+{% endif %}
+
+<section class="card">
+  <h2>Conversations</h2>
+  {% if conversations %}
+  <ul class="com-people">
+    {% for c in conversations %}
+    <li>
+      <a href="{{ url_for('community.conversation', user_id=c.id) }}"><strong>{{ c.username }}</strong></a>
+      {% if c.unread %}<span class="tag tag-hot">{{ c.unread }} nouveau{{ 'x' if c.unread > 1 }}</span>{% endif %}
+      <div class="small muted">{{ 'Toi : ' if c.last_sender == g.user.id }}{{ (c.last_body or '📎 Fichier') | truncate(90) }}</div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}<p class="muted">Pas encore de conversation. Cherche quelqu'un ci-dessus pour commencer.</p>{% endif %}
+</section>
+{% endblock %}

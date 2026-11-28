@@ -69,7 +69,7 @@
     <p class="assistant-privacy">Pour te répondre, ta question, tes pièces jointes et les données utiles (planning, notes) sont envoyées à <span class="assistant-provider">ton fournisseur d'IA</span>. Photos et PDF ne sont pas conservés. L'historique n'est visible que par toi et s'efface à la déconnexion, à la fermeture de l'application ou après 2 h d'inactivité.</p>
   </section>
 </div>
-<script>
+<script nonce="{{ csp_nonce() }}">
 (() => {
   const root = document.getElementById('assistant');
   const fab = root.querySelector('.assistant-fab');
@@ -90,14 +90,23 @@
   // 2. le Markdown devient du HTML, nettoyé par DOMPurify (aucun script ne passe) ;
   // 3. chaque formule est rendue par KaTeX à sa place.
   const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/';
-  const LIBS = { katex: CDN + 'KaTeX/0.16.9/katex.min.js', marked: CDN + 'marked/12.0.2/marked.min.js',
-                 DOMPurify: CDN + 'dompurify/3.1.6/purify.min.js' };
+  // SRI (F-10) : empreintes SHA-384 des fichiers exacts ; le navigateur refuse tout fichier modifié sur le CDN.
+  const LIBS = {
+    katex: [CDN + 'KaTeX/0.16.9/katex.min.js', 'sha384-XjKyOOlGwcjNTAIQHIpgOno0Hl1YQqzUOEleOLALmuqehneUG+vnGctmUb0ZY0l8'],
+    marked: [CDN + 'marked/12.0.2/marked.min.js', 'sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi'],
+    DOMPurify: [CDN + 'dompurify/3.1.6/purify.min.js', 'sha384-+VfUPEb0PdtChMwmBcBmykRMDd+v6D/oFmB3rZM/puCMDYcIvF968OimRh4KQY9a'],
+  };
+  const KATEX_CSS_SRI = 'sha384-n8MVd4RsNIU0tAv4ct0nTaAbDJwPJzDEaqSD1odI+WdtXRGWt2kTvGFasHpSy3SV';
   // $…$ en ligne : pas d'espace juste après le $ ouvrant ni avant le $ fermant (« 5 $ et 10 $ » reste du texte)
   const MATH = /\$\$[\s\S]+?\$\$|\\\[[\s\S]+?\\\]|\\\([\s\S]+?\\\)|(?<![\\$\w])\$(?![\s$])[^$\n]+?(?<![\s\\])\$(?![\w$])/g;
   const CODE = /(```[\s\S]*?```|`[^`\n]+`)/;
   let libsReady = null, purifyHooked = false;
-  function loadScript(src) {
-    return new Promise((ok, ko) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.append(s); });
+  function loadScript([src, integrity]) {
+    return new Promise((ok, ko) => {
+      const s = document.createElement('script');
+      s.src = src; s.integrity = integrity; s.crossOrigin = 'anonymous'; s.referrerPolicy = 'no-referrer';
+      s.onload = ok; s.onerror = ko; document.head.append(s);
+    });
   }
   function libsLoaded() { return !!(window.katex && window.marked && window.DOMPurify); }
   function ensureLibs() {
@@ -105,9 +114,10 @@
     if (!libsReady) {
       if (!document.querySelector('link[href*="katex.min.css"]')) {
         const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = CDN + 'KaTeX/0.16.9/katex.min.css';
+        css.integrity = KATEX_CSS_SRI; css.crossOrigin = 'anonymous'; css.referrerPolicy = 'no-referrer';
         document.head.append(css);
       }
-      libsReady = Promise.all(Object.entries(LIBS).filter(([g]) => !window[g]).map(([, src]) => loadScript(src)))
+      libsReady = Promise.all(Object.entries(LIBS).filter(([g]) => !window[g]).map(([, lib]) => loadScript(lib)))
         .then(() => libsLoaded())
         .catch(() => { libsReady = null; return false; });  // hors ligne : mise en forme simple
     }

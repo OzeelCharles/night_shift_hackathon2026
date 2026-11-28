@@ -26,7 +26,7 @@ class AppTests(unittest.TestCase):
         self.tmp.cleanup()
 
     # ---------------------------------------------------------------- helpers
-    def register(self, email="eleve@test.fr", password="motdepasse1", level="licence", school="Université de Rennes"):
+    def register(self, email="eleve@test.fr", password="Carnet-Revision-2026", level="licence", school="Université de Rennes"):
         return self.client.post("/inscription", data={"email": email, "username": "Élève", "password": password,
                                                       "password2": password, "level": level, "school": school})
 
@@ -587,7 +587,7 @@ class AppTests(unittest.TestCase):
         self.login("admin@test.fr", "adminpass123")
         self.assertEqual(self.client.get("/admin/").status_code, 200)
         r = self.client.post("/admin/utilisateurs/nouveau", data={
-            "email": "new@test.fr", "username": "Nouveau", "password": "password12", "role": "user",
+            "email": "new@test.fr", "username": "Nouveau", "password": "Galet-Ruisseau-Plume-8", "role": "user",
             "level": "lycee", "school": "Lycée Chateaubriand"})
         self.assertEqual(r.status_code, 302)
         uid = self.q("SELECT id FROM users WHERE email='new@test.fr'")[0]["id"]

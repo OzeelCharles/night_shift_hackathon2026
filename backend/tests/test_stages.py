@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from backend import create_app
+from backend.dao import safe_http
 from backend.dao.db import get_db
 from backend.plugins.stages import letters, service, sources
 
@@ -59,8 +60,8 @@ class StagesRoutesTests(unittest.TestCase):
                                "DATABASE": os.path.join(self.tmp.name, "t.sqlite"),
                                "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up")})
         self.client = self.app.test_client()
-        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "licence", "school": "Université Lyon 3"})
+        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "licence", "school": "Université Lyon 3"})
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -97,10 +98,9 @@ class StagesRoutesTests(unittest.TestCase):
     def test_offer_read_from_link(self):
         self.app.config["ENABLE_WEB"] = True
         with mock.patch.object(service, "_fetch", wraps=service._fetch) as fetch, \
-                mock.patch("backend.dao.web.secure_session") as session:
-            session.return_value.get.return_value = mock.Mock(
-                status_code=200, content=JOB_PAGE.encode("utf-8"),
-                headers={"Content-Type": "text/html; charset=utf-8"}, apparent_encoding="utf-8")
+                mock.patch("backend.dao.safe_http.get") as get:  # tout lien d'utilisateur passe par safe_http
+            get.return_value = safe_http.Response(url="https://x", status_code=200, content=JOB_PAGE.encode("utf-8"),
+                                                  headers={"content-type": "text/html; charset=utf-8"})
             self.client.post("/stages/offres", data={"url": "https://www.welcometothejungle.com/fr/jobs/1"})
             fetch.assert_called_once()
         offer = self.q("SELECT * FROM stg_offers")[0]
@@ -113,10 +113,9 @@ class StagesRoutesTests(unittest.TestCase):
         page = JOB_PAGE.replace("Stage - Assistant juridique (F/H)",
                                 "Stage d’été – Professionnel de recherche, Économie de la santé")
         page = page.replace("Lyon", "Montréal")
-        with mock.patch("backend.dao.web.secure_session") as session:
-            session.return_value.get.return_value = mock.Mock(
-                status_code=200, content=page.encode("utf-8"), headers={"Content-Type": "text/html"},
-                apparent_encoding="ascii")
+        with mock.patch("backend.dao.safe_http.get") as get:  # page servie sans charset
+            get.return_value = safe_http.Response(url="https://x", status_code=200, content=page.encode("utf-8"),
+                                                  headers={"content-type": "text/html"})
             self.client.post("/stages/offres", data={"url": "https://careers-analysisgroup.icims.com/jobs/1/job"})
         offer = self.q("SELECT title, location FROM stg_offers")[0]
         self.assertEqual(offer["title"], "Stage d’été – Professionnel de recherche, Économie de la santé")
@@ -204,8 +203,8 @@ class StagesRoutesTests(unittest.TestCase):
         self.client.post("/stages/lettres", data={"title": "Graphiste"})
         lid = self.q("SELECT id FROM stg_letters")[0]["id"]
         self.client.post("/deconnexion")
-        self.client.post("/inscription", data={"email": "b@test.fr", "username": "Bobby", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "b@test.fr", "username": "Bobby", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
         self.assertEqual(self.client.get(f"/stages/lettres/{lid}").status_code, 404)
 
 

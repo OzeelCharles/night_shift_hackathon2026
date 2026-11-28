@@ -10,17 +10,34 @@ from __future__ import annotations
 import json
 import os
 import re
+from datetime import date
 
 import requests
-from flask import current_app
+from flask import current_app, g
 
-from . import web
+from . import llm_usage, web
 
 URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
 class GroqError(Exception):
     """Appel impossible (pas de clé, réseau, quota, réponse inexploitable)."""
+
+
+class QuotaError(GroqError):
+    """Quota quotidien de générations de l'utilisateur atteint (SEC-08)."""
+
+
+def charge_quota() -> None:
+    """Compte une génération pour l'utilisateur connecté (QCM, exercices, notebooks, lettres, photos confondus) ;
+    lève QuotaError au-delà de LLM_DAILY_QUOTA par jour. Appelé juste avant chaque appel à un modèle, quel que soit
+    le fournisseur : c'est le passage obligé de toutes les fonctions IA."""
+    user = g.get("user")
+    if user is None:  # hors requête d'un utilisateur connecté : rien à compter
+        return
+    limit = int(current_app.config.get("LLM_DAILY_QUOTA", 20))
+    if not llm_usage.consume(user["id"], date.today().isoformat(), limit):
+        raise QuotaError(f"Tu as utilisé tes {limit} générations par l'IA du jour : réessaie demain.")
 
 
 def read_key(config_name: str, filename: str) -> str:
@@ -52,6 +69,7 @@ def chat(messages: list[dict], *, model: str, temperature: float = 0.4, max_toke
     key = api_key()
     if not key:
         raise GroqError("Aucune clé Groq : range-la dans instance/anthropic_api_key ou instance/groq_api_key.")
+    charge_quota()
     body = {"model": model, "temperature": temperature, "max_tokens": max_tokens, "messages": messages}
     if as_json:
         body["response_format"] = {"type": "json_object"}

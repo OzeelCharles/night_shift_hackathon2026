@@ -29,8 +29,8 @@ class _Base(unittest.TestCase):
         self.tmp.cleanup()
 
     def register(self):
-        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
 
 
 class PluginTests(_Base):

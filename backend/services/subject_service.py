@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import mimetypes
 import os
+import shutil
 import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
@@ -11,10 +12,10 @@ from datetime import date, datetime, timedelta
 from flask import current_app
 from werkzeug.utils import secure_filename
 
-from backend.business import agenda_analysis, exams, extractor, matching
+from backend.business import agenda_analysis, exams, extractor, matching, uploads
 from backend.business import subjects as rules
 from backend.business.planner import DEFAULT_TOPICS
-from backend.business.text import bounded_float, bounded_int, date_fr, iso, parse_date
+from backend.business.text import bounded_float, bounded_int, date_fr, iso, parse_date, parse_id
 from backend.core import events
 from backend.dao import agenda as agenda_dao
 from backend.dao import documents as documents_dao
@@ -23,7 +24,7 @@ from backend.dao import subjects as dao
 from backend.dao import vision
 
 from . import exam_service, planning_service, resource_service
-from .common import owned
+from .common import owned, track_written, user_lock
 from .report import Report
 
 
@@ -72,7 +73,7 @@ def resolve(user_id, title: str, explicit: str | None = "auto", goal: str = "exa
     explicit : id choisi par l'utilisateur, ou « auto ». Retourne (matière, statut, score) ;
     statut ∈ explicit / matched / created."""
     if explicit and explicit.isdigit():
-        return get(int(explicit), user_id), "explicit", 1.0
+        return get(parse_id(explicit) or 0, user_id), "explicit", 1.0  # 404 si inconnu ou hors bornes
     match, score = matching.best_match(title, list_for(user_id))
     if match is not None:
         return match, "matched", score
@@ -99,8 +100,41 @@ def remove_files(paths) -> None:
             os.remove(real)
 
 
+def remove_user_folder(user_id) -> None:
+    """BDD-04 : suppression d'un compte, tous ses fichiers déposés (même ceux sans ligne en base)."""
+    folder = os.path.join(current_app.config["UPLOAD_FOLDER"], str(int(user_id)))
+    if _inside_uploads(folder) and os.path.isdir(folder):
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _stored_path(user_id, filename: str, default: str = "document") -> str:
+    """Chemin de stockage : UUID + nom d'origine nettoyé et raccourci, dans le dossier de l'utilisateur."""
+    return os.path.join(_upload_folder(user_id),
+                        uploads.stored_name(uuid.uuid4().hex, secure_filename(filename or ""), default))
+
+
+def _used_bytes(user_id) -> int:
+    folder = _upload_folder(user_id)
+    return sum(e.stat().st_size for e in os.scandir(folder) if e.is_file())
+
+
+def _stream_size(f) -> int:
+    stream = f.stream
+    pos = stream.tell()
+    stream.seek(0, os.SEEK_END)
+    size = stream.tell()
+    stream.seek(pos)
+    return size
+
+
+def _quota() -> int:
+    return int(current_app.config.get("USER_QUOTA_BYTES", uploads.USER_QUOTA_BYTES))
+
+
 def save_documents(user_id, subject_id, files) -> tuple[list[str], list[str]]:
-    """Enregistre et analyse les fichiers. Retourne (chapitres trouvés, messages)."""
+    """Enregistre et analyse les fichiers. Retourne (chapitres trouvés, messages).
+    SEC-06 : quota par utilisateur, nom de stockage raccourci, type vérifié par le contenu avant l'analyse
+    (un fichier refusé ne reste pas sur le disque)."""
     topics, messages, added = [], [], False
     for f in files:
         if not f or not f.filename:
@@ -108,8 +142,26 @@ def save_documents(user_id, subject_id, files) -> tuple[list[str], list[str]]:
         if not extractor.allowed_file(f.filename):
             messages.append(f"« {f.filename} » : format non pris en charge.")
             continue
-        path = os.path.join(_upload_folder(user_id), f"{uuid.uuid4().hex}_{secure_filename(f.filename) or 'document'}")
-        f.save(path)
+        full = (f"« {f.filename} » : espace de stockage plein ({_quota() // (1024 * 1024)} Mo par compte). "
+                "Supprime d'anciens documents pour en ajouter.")
+        # F-034 : lecture du quota et écriture d'un seul tenant (envois simultanés d'un même compte), puis
+        # recontrôle après écriture (plusieurs processus) : au-delà du quota, le fichier est retiré.
+        with user_lock(user_id):
+            if uploads.over_quota(_used_bytes(user_id), _stream_size(f), _quota()):
+                messages.append(full)
+                continue
+            path = _stored_path(user_id, f.filename)
+            f.save(path)
+            if _used_bytes(user_id) > _quota():
+                os.remove(path)
+                messages.append(full)
+                continue
+        track_written(path)
+        refused = extractor.check_content(path)
+        if refused:
+            os.remove(path)
+            messages.append(f"« {f.filename} » refusé : {refused}.")
+            continue
         text, found = extractor.extract(path)
         if not found and text:
             found = [k.capitalize() for k in extractor.keywords(text, 6)]
@@ -145,12 +197,20 @@ def _note_name(filename: str, n: int) -> str:
 def save_photos(user_id, subject_id, files) -> tuple[list[str], list[str]]:
     """Fait lire chaque photo par Groq et l'enregistre comme support en Markdown. Retourne (chapitres, messages)."""
     topics, messages, added = [], [], False
-    for n, f in enumerate([f for f in files if f and f.filename], 1):
+    photos = [f for f in files if f and f.filename]
+    if len(photos) > uploads.MAX_PHOTOS_PER_UPLOAD:  # vérifié avant tout appel au modèle (coût, mémoire)
+        return [], [f"{uploads.MAX_PHOTOS_PER_UPLOAD} photos au plus par envoi : envoie-les en plusieurs fois."]
+    for n, f in enumerate(photos, 1):
         if not (f.mimetype or "").startswith("image/"):
             messages.append(f"« {f.filename} » : ce n'est pas une photo.")
             continue
+        image = f.read(uploads.MAX_PHOTO_BYTES + 1)
+        if len(image) > uploads.MAX_PHOTO_BYTES:
+            messages.append(f"« {f.filename} » : photo trop lourde ({uploads.MAX_PHOTO_BYTES // (1024 * 1024)} Mo "
+                            "maximum).")
+            continue
         try:
-            text = vision.ask(f.read(), NOTES_PROMPT, as_json=False)
+            text = vision.ask(image, NOTES_PROMPT, as_json=False)
         except vision.VisionError as e:
             messages.append(f"« {f.filename} » : photo non lue ({e})")
             continue
@@ -158,7 +218,8 @@ def save_photos(user_id, subject_id, files) -> tuple[list[str], list[str]]:
             messages.append(f"« {f.filename} » : aucun texte lisible sur la photo.")
             continue
         name = _note_name(f.filename, n)
-        path = os.path.join(_upload_folder(user_id), f"{uuid.uuid4().hex}_{secure_filename(name) or 'photo.md'}")
+        path = _stored_path(user_id, name, "photo.md")
+        track_written(path)
         with open(path, "w", encoding="utf-8") as out:
             out.write(text + "\n")
         extracted, found = extractor.extract(path)

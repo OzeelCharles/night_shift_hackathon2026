@@ -35,7 +35,7 @@ def save(user_id, form) -> str | None:
         "method": form.get("method") if form.get("method") in planner.METHODS else "mixte",
         "session_minutes": bounded_int(form.get("session_minutes"), 50, 20, 240),
         "break_minutes": bounded_int(form.get("break_minutes"), 10, 0, 60),
-        "daily_max_minutes": bounded_int(form.get("daily_max_minutes"), 180, 20, 720),
+        "daily_max_minutes": bounded_int(form.get("daily_max_minutes"), 180, 30, 720),
         "day_start": start.strftime("%H:%M"), "day_end": end.strftime("%H:%M"),
         "rest_days": ",".join(map(str, rest)),
         "buffer_minutes": bounded_int(form.get("buffer_minutes"), 15, 0, 120),

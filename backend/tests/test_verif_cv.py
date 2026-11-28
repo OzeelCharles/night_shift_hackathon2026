@@ -220,8 +220,8 @@ class _AppCase(unittest.TestCase):
         self.tmp.cleanup()
 
     def register(self, email, name):
-        self.client.post("/inscription", data={"email": email, "username": name, "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": email, "username": name, "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
 
     def q(self, sql, *args):
         with self.app.app_context():

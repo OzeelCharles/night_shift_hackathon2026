@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from .text import date_fr
+from .text import date_fr, parse_date
 
 SCALE = 20.0
 
@@ -36,10 +36,8 @@ def validate(form) -> tuple[dict, list[str]]:
     if coefficient is None or not 0 < coefficient <= 100:
         errors.append("Le coefficient doit être un nombre positif (par exemple 1 ou 2).")
     raw_day = (form.get("day") or "").strip()
-    try:
-        day = date.fromisoformat(raw_day) if raw_day else date.today()
-    except ValueError:
-        day = None
+    day = parse_date(raw_day) if raw_day else date.today()  # BDD-06 : année plausible
+    if day is None:
         errors.append("Date de la note invalide.")
     if day and day > date.today():
         errors.append("La date de la note ne peut pas être dans le futur.")

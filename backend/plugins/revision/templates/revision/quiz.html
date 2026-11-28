@@ -72,7 +72,7 @@
   {% endfor %}
   {% if not done %}
   <p class="small muted">Une question sans réponse vaut 0{% if q.settings.penalty %} (pas de pénalité){% endif %}.</p>
-  <button class="btn btn-lg" onclick="return [...this.form.querySelectorAll('fieldset')].every(f => f.querySelector('input:checked')) || confirm('Certaines questions sont sans réponse. Rendre la copie quand même ?')">Rendre ma copie</button>
+  <button class="btn btn-lg" data-confirm-unanswered="Certaines questions sont sans réponse. Rendre la copie quand même ?">Rendre ma copie</button>
   {% endif %}
 </form>
 {% endblock %}

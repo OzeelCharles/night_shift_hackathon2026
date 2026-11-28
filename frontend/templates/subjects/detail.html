@@ -22,7 +22,7 @@
   </div>
   <div class="actions">
     <a class="btn btn-ghost" href="{{ url_for('subjects.edit', subject_id=s.id) }}">Modifier</a>
-    <form method="post" action="{{ url_for('subjects.delete', subject_id=s.id) }}" onsubmit="return confirm('Supprimer cette matière, ses documents et ses séances ?')">
+    <form method="post" action="{{ url_for('subjects.delete', subject_id=s.id) }}" data-confirm="Supprimer cette matière, ses documents et ses séances ?">
       {{ csrf_field() }}
       <button class="btn btn-danger">Supprimer</button>
     </form>
@@ -63,7 +63,7 @@
         <span class="when">{{ x.start|jour }}, {{ x.start|hm }} à {{ x.end|hm }}</span>
         <span>{{ x.title }} <span class="tag tag-quiet">{{ "ajouté par toi" if x.source == 'manuel' else "emploi du temps" }}</span></span>
         {% if x.source == 'manuel' %}
-        <form method="post" action="{{ url_for('agenda.delete', event_id=x.id) }}" class="inline" onsubmit="return confirm('Supprimer cet examen ?')">
+        <form method="post" action="{{ url_for('agenda.delete', event_id=x.id) }}" class="inline" data-confirm="Supprimer cet examen ?">
           {{ csrf_field() }}
           <input type="hidden" name="next" value="{{ request.path }}#examens">
           <button class="btn-link danger small">Supprimer</button>
@@ -155,7 +155,7 @@
         <legend>Objectif</legend>
         <div class="segmented segmented-full">
           {% for key in ['exam', 'a_jour'] %}
-          <label><input type="radio" name="goal" value="{{ key }}" {% if s.goal == key %}checked{% endif %} onchange="this.form.dataset.goal=this.value"> {{ "Examen" if key == 'exam' else "Être à jour" }}</label>
+          <label><input type="radio" name="goal" value="{{ key }}" {% if s.goal == key %}checked{% endif %} data-sync-form="goal"> {{ "Examen" if key == 'exam' else "Être à jour" }}</label>
           {% endfor %}
         </div>
       </fieldset>
@@ -212,7 +212,7 @@
       <span class="muted small">{{ d.topics_found }} chapitre(s) détecté(s), ajouté le {{ d.created_at[:10]|datefr }}</span>
       <span class="row-actions">
         <a href="{{ url_for('subjects.document_open', doc_id=d.id, telecharger=1) }}">Télécharger</a>
-        <form method="post" action="{{ url_for('subjects.document_delete', doc_id=d.id) }}" class="inline" onsubmit="return confirm('Supprimer ce document ?')">
+        <form method="post" action="{{ url_for('subjects.document_delete', doc_id=d.id) }}" class="inline" data-confirm="Supprimer ce document ?">
           {{ csrf_field() }}
           <button class="btn-link danger">Supprimer</button>
         </form>
@@ -353,7 +353,7 @@
   </table>
 </details>
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce() }}">
   document.querySelectorAll('.program-form').forEach(f => {
     f.dataset.goal = (f.querySelector('input[name=goal]:checked') || {}).value || 'exam';
   });

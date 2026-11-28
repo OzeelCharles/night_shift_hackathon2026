@@ -2,7 +2,7 @@
 from flask import Blueprint, flash, g, redirect, render_template, request, url_for
 
 from backend.core.features import Feature, NavItem
-from backend.core.security import admin_required
+from backend.core.security import admin_required, start_session
 from backend.services import admin_service
 
 from . import flash_errors
@@ -13,7 +13,7 @@ bp = Blueprint("admin", __name__, url_prefix="/admin")
 @bp.route("/")
 @admin_required
 def index():
-    return render_template("admin/index.html", **admin_service.overview(request.args.get("q", "").strip()))
+    return render_template("admin/index.html", **admin_service.overview(request.args.get("q", "")[:100].strip()))
 
 
 @bp.route("/utilisateurs/nouveau", methods=("GET", "POST"))
@@ -34,11 +34,13 @@ def user_new():
 def user_edit(user_id):
     u = admin_service.get_user(user_id)
     if request.method == "POST":
-        errors = admin_service.update_user(user_id, request.form)
+        errors = admin_service.update_user(user_id, request.form, g.user["id"])
         if errors:
             flash_errors(errors)
             return render_template("admin/user_form.html", u={**dict(u), **request.form.to_dict()}, new=False,
                                    user_id=user_id)
+        if user_id == g.user["id"]:
+            start_session(user_id)  # son propre mot de passe changé : nouvelle session, les autres tombent
         flash("Utilisateur mis à jour.", "success")
         return redirect(url_for("admin.index"))
     return render_template("admin/user_form.html", u=u, new=False, user_id=user_id,
@@ -54,6 +56,26 @@ def user_delete(user_id):
         flash(error, "error")
     else:
         flash(f"Utilisateur {email} supprimé avec toutes ses données.", "success")
+    return redirect(url_for("admin.index"))
+
+
+@bp.route("/journal")
+@admin_required
+def audit():
+    """SEC-10 : journal d'audit des actions des administrateurs."""
+    return render_template("admin/audit.html", entries=admin_service.audit_log())
+
+
+@bp.route("/utilisateurs/<int:user_id>/moderateur", methods=("POST",))
+@admin_required
+def user_moderator(user_id):
+    on = request.form.get("on") == "1"
+    error = admin_service.set_moderator(user_id, on)
+    name = admin_service.get_user(user_id)["username"]
+    if error:
+        flash(error, "error")
+    else:
+        flash(f"{name} est maintenant modérateur de la communauté." if on else f"{name} n'est plus modérateur.", "success")
     return redirect(url_for("admin.index"))
 
 

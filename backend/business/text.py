@@ -55,8 +55,21 @@ def parse_time(value, default: time | None = None) -> time | None:
         return default
 
 
+# BDD-06 : dates plausibles seulement (la base refuse aussi les années hors de 1900-2200 ; 2199 au plus ici
+# pour laisser la place aux répétitions hebdomadaires)
+MIN_YEAR, MAX_YEAR = 1900, 2199
+MAX_ID = 2 ** 63 - 1  # entier SQLite
+
+
 def parse_date(value) -> date | None:
     try:
-        return date.fromisoformat(value or "")
-    except ValueError:
+        d = date.fromisoformat(value or "")
+    except (TypeError, ValueError):
         return None
+    return d if MIN_YEAR <= d.year <= MAX_YEAR else None
+
+
+def parse_id(value) -> int | None:
+    """Identifiant saisi (« 12 ») ; None s'il n'est pas un entier positif stockable par SQLite."""
+    value = str(value or "").strip()
+    return int(value) if value.isdigit() and 0 < int(value) <= MAX_ID else None

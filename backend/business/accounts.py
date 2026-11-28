@@ -1,8 +1,14 @@
-"""Règles des comptes : niveaux d'études, validation des saisies."""
+"""Règles des comptes : niveaux d'études, validation des saisies, politique de mot de passe."""
 import re
+import unicodedata
+
+from . import moderation
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-MIN_PASSWORD = 8
+MIN_PASSWORD = 10
+MIN_DISTINCT_CHARS = 4  # « aaaaaaaaaa », « ababababab »… refusés
+_EDGES = re.compile(r"^[\W\d_]+|[\W\d_]+$")  # chiffres et symboles ajoutés au début ou à la fin
+_LEET = str.maketrans({"@": "a", "4": "a", "0": "o", "3": "e", "$": "s", "5": "s", "1": "i", "!": "i", "7": "t"})
 
 # Niveau scolaire : sert à adapter les ressources proposées (requêtes, tri des vidéos, plateformes).
 LEVELS = {
@@ -18,15 +24,63 @@ LEVELS = {
 }
 
 
-def validate_username(username: str) -> list[str]:
-    return [] if 2 <= len(username) <= 40 else ["Le nom d'utilisateur doit faire entre 2 et 40 caractères."]
+def validate_username(username: str, banned: "moderation.Terms | None" = None) -> list[str]:
+    """Longueur, et pas de terme interdit (le nom est visible par d'autres personnes, SEC-05)."""
+    if not 2 <= len(username) <= 40:
+        return ["Le nom d'utilisateur doit faire entre 2 et 40 caractères."]
+    if banned is not None and moderation.contains_banned(username, banned):
+        return ["Ce nom d'utilisateur contient un terme interdit (insulte, propos haineux ou contenu sexuel) : "
+                "choisis-en un autre."]
+    return []
 
 
-def validate_account(email: str, username: str, password: str | None, require_password=True) -> list[str]:
+def _fold(value: str) -> str:
+    """Minuscules sans accents ni espaces superflus (comparaison tolérante)."""
+    value = unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode()
+    return value.strip().lower()
+
+
+def _alnum(value: str) -> str:
+    return re.sub(r"[\W_]+", "", _fold(value))
+
+
+def _common_forms(password: str) -> set[str]:
+    """Formes sous lesquelles un mot de passe courant se cache : casse, chiffres ou symboles en bordure,
+    substitutions classiques (p@ssw0rd)."""
+    low = _fold(password)
+    forms = set()
+    # séparateurs glissés au milieu (« mot de passe », « m.o.t-d_e », « 1234*5678 », « 1qaz#2wsx »…) : on les
+    # retire aussi, tous sauf les symboles qui remplacent une lettre (@ $ !), traités par _LEET (F-036)
+    for base in (low, re.sub(r"[\s._\-]+", "", low), re.sub(r"[^a-z0-9@$!]+", "", low)):
+        forms |= {base, _EDGES.sub("", base), base.translate(_LEET), _EDGES.sub("", base).translate(_LEET),
+                  _EDGES.sub("", base.translate(_LEET))}
+        leet = base.translate(_LEET)
+        forms |= {re.sub(r"[\W_]+", "", leet), _EDGES.sub("", re.sub(r"[\W_]+", "", base))}
+    return {f for f in forms if f}
+
+
+def password_errors(password: str, email: str = "", username: str = "", common=frozenset()) -> list[str]:
+    """Politique SEC-03 : 10 caractères minimum, pas un mot de passe courant (liste `common`, en minuscules),
+    pas l'adresse e-mail (ni sa partie avant @) ni le nom."""
+    password = password or ""
+    if len(password) < MIN_PASSWORD:
+        return [f"Le mot de passe doit faire au moins {MIN_PASSWORD} caractères."]
+    errors = []
+    if len(set(password.lower())) < MIN_DISTINCT_CHARS or _common_forms(password) & set(common):
+        errors.append("Ce mot de passe est trop courant : choisis-en un autre "
+                      "(par exemple trois ou quatre mots sans rapport, séparés par des tirets).")
+    personal = {_alnum(email), _alnum(email.split("@")[0]), _alnum(username)} - {""}
+    if _alnum(password) in personal:
+        errors.append("Le mot de passe ne doit reprendre ni ton adresse e-mail ni ton nom.")
+    return errors
+
+
+def validate_account(email: str, username: str, password: str | None, require_password=True,
+                     common=frozenset(), banned: "moderation.Terms | None" = None) -> list[str]:
     errors = [] if EMAIL_RE.match(email) else ["Adresse e-mail invalide."]
-    errors += validate_username(username)
-    if (require_password or password) and len(password or "") < MIN_PASSWORD:
-        errors.append(f"Le mot de passe doit faire au moins {MIN_PASSWORD} caractères.")
+    errors += validate_username(username, banned)
+    if require_password or password:
+        errors += password_errors(password or "", email, username, common)
     return errors
 
 

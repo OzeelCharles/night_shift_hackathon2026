@@ -37,7 +37,7 @@
 </ul>
 <p class="small muted">Données : restaurants et menus des Crous via <a href="https://www.data.gouv.fr/dataservices/api-croustillant" target="_blank" rel="noopener">CROUStillant</a> (projet communautaire non officiel).
   L'affluence vient des signalements des étudiants ; sans signalement, c'est une estimation de la fréquentation habituelle.</p>
-<script>
+<script nonce="{{ csp_nonce() }}">
   // Aperçu du menu du jour, chargé après coup pour ne pas ralentir la liste.
   document.querySelectorAll('.cp-menu[data-menu-url]:not([hidden])').forEach(async box => {
     try {

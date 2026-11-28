@@ -102,7 +102,7 @@
       <div class="tile-foot">
         <form method="post" action="{{ url_for('stages.offer_status', offer_id=o.id) }}" class="stg-status">
           {{ csrf_field() }}
-          <select name="status" onchange="this.form.submit()" aria-label="Où en est cette candidature ?">
+          <select name="status" data-autosubmit aria-label="Où en est cette candidature ?">
             {% for k, label in statuses.items() %}<option value="{{ k }}" {% if o.status == k %}selected{% endif %}>{{ label }}</option>{% endfor %}
           </select>
           <noscript><button class="btn-link">OK</button></noscript>
@@ -111,7 +111,7 @@
           {{ csrf_field() }}<input type="hidden" name="offer_id" value="{{ o.id }}">
           <button class="btn btn-sm">{{ "Nouvelle lettre" if o.n_letters else "Écrire la lettre" }}</button>
         </form>
-        <form method="post" action="{{ url_for('stages.delete_offer', offer_id=o.id) }}" onsubmit="return confirm('Retirer cette offre ?')">
+        <form method="post" action="{{ url_for('stages.delete_offer', offer_id=o.id) }}" data-confirm="Retirer cette offre ?">
           {{ csrf_field() }}<button class="btn-link danger small">Retirer</button>
         </form>
       </div>

@@ -1,0 +1,58 @@
+{# Éléments communs : pièces jointes affichées, champ d'ajout de fichiers. #}
+{% macro attachments(files) %}
+{% if files %}
+<ul class="com-files">
+  {% for f in files %}
+  <li><a href="{{ url_for('community.file', file_id=f.id) }}">📎 {{ f.filename }}</a> <span class="small muted">({{ f.size_label }})</span></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endmacro %}
+
+{% macro file_fields(documents, limits) %}
+<label>Joindre des fichiers
+  <input type="file" name="files" multiple accept=".pdf,.pptx,.docx,.odt,.odp,.txt,.md,.png,.jpg,.jpeg">
+  <span class="small muted">Poly, diapos, photos : {{ limits.MAX_FILES }} fichiers au plus, {{ (limits.MAX_FILE_BYTES // 1048576) }} Mo chacun.</span>
+</label>
+{% if documents %}
+<details class="com-docs">
+  <summary>Partager un support de ma bibliothèque ({{ documents | length }})</summary>
+  <p class="small muted">Une copie est envoyée : tu gardes ton original.</p>
+  {% for d in documents %}
+  <label class="check"><input type="checkbox" name="documents" value="{{ d.id }}"> {{ d.filename }} <span class="muted">· {{ d.subject }}</span></label>
+  {% endfor %}
+</details>
+{% endif %}
+{% endmacro %}
+
+{% macro badge(level) %}{% if level in levels %}<span class="tag">{{ levels[level] }}</span>{% endif %}{% endmacro %}
+
+{% macro report_form(action, reported, limits) %}
+{# Signalement d'un message : choisir la raison, expliquer si besoin. Les règles sont sur /communaute/regles. #}
+{% if reported %}
+<span class="small muted">🚩 Signalé : la modération va l'examiner.</span>
+{% else %}
+<details class="com-report">
+  <summary class="small">Signaler</summary>
+  <form method="post" action="{{ action }}" class="com-form">
+    {{ csrf_field() }}
+    <p class="small muted">Ce message ne respecte pas <a href="{{ url_for('community.rules_page') }}">les règles de la communauté</a> ? Les modérateurs l'examinent.</p>
+    <label>Raison
+      <select name="reason" required>
+        <option value="">Choisir…</option>
+        {% for key, label in limits.REASONS.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+      </select></label>
+    <label>Précisions (facultatif)
+      <textarea name="details" rows="2" maxlength="{{ limits.DETAILS_MAX }}"></textarea></label>
+    <div class="actions"><button class="btn btn-sm btn-danger">Envoyer le signalement</button></div>
+  </form>
+</details>
+{% endif %}
+{% endmacro %}
+
+{% macro staff_tag(p) %}{% if p.staff %}<span class="tag tag-hot">{{ 'Admin' if p.author_role == 'admin' else 'Modérateur' }}</span>{% endif %}{% endmacro %}
+
+{% macro muted_notice() %}
+<div class="notice"><p>Ton accès en écriture à la communauté est suspendu par la modération : tu peux lire, pas publier.
+  Relis <a href="{{ url_for('community.rules_page') }}">les règles</a>.</p></div>
+{% endmacro %}

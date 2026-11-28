@@ -269,7 +269,7 @@
 </section>
 {% endif %}
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce() }}">
   // Le niveau proposé pour le QCM suit le chapitre choisi (niveau propre au chapitre, sinon celui de la matière)
   const chap = document.getElementById('qcm-chapitre');
   if (chap) chap.addEventListener('change', () => {
