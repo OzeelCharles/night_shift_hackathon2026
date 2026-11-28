@@ -63,7 +63,17 @@ def check_csrf():
             abort(400, "Jeton CSRF invalide : recharge la page.")
 
 
+def security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    if current_app.config.get("PRODUCTION"):
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    return response
+
+
 def init_app(app):
     app.before_request(check_csrf)
     app.before_request(load_current_user)
+    app.after_request(security_headers)
     app.jinja_env.globals.update(csrf_token=csrf_token, csrf_field=csrf_field)

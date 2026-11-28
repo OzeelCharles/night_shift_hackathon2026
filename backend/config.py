@@ -7,6 +7,7 @@ import secrets
 FEATURES = [
     "backend.controllers.auth",
     "backend.controllers.main",
+    "backend.controllers.pwa",  # version mobile : manifeste, service worker, page hors ligne
     "backend.controllers.planning",
     "backend.controllers.agenda",
     "backend.controllers.subjects",
@@ -40,9 +41,17 @@ def load_env(path: str) -> None:
                 os.environ[key] = value
 
 
+def is_production() -> bool:
+    """RIVEZLI_ENV=production : cookie de session sécurisé (https), clé secrète obligatoire, proxy de l'hébergeur."""
+    return os.environ.get("RIVEZLI_ENV", "").strip().lower() == "production"
+
+
 def _secret_key(instance_path: str) -> str:
     if os.environ.get("SECRET_KEY"):
         return os.environ["SECRET_KEY"]
+    if is_production():
+        # Une clé écrite dans un fichier sur le disque de l'hébergeur change à chaque déploiement : tout le monde serait déconnecté.
+        raise RuntimeError("En production, définis la variable d'environnement SECRET_KEY (une longue chaîne aléatoire).")
     path = os.path.join(instance_path, "secret_key")
     if not os.path.exists(path):
         with open(path, "w", encoding="utf-8") as f:
@@ -59,8 +68,11 @@ def defaults(instance_path: str) -> dict:
         "MAX_CONTENT_LENGTH": 25 * 1024 * 1024,
         "DONATION_URL": os.environ.get("DONATION_URL", "").strip(),  # page de don (https://…) ; vide = pas de bouton
         "ENABLE_WEB": True,  # recherche de ressources sur internet
+        "PRODUCTION": is_production(),
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",
+        "SESSION_COOKIE_SECURE": is_production(),   # le cookie de session ne voyage qu'en https
+        "PREFERRED_URL_SCHEME": "https" if is_production() else "http",
         "FEATURES": list(FEATURES),
         "EXTRA_FEATURES": [m for m in os.environ.get("EXTRA_FEATURES", "").split(",") if m.strip()],
     }

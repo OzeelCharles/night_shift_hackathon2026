@@ -21,6 +21,15 @@ def create(email, username, password_hash, role, level, school) -> int:
     return uid
 
 
+def create_if_free(email, username, password_hash, role, level, school):
+    """Comme create(), mais renvoie None si l'adresse existe déjà (un autre processus vient de la créer)."""
+    from sqlite3 import IntegrityError
+    try:
+        return create(email, username, password_hash, role, level, school)
+    except IntegrityError:
+        return None
+
+
 def update(user_id, **fields) -> None:
     allowed = {"email", "username", "role", "is_active", "level", "school", "password_hash", "full_name",
                "birth_date", "phone", "home_city", "study_city", "driving_license", "wants_internship", "field",

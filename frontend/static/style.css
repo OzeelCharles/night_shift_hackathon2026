@@ -457,6 +457,22 @@ a.feature-body:hover .feature-go { text-decoration: underline; }
 .donate p { margin: 0; color: var(--graphite); opacity: .85; max-width: 62ch; }
 .donate .btn { flex: 0 0 auto; }
 .donate-soon { flex: 0 0 auto; }
+
+/* Installation de l'appli (version mobile) : n'apparaît que si le navigateur sait l'installer */
+.install { margin-top: var(--s-8); display: flex; align-items: center; gap: var(--s-5); padding: var(--s-6); border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--hl-1) 26%, var(--surface)); }
+.install[hidden], .install [hidden] { display: none !important; }
+.install-icon { display: grid; place-items: center; flex: 0 0 auto; width: 64px; height: 64px; border-radius: 20px; font-size: 2rem; background: var(--hl-1); }
+.install-text { flex: 1; min-width: 0; }
+.install h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin: 0 0 .3em; }
+.install p { margin: 0 0 .3em; color: var(--graphite); opacity: .85; max-width: 62ch; }
+.install .btn { flex: 0 0 auto; }
+@media (max-width: 760px) { .install { flex-direction: column; align-items: flex-start; padding: var(--s-5); } .install .btn { width: 100%; } }
+
+/* Page hors ligne : autonome, sans en-tête ni donnée personnelle */
+.offline { min-height: 100vh; display: grid; align-content: center; justify-items: center; gap: var(--s-3); padding: var(--s-6); text-align: center; background: var(--paper); }
+.offline h1 { font-size: clamp(2rem, 7vw, 3rem); margin: .2em 0 0; }
+.offline p { max-width: 38ch; color: var(--muted); margin: 0; }
 @media (max-width: 760px) { .donate { flex-direction: column; align-items: flex-start; padding: var(--s-5); } }
 
 /* Un visiteur garde « Se connecter » et « Créer un compte » visibles en haut à droite, même sur téléphone */
@@ -996,3 +1012,19 @@ form[data-kind="autre"] .kind-school { display: none; }
 .cp-bars li.off .cp-bar { background: var(--line); }
 .cp-bars li.now .cp-h { font-weight: 700; color: var(--ink); }
 .cp-h { font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* Téléphone : rien ne doit élargir la page */
+.grid2 > *, .form-grid > *, .feature-grid > * { min-width: 0; }
+.choices { grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); }
+.choice > span, .choice > div { min-width: 0; overflow-wrap: anywhere; }
+input, select, textarea { max-width: 100%; }
+@media (max-width: 760px) {
+  table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
+.btn { max-width: 100%; white-space: normal; text-align: center; }
+.photo-import > * { max-width: 100%; }
+@media (max-width: 760px) {
+  .split { grid-template-columns: minmax(0, 1fr); }
+  .form-grid, .grid2 { grid-template-columns: minmax(0, 1fr); }
+}
+.photo-import { grid-template-columns: minmax(0, 1fr); }

@@ -7,3 +7,4 @@ odfpy>=1.4
 anthropic>=2.14  # atelier de révision : QCM, exercices et notebooks rédigés par Claude
 numpy>=2.0
 fastembed>=0.9  # assistant : embeddings locaux (EmbeddingGemma-300m) pour chercher dans les supports de cours
+gunicorn>=22.0  # serveur de production (voir Procfile et DEPLOY.md)

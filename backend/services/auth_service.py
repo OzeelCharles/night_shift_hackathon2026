@@ -77,7 +77,9 @@ def ensure_admin() -> None:
     if existing:
         dao.update(existing["id"], role="admin")
         return
-    create_user(email, "Administrateur", password, role="admin")
+    created = dao.create_if_free(email.lower(), "Administrateur", generate_password_hash(password), "admin", "autre", "")
+    if created is None:   # un autre processus l'a créé juste avant (plusieurs workers au premier démarrage) : rien à faire
+        return
     if not current_app.config.get("TESTING"):
         print("=" * 60)
         print(" Compte administrateur créé")

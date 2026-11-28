@@ -10,6 +10,7 @@
 import os
 
 from flask import Flask, render_template
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FRONTEND = os.path.join(ROOT, "frontend")
@@ -24,13 +25,18 @@ from .dao import db
 def create_app(test_config=None):
     if not (test_config or {}).get("TESTING"):  # les tests ne dépendent pas des clés de la machine
         config.load_env(os.path.join(ROOT, ".env"))  # clés d'API des modèles de langage (voir .env.example)
-    app = Flask(__name__, instance_relative_config=True,
+    # INSTANCE_DIR : dossier durable (base SQLite, documents envoyés) quand le disque du projet est éphémère chez l'hébergeur
+    instance_dir = os.path.abspath(os.environ["INSTANCE_DIR"]) if os.environ.get("INSTANCE_DIR") else None
+    app = Flask(__name__, instance_path=instance_dir, instance_relative_config=True,
                 template_folder=os.path.join(FRONTEND, "templates"), static_folder=os.path.join(FRONTEND, "static"))
     os.makedirs(app.instance_path, exist_ok=True)
     app.config.from_mapping(config.defaults(app.instance_path))
     if test_config:
         app.config.update(test_config)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+    proxies = int(os.environ.get("TRUST_PROXY", "1"))   # derrière le reverse proxy de l'hébergeur : vrai schéma https, vraie adresse
+    if app.config.get("PRODUCTION") and proxies:
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=proxies, x_proto=proxies, x_host=proxies)
 
     db.init_app(app)
     security.init_app(app)

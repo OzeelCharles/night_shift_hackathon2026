@@ -12,6 +12,16 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500..800&display=swap">
+  {% if pwa_enabled %}
+  <link rel="manifest" href="{{ url_for('pwa.manifest') }}">
+  <meta name="theme-color" content="#fcf4f1" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#17161f" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Rivezli">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <script defer src="{{ url_for('static', filename='pwa.js') }}" data-sw="{{ url_for('pwa.service_worker') }}"></script>
+  {% endif %}
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon-32.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
