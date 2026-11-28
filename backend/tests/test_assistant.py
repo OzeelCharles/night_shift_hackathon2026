@@ -445,11 +445,14 @@ class AssistantAppTests(unittest.TestCase):
             self.assertEqual(reply.status_code, 422)
             self.assertIn("ANTHROPIC_API_KEY=", reply.get_data(as_text=True), "le guide de configuration n'apparaît qu'à l'envoi")
             self.assertIn("fichier .env", reply.get_data(as_text=True))
-    def test_welcome_asks_what_the_student_needs(self):
+    def test_welcome_greets_the_student_and_invites_a_question(self):
         self.login_as("lea@test.fr")
         page = self.client.get("/").get_data(as_text=True)
-        self.assertIn("De quoi as-tu besoin", page)
-        self.assertNotIn("pas encore branché", page)
+        welcome = page[page.index('class="assistant-welcome"'):page.index('class="assistant-file"')]
+        self.assertIn("Salut", welcome, "accueil personnalisé")
+        self.assertIn("question", welcome, "le chatbot invite à poser sa question")
+        self.assertIn('class="chip"', welcome, "des suggestions cliquables")
+        self.assertNotIn("pas encore branché", page, "aucun avertissement sur la clé à l'ouverture")
 
 
 if __name__ == "__main__":
