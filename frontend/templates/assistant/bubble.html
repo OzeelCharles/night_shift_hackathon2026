@@ -36,6 +36,7 @@
     <div class="assistant-log" role="log" aria-live="polite" aria-label="Conversation"></div>
 
     <div class="assistant-welcome" hidden>
+      <p><strong>Salut {{ g.user.username }} !</strong> De quoi as-tu besoin aujourd'hui ? Ton planning, une méthode de révision, tes notes… dis-moi, je t'aide.</p>
       <div class="assistant-chips">
         <button type="button" class="chip">Qu'est-ce que je fais aujourd'hui ?</button>
         {% if subject_id %}<button type="button" class="chip">Comment réviser cette matière ?</button>
