@@ -14,6 +14,13 @@
   .stg-profile h3 { margin-top: 0; }
   .sheet .stg-profile input, .sheet .stg-profile textarea, .sheet .stg-profile .btn-ghost { background-color: var(--surface); }
   .stg-profile .suggest { margin-top: -8px; }
+  /* Lien vers l'annonce : il doit se voir comme un lien (couleur, soulignement, flèche) et ne jamais déborder */
+  .stg-offer-title { overflow-wrap: anywhere; }
+  .stg-offer-link { color: var(--ink); text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+  .stg-offer-link:hover { color: var(--ink-strong); text-decoration-thickness: 3px; }
+  .stg-offer-link:focus-visible { outline: 3px solid var(--ink); outline-offset: 2px; border-radius: 4px; }
+  .stg-offer-link .stg-ext { font-size: .8em; text-decoration: none; display: inline-block; margin-left: .2em; }
+  .stg-offer-src { overflow-wrap: anywhere; }
 </style>
 
 <div class="page-head">
@@ -85,11 +92,13 @@
   <ul class="wall">
     {% for o in offers %}
     <li class="tile tile-plain status-{{ o.status }}">
-      <h3>{% if o.url %}<a class="plain-link" href="{{ o.url }}" target="_blank" rel="noopener noreferrer">{{ o.title }}</a>{% else %}{{ o.title }}{% endif %}</h3>
+      <h3 class="stg-offer-title">{% if o.url %}<a class="stg-offer-link" href="{{ o.url }}" target="_blank" rel="noopener noreferrer">{{ o.title }}<span class="stg-ext" aria-hidden="true">↗</span><span class="visually-hidden"> (ouvre l'annonce dans un nouvel onglet)</span></a>{% else %}{{ o.title }}{% endif %}</h3>
       {% set where = [o.company, o.location]|select|join(", ") %}
       {% if where %}<p class="small">{{ where }}</p>{% endif %}
-      {% if o.source %}<p class="small muted">Vue sur {{ o.source }}</p>{% endif %}
+      {% if o.url %}<p class="small stg-offer-src"><a class="stg-offer-link" href="{{ o.url }}" target="_blank" rel="noopener noreferrer">Voir l'annonce{% if o.source %} sur {{ o.source }}{% endif %}<span class="stg-ext" aria-hidden="true">↗</span></a></p>
+      {% elif o.source %}<p class="small muted">Vue sur {{ o.source }}</p>{% endif %}
       {% if o.description %}<details class="small"><summary>Texte de l'offre</summary><p class="pre">{{ o.description }}</p></details>{% endif %}
+      {% for p in panels.get("stages_offer", []) %}{% include p %}{% endfor %}
       <div class="tile-foot">
         <form method="post" action="{{ url_for('stages.offer_status', offer_id=o.id) }}" class="stg-status">
           {{ csrf_field() }}

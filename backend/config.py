@@ -22,6 +22,7 @@ FEATURES = [
     "backend.controllers.assistant",  # chatbot (bulle flottante), modèle de Groq
     "backend.plugins.revision",  # atelier de révision : fiches, QCM notés, carnet de notes, exercices
     "backend.plugins.stages",  # recherche de stage : offres, suivi des candidatures, lettres de motivation
+    "backend.plugins.verif_cv",  # vérificateur ATS de CV dans « Stages » (après stages, dont il a besoin)
 ]
 
 

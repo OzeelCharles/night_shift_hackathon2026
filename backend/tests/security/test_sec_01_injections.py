@@ -163,6 +163,7 @@ RELUS = {
     ("dao/subjects.py", "update"),
     ("dao/users.py", "update"),              # colonnes filtrées par une liste blanche locale
     ("plugins/stages/store.py", "save_profile"),  # PROFILE_FIELDS (constante)
+    ("plugins/stages/store.py", "repair_texts"),  # tables et colonnes de _REPAIRABLE (constante), valeurs en « ? »
     # assistant (fusion de main, relu) : uniquement des « ? » ou des fragments codés en dur
     ("dao/actions.py", "statuses"),          # autant de « ? » que d'ids
     ("dao/rag.py", "chunks_by_ids"),         # autant de « ? » que d'ids

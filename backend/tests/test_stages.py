@@ -5,6 +5,7 @@ import unittest
 from unittest import mock
 
 from backend import create_app
+from backend.dao import safe_http
 from backend.dao.db import get_db
 from backend.plugins.stages import letters, service, sources
 
@@ -32,6 +33,24 @@ class SourcesTests(unittest.TestCase):
         self.assertEqual((offer["company"], offer["location"]), ("Cabinet Martin", "Lyon"))
         self.assertIn("Rédaction d'actes.\nVeille", offer["description"])
         self.assertEqual(sources.site_name("https://fr.linkedin.com/jobs/view/1"), "LinkedIn")
+
+    def test_fix_mojibake(self):
+        good = "Stage d’été – Professionnel de recherche, Économie de la santé · « Montréal » 5 € ™"
+        once = good.encode("utf-8").decode("latin-1")                          # Latin-1 (requests sans charset)
+        cp = good.encode("utf-8").decode("cp1252", errors="replace")           # Windows-1252
+        twice = once.encode("utf-8").decode("latin-1")                         # encodé deux fois
+        self.assertEqual(sources.fix_mojibake(once), good)
+        self.assertEqual(sources.fix_mojibake(twice), good)
+        self.assertIn("Économie de la santé", sources.fix_mojibake(cp))
+        for ok in (good, "Ça coûte 5 € à Montréal", "Señor Müller, naïve, œuvre", "", "ASCII only"):
+            self.assertEqual(sources.fix_mojibake(ok), ok, "un texte correct n'est jamais modifié")
+
+    def test_decode_page(self):
+        page = "<html><head><title>Économie</title></head></html>"
+        self.assertEqual(sources.decode_page(page.encode("utf-8"), "text/html"), page, "sans charset : UTF-8")
+        self.assertEqual(sources.decode_page(page.encode("cp1252"), "text/html; charset=windows-1252"), page)
+        meta = '<meta charset="iso-8859-1"><p>Économie</p>'
+        self.assertEqual(sources.decode_page(meta.encode("latin-1"), "text/html"), meta, "charset de la balise meta")
 
 
 class StagesRoutesTests(unittest.TestCase):
@@ -80,12 +99,45 @@ class StagesRoutesTests(unittest.TestCase):
         self.app.config["ENABLE_WEB"] = True
         with mock.patch.object(service, "_fetch", wraps=service._fetch) as fetch, \
                 mock.patch("backend.dao.safe_http.get") as get:  # tout lien d'utilisateur passe par safe_http
-            get.return_value = mock.Mock(status_code=200, text=JOB_PAGE)
+            get.return_value = safe_http.Response(url="https://x", status_code=200, content=JOB_PAGE.encode("utf-8"),
+                                                  headers={"content-type": "text/html; charset=utf-8"})
             self.client.post("/stages/offres", data={"url": "https://www.welcometothejungle.com/fr/jobs/1"})
             fetch.assert_called_once()
         offer = self.q("SELECT * FROM stg_offers")[0]
         self.assertEqual((offer["title"], offer["company"], offer["location"]),
                          ("Stage - Assistant juridique (F/H)", "Cabinet Martin", "Lyon"))
+
+    def test_offer_page_without_charset_is_readable(self):
+        """Page UTF-8 servie sans charset (cas d'iCIMS) : avant, l'intitulé devenait « Stage dâ€™Ã©tÃ©… »."""
+        self.app.config["ENABLE_WEB"] = True
+        page = JOB_PAGE.replace("Stage - Assistant juridique (F/H)",
+                                "Stage d’été – Professionnel de recherche, Économie de la santé")
+        page = page.replace("Lyon", "Montréal")
+        with mock.patch("backend.dao.safe_http.get") as get:  # page servie sans charset
+            get.return_value = safe_http.Response(url="https://x", status_code=200, content=page.encode("utf-8"),
+                                                  headers={"content-type": "text/html"})
+            self.client.post("/stages/offres", data={"url": "https://careers-analysisgroup.icims.com/jobs/1/job"})
+        offer = self.q("SELECT title, location FROM stg_offers")[0]
+        self.assertEqual(offer["title"], "Stage d’été – Professionnel de recherche, Économie de la santé")
+        self.assertEqual(offer["location"], "Montréal")
+
+    def test_saved_garbled_offers_are_repaired_at_startup(self):
+        good = "Stage d’été – Économie de la santé à Montréal"
+        garbled = good.encode("utf-8").decode("latin-1")      # ce qu'enregistrait l'ancienne version
+        uid = self.q("SELECT id FROM users WHERE email = 'e@test.fr'")[0]["id"]
+        with self.app.app_context():
+            get_db().execute("INSERT INTO stg_offers (user_id, title, company) VALUES (?, ?, ?)",
+                             (uid, garbled, "Café Crème"))
+            get_db().execute("INSERT INTO stg_letters (user_id, title, content) VALUES (?, ?, ?)",
+                             (uid, garbled, "Objet : " + garbled))
+            get_db().commit()
+        again = create_app({"TESTING": True, "ENABLE_WEB": False, "DATABASE": self.app.config["DATABASE"],
+                            "UPLOAD_FOLDER": self.app.config["UPLOAD_FOLDER"]})
+        with again.app_context():
+            offer = dict(get_db().execute("SELECT title, company FROM stg_offers").fetchone())
+            letter = dict(get_db().execute("SELECT title, content FROM stg_letters").fetchone())
+        self.assertEqual(offer, {"title": good, "company": "Café Crème"}, "le texte correct reste identique")
+        self.assertEqual(letter, {"title": good, "content": "Objet : " + good})
 
     def test_template_letter_without_ai(self):
         self.account(field="Droit", program="Licence 3 de droit privé", home_city="Lyon", driving_license="oui",

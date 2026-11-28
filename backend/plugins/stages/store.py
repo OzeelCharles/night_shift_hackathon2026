@@ -106,6 +106,25 @@ def delete_offer(offer_id, user_id) -> None:
     execute("DELETE FROM stg_offers WHERE id = ? AND user_id = ?", offer_id, user_id)
 
 
+# ---------------------------------------------------------------- réparation des textes mal décodés
+_REPAIRABLE = {"stg_offers": ("title", "company", "location", "description"),
+               "stg_letters": ("title", "company", "content")}
+
+
+def repair_texts(fix) -> int:
+    """Applique `fix` aux colonnes texte des offres et des lettres ; ne réécrit que les lignes qui changent."""
+    changed = 0
+    for table, cols in _REPAIRABLE.items():
+        suspects = " OR ".join(f"{c} LIKE '%Ã%' OR {c} LIKE '%â%' OR {c} LIKE '%Â%'" for c in cols)
+        for row in query(f"SELECT id, {', '.join(cols)} FROM {table} WHERE {suspects}"):
+            fixed = {c: fix(row[c]) for c in cols}
+            if any(fixed[c] != row[c] for c in cols):
+                execute(f"UPDATE {table} SET {', '.join(f'{c} = ?' for c in cols)} WHERE id = ?",
+                        *(fixed[c] for c in cols), row["id"])
+                changed += 1
+    return changed
+
+
 # ---------------------------------------------------------------- lettres
 def letters(user_id):
     return query("SELECT id, offer_id, title, company, author, created_at FROM stg_letters WHERE user_id = ? "

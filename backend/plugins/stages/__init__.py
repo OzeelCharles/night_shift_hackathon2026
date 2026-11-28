@@ -10,9 +10,16 @@ Tout est dans ce dossier ; les tables (préfixe stg_) sont créées au démarrag
 """
 from backend.core.features import Feature, NavItem
 
-from . import store
+from . import service, store
 from .assistant import ACTIONS, TOOLS
 from .views import bp
+
+
+def setup(app) -> None:
+    """Au démarrage : répare les intitulés déjà enregistrés depuis une page mal décodée (« Ã© » au lieu de « é »)."""
+    fixed = service.repair_saved_texts()
+    if fixed:
+        app.logger.info("Stages : %d offre(s) ou lettre(s) au texte mal décodé réparée(s).", fixed)
 
 feature = Feature(
     "stages",
@@ -24,4 +31,5 @@ feature = Feature(
     migrations=store.MIGRATIONS,
     tools=TOOLS,      # l'assistant suit la recherche et propose des postes d'après la description de l'étudiant
     actions=ACTIONS,  # … qu'il ajoute à la liste seulement si l'étudiant clique « Choisir »
+    setup=setup,
 )

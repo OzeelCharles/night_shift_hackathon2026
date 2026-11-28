@@ -53,7 +53,8 @@ def create_app(test_config=None):
         jours=JOURS_COURTS, event_kinds=agenda_analysis.EVENT_KINDS, levels=accounts.LEVELS, licenses=accounts.LICENSE, internship_choices=accounts.INTERNSHIP,
         study_fields=accounts.STUDY_FIELDS,
         exam_sources=exams.SOURCES, exam_soon_days=exams.EXAM_SOON_DAYS)
-    features.load_features(app, app.config["FEATURES"] + app.config["EXTRA_FEATURES"])
+    # Sans doublon, ordre gardé : un plugin listé dans FEATURES et EXTRA_FEATURES n'est chargé qu'une fois.
+    features.load_features(app, list(dict.fromkeys(app.config["FEATURES"] + app.config["EXTRA_FEATURES"])))
 
     from .services import common
     with app.app_context():
