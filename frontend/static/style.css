@@ -416,8 +416,15 @@ details.more > summary { color: var(--muted); font-size: .95rem; }
 .art-2 { top: 108px; right: 0; transform: rotate(2.5deg); }
 .art-3 { top: 214px; left: 12%; transform: rotate(-1.5deg); }
 
-.features, .how { margin-top: var(--s-8); }
-.features > h2, .how > h2, .final-cta > h2 { font-size: clamp(1.8rem, 3.6vw, 2.6rem); margin-bottom: .3em; }
+.features, .how, .tuto { margin-top: var(--s-8); }
+.features > h2, .how > h2, .tuto > h2, .final-cta > h2 { font-size: clamp(1.8rem, 3.6vw, 2.6rem); margin-bottom: .3em; }
+/* Vidéo « Rivezli en 1 minute » */
+.tuto-frame { margin-top: var(--s-5); aspect-ratio: 16 / 9; border-radius: var(--r-lg); overflow: hidden; background: var(--graphite); box-shadow: var(--shadow-3); }
+.tuto-frame video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.tuto-text { margin-top: var(--s-4); color: var(--muted); }
+.tuto-text summary { cursor: pointer; font-weight: 700; color: var(--ink-strong); width: fit-content; }
+.tuto-text ol { margin: var(--s-3) 0 0; padding-left: 1.4em; display: grid; gap: 6px; }
+.tuto-text strong { color: var(--graphite); }
 .feature-grid { list-style: none; padding: 0; margin: var(--s-5) 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }   /* 3 × 3 */
 .feature { border-radius: var(--r-lg); background: color-mix(in srgb, var(--hl) 24%, var(--surface)); transition: transform var(--dur) var(--ease-out), box-shadow var(--dur) var(--ease-out); }
 .feature-body { display: flex; flex-direction: column; align-items: flex-start; height: 100%; padding: 26px; color: var(--graphite); text-decoration: none; }
@@ -435,7 +442,7 @@ a.feature-body:hover .feature-go { text-decoration: underline; }
 @media (max-width: 860px) {
   .welcome { grid-template-columns: 1fr; gap: var(--s-5); padding-top: var(--s-4); }
   .welcome-art { min-height: 300px; max-width: 420px; }
-  .features, .how, .final-cta { margin-top: var(--s-7); }
+  .features, .how, .tuto, .final-cta { margin-top: var(--s-7); }
   .feature-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) { .feature-grid { grid-template-columns: 1fr; } }

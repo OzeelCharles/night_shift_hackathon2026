@@ -187,6 +187,43 @@ class HomeTests(_Base):
         self.assertNotIn("topbar-guest", self.top(page))
 
 
+class TutorialVideoTests(_Base):
+    """Vidéo « Rivezli en 1 minute » : sous la présentation, avant la liste des outils, sans lecture automatique."""
+
+    def home(self):
+        return self.client.get("/").get_data(as_text=True)
+
+    def test_video_sits_between_the_welcome_and_the_tools(self):
+        page = self.home()
+        self.assertIn("<video", page)
+        self.assertLess(page.index('class="welcome"'), page.index('id="tuto-title"'))
+        self.assertLess(page.index('id="tuto-title"'), page.index('id="features-title"'))
+
+    def test_video_is_accessible_and_never_starts_by_itself(self):
+        page = self.home()
+        tag = page[page.index("<video"):page.index(">", page.index("<video")) + 1]
+        self.assertIn("controls", tag)
+        for forbidden in ("autoplay", "loop", "muted"):
+            self.assertNotIn(forbidden, tag, "pas de lecture automatique : c'est l'étudiant qui lance la vidéo")
+        self.assertIn("poster=", tag)
+        self.assertIn("Lire le texte de la vidéo", page, "équivalent texte pour les personnes qui ne peuvent pas la regarder")
+        for f in ("Un planning qui tient dans ta semaine", "Un atelier de révision"):
+            self.assertIn(f, page[page.index('id="tuto-text"'):page.index('id="features-title"')])
+
+    def test_video_files_are_served_and_light_enough(self):
+        for path, lo, hi in (("/static/video/tuto.mp4", 100_000, 8_000_000), ("/static/video/tuto-poster.jpg", 5_000, 400_000)):
+            reply = self.client.get(path)
+            self.assertEqual(reply.status_code, 200, path)
+            size = len(reply.get_data())
+            self.assertTrue(lo < size < hi, f"{path} : {size} octets")
+        self.assertEqual(self.client.get("/static/video/tuto.mp4").mimetype, "video/mp4")
+
+    def test_video_can_be_read_by_ranges_so_it_starts_quickly(self):
+        reply = self.client.get("/static/video/tuto.mp4", headers={"Range": "bytes=0-99"})
+        self.assertEqual(reply.status_code, 206)
+        self.assertEqual(len(reply.get_data()), 100)
+
+
 class DonationTests(_Base):
     """Section « Soutenir Rivezli » : tout en bas de l'accueil, bouton seulement si une adresse https est configurée."""
 

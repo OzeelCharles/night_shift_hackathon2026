@@ -27,6 +27,25 @@
   </div>
 </section>
 
+<section class="tuto" aria-labelledby="tuto-title">
+  <h2 id="tuto-title">Rivezli en 1 minute</h2>
+  <p class="lead">Un tour des neuf outils, pour voir comment ils s'enchaînent avant de te lancer.</p>
+  <div class="tuto-frame">
+    <video controls preload="metadata" playsinline aria-describedby="tuto-text"
+           poster="{{ url_for('static', filename='video/tuto-poster.jpg') }}">
+      <source src="{{ url_for('static', filename='video/tuto.mp4') }}" type="video/mp4">
+      Ton navigateur ne sait pas lire cette vidéo. <a href="{{ url_for('static', filename='video/tuto.mp4') }}">Télécharge-la</a>.
+    </video>
+  </div>
+  <details class="tuto-text" id="tuto-text">
+    <summary>Lire le texte de la vidéo</summary>
+    <ol>
+      {% for f in features %}<li><strong>{{ f.title }}</strong> : {{ f.text }}</li>
+      {% endfor %}
+    </ol>
+  </details>
+</section>
+
 <section class="features" aria-labelledby="features-title">
   <h2 id="features-title">Tout ce qu'il te faut, au même endroit</h2>
   <p class="lead">Chaque outil sert à un moment précis de ta semaine. Ils se parlent entre eux : tes matières et ton école comptent partout.</p>
