@@ -19,7 +19,7 @@
     <header class="assistant-head">
       <div>
         <h2 id="assistant-title">Assistant</h2>
-        <p>Ton planning, tes notes, tes méthodes de travail</p>
+        <p>Révisions, cours, campus, caféine et stages</p>
       </div>
       <button class="icon-btn assistant-expand" type="button" aria-pressed="false" title="Agrandir la fenêtre" aria-label="Agrandir la fenêtre">
         <svg class="icon i-grow" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
@@ -36,12 +36,13 @@
     <div class="assistant-log" role="log" aria-live="polite" aria-label="Conversation"></div>
 
     <div class="assistant-welcome" hidden>
-      <p><strong>Salut {{ g.user.username }} !</strong> Pose-moi une question sur tes révisions.</p>
+      <p><strong>Salut {{ g.user.username }} !</strong> Pose-moi une question sur tes révisions, le campus ou ton stage.</p>
       <div class="assistant-chips">
         <button type="button" class="chip">Qu'est-ce que je fais aujourd'hui ?</button>
         {% if subject_id %}<button type="button" class="chip">Comment réviser cette matière ?</button>
         {% else %}<button type="button" class="chip">Comment réviser une matière ?</button>{% endif %}
         <button type="button" class="chip">Comment évoluent mes notes ?</button>
+        <button type="button" class="chip">Qu'est-ce qu'on mange au resto U ?</button>
       </div>
     </div>
 
@@ -285,6 +286,29 @@
     box.append(ol);
     return box;
   }
+  // ------------------------------------------------ liens donnés par un outil (restos U, recherches de stage…)
+  function safeUrl(url) {
+    // pages de l'application (/…) ou sites https/http : jamais javascript:, ni //autre-site
+    return /^\/(?!\/)/.test(url) || /^https?:\/\//i.test(url) ? url : null;
+  }
+  function linksBox(groups) {
+    const box = document.createElement('div'); box.className = 'msg-links';
+    groups.forEach(g => {
+      const items = (g.items || []).filter(i => safeUrl(i.url));
+      if (!items.length) return;
+      const group = document.createElement('div'); group.className = 'links-group';
+      const title = document.createElement('span'); title.className = 'links-title'; title.textContent = g.title;
+      const row = document.createElement('div'); row.className = 'links-row';
+      items.forEach(i => {
+        const a = document.createElement('a');
+        a.href = safeUrl(i.url); a.textContent = i.label; a.className = 'link-chip';
+        if (!i.url.startsWith('/')) { a.target = '_blank'; a.rel = 'noopener noreferrer'; }
+        row.append(a);
+      });
+      group.append(title, row); box.append(group);
+    });
+    return box;
+  }
   // ------------------------------------------------ proposition à valider (ex. rattraper une séance ratée)
   function actionCard(a) {
     const card = document.createElement('div'); card.className = 'msg-action';
@@ -336,7 +360,7 @@
     }
   }
 
-  function add(role, text, charts, extraClass, attachment, imageUrl, sources, actions) {
+  function add(role, text, charts, extraClass, attachment, imageUrl, sources, actions, links) {
     const div = document.createElement('div');
     div.className = `msg msg-${role}` + (extraClass ? ' ' + extraClass : '');
     if (attachment) div.append(attachmentTag(attachment, imageUrl));
@@ -347,6 +371,7 @@
     div.append(body);
     (charts || []).forEach(c => div.append(chart(c)));
     if (sources && sources.length) div.append(sourcesList(sources));
+    if (links && links.length) div.append(linksBox(links));
     (actions || []).forEach(a => div.append(actionCard(a)));
     log.append(div);
     welcome.hidden = true;
@@ -356,7 +381,7 @@
   function render(data) {
     if (data.provider) root.querySelector('.assistant-provider').textContent = data.provider;
     log.replaceChildren();
-    data.messages.forEach(m => add(m.role, m.content, m.charts, '', m.attachment, null, m.sources, m.actions));
+    data.messages.forEach(m => add(m.role, m.content, m.charts, '', m.attachment, null, m.sources, m.actions, m.links));
     if (data.notice) add('assistant', data.notice, [], 'msg-notice');
     welcome.hidden = data.messages.length > 0;
     log.scrollTop = log.scrollHeight;
@@ -428,7 +453,7 @@
         log.insertBefore(note, userMsg);
       }
       add('assistant', done.message.content, done.message.charts, '', null, null, done.message.sources,
-          done.message.actions);
+          done.message.actions, done.message.links);
     } else retry(error || 'Réponse interrompue : réessaie.', text, sending);
     busy = false; sendBtn.disabled = false; input.focus();
   }

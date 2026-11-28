@@ -32,9 +32,8 @@ from backend.dao import llm, vision
 from backend.dao import subjects as subjects_dao
 from backend.dao.db import commit
 
-from . import reschedule_service
-
 MAX_PDF_BYTES = 15 * 1024 * 1024
+MAX_ARGUMENT_CHARS = 1000   # ex. la description du stage recherché
 IMAGE_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif", "heic", "heif"}
 
 NOT_CONFIGURED = ("L'assistant n'est pas encore branché : colle une clé Anthropic (ANTHROPIC_API_KEY=) ou Groq "
@@ -94,24 +93,39 @@ def _public(m: dict, user=None) -> dict:
     a = m["meta"].get("attachment")
     actions = m["meta"].get("actions", [])
     return {"id": m["id"], "role": m["role"], "content": m["content"], "charts": m["meta"].get("charts", []),
-            "sources": m["meta"].get("sources", []),
+            "sources": m["meta"].get("sources", []), "links": m["meta"].get("links", []),
             "actions": _with_status(user, actions) if (actions and user) else actions,
             "attachment": {"name": a["name"], "kind": a["kind"]} if a else None}
 
 
+def _pending(user, action_id: int):
+    """(proposition, son Action) ou (None, message d'erreur). Seul son auteur peut la traiter, une seule fois."""
+    row = actions_dao.get_owned(action_id, user["id"])
+    handler = current_app.extensions.get("assistant_actions", {}).get(row["kind"]) if row else None
+    if handler is None:
+        return None, "Proposition introuvable."
+    if row["status"] != "pending":
+        return None, "Cette proposition a déjà été traitée."
+    return handler, None
+
+
 def apply_action(user, action_id: int, choice: str) -> dict:
     """L'étudiant valide une option : elle est appliquée, et la confirmation s'ajoute à la conversation."""
-    text, error = reschedule_service.apply(user, action_id, choice)
+    handler, error = _pending(user, action_id)
+    if error:
+        return {"error": error}
+    text, error = handler.apply(user, action_id, choice)
     if error:
         return {"error": error}
     return {"message": _record(user, text)}
 
 
 def cancel_action(user, action_id: int) -> dict:
-    error = reschedule_service.cancel(user, action_id)
+    handler, error = _pending(user, action_id)
     if error:
         return {"error": error}
-    return {"message": _record(user, "D'accord, je ne change rien à ton planning.")}
+    actions_dao.close(action_id, user["id"], "cancelled")
+    return {"message": _record(user, handler.cancelled)}
 
 
 def _record(user, text: str) -> dict:
@@ -120,7 +134,8 @@ def _record(user, text: str) -> dict:
     conv_id = conv["id"] if conv else dao.create(user["id"], _session_key())
     message_id = dao.add_message(conv_id, "assistant", text)
     dao.touch(conv_id, user["id"])
-    return {"id": message_id, "role": "assistant", "content": text, "charts": [], "sources": [], "actions": [],
+    return {"id": message_id, "role": "assistant", "content": text, "charts": [], "sources": [], "links": [],
+            "actions": [],
             "attachment": None}
 
 
@@ -198,13 +213,13 @@ def _profile(user) -> dict:
 
 
 def _run_tool(user, tools: dict, name: str, arguments: dict,
-              source_offset: int = 0) -> tuple[str, dict | None, list[dict], dict | None]:
-    """(texte pour le modèle, graphique, sources, modification proposée à valider par l'étudiant)."""
+              source_offset: int = 0) -> tuple[str, dict | None, list[dict], dict | None, list[dict]]:
+    """(texte pour le modèle, graphique, sources, modification proposée à valider par l'étudiant, liens)."""
     tool = tools.get(name)
     if tool is None:
-        return json.dumps({"erreur": f"Outil inconnu : {name}."}, ensure_ascii=False), None, [], None
+        return json.dumps({"erreur": f"Outil inconnu : {name}."}, ensure_ascii=False), None, [], None, []
     allowed = tool.parameters.get("properties", {})
-    args = {k: str(v)[:200] for k, v in (arguments or {}).items()   # arguments vérifiés ; null = non renseigné
+    args = {k: str(v)[:MAX_ARGUMENT_CHARS] for k, v in (arguments or {}).items()   # null = non renseigné
             if k in allowed and v is not None and str(v).strip()}
     try:
         result = tool.run(user, **args)
@@ -215,7 +230,11 @@ def _run_tool(user, tools: dict, name: str, arguments: dict,
     action = result.pop("action", None)   # proposition affichée avec des boutons, pas envoyée au modèle
     if action:
         result["boutons"] = "affichés sous ta réponse : l'étudiant choisit lui-même une option"
-    return (*rules.split_result(result, source_offset), action)
+    links = result.pop("links", None) or []   # liens cliquables affichés tels quels sous la réponse
+    if links:
+        result["liens"] = "affichés sous ta réponse (" + ", ".join(g["title"] for g in links) + \
+                          ") : ne recopie pas les adresses, invite l'étudiant à cliquer"
+    return (*rules.split_result(result, source_offset), action, links)
 
 
 def send(user, text: str, page: str = "", subject_id=None, file=None) -> dict:
@@ -276,15 +295,16 @@ def send_events(user, text: str, page: str = "", subject_id=None, file=None):
     history_messages = [{"role": m["role"], "content": rules.with_attachment(m)} for m in recent]
     tools = current_app.extensions.get("tools", {})
     tool_list = [{"name": t.name, "description": t.description, "parameters": t.parameters} for t in tools.values()]
-    charts, sources, actions = [], [], []
+    charts, sources, actions, links = [], [], [], []
 
     def run_tool(name: str, arguments: dict) -> str:
-        content, chart, found, action = _run_tool(user, tools, name, arguments, len(sources))
+        content, chart, found, action, found_links = _run_tool(user, tools, name, arguments, len(sources))
         if chart:
             charts.append(chart)
         if action:
             actions.append(action)
         sources.extend(found)
+        links.extend(g for g in found_links if g not in links)
         return content
 
     answer = ""
@@ -321,11 +341,12 @@ def send_events(user, text: str, page: str = "", subject_id=None, file=None):
                            "excerpt": attachment["text"][:rules.HISTORY_ATTACHMENT_CHARS]}} if attachment else {}
     user_id_msg = dao.add_message(conv_id, "user", text, meta)
     answer_id = dao.add_message(conv_id, "assistant", answer,
-                                {"charts": charts, "sources": sources, "actions": actions})
+                                {"charts": charts, "sources": sources, "actions": actions, "links": links})
     dao.touch(conv_id, uid, title=rules.title_from(text))
     commit()  # réponse diffusée : la requête se termine après l'envoi du dernier événement
     yield {"type": "done", "reset": reset,
            "message": {"id": answer_id, "role": "assistant", "content": answer, "charts": charts,
-                       "sources": sources, "actions": _with_status(user, actions), "attachment": None},
+                       "sources": sources, "links": links, "actions": _with_status(user, actions),
+                       "attachment": None},
            "question": {"id": user_id_msg, "role": "user", "content": text, "charts": [],
                         "attachment": {"name": attachment["name"], "kind": attachment["kind"]} if attachment else None}}

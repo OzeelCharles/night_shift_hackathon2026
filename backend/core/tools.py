@@ -5,7 +5,12 @@ la description et les paramètres (schéma JSON) ; quand il appelle un outil, `r
 s'exécute pour l'utilisateur connecté seulement et renvoie un dict sérialisable en JSON.
 
 Clés spéciales du résultat, retirées avant l'envoi au modèle et transmises à l'interface :
-- « chart » : un graphique à afficher dans la conversation (voir business/assistant.chart).
+- « chart » : un graphique à afficher dans la conversation (voir business/assistant.chart) ;
+- « sources » : passages de supports de cours, citables [S1], [S2]… ;
+- « links » : liens cliquables affichés sous la réponse, par groupe : [{"title", "items": [{"label", "url"}]}]
+  (le modèle n'a pas à recopier d'adresses) ;
+- « action » : une proposition que l'étudiant valide avec un bouton (carte sous la réponse). Son « kind »
+  désigne l'`Action` (champ `actions` de Feature) qui l'applique.
 """
 from dataclasses import dataclass, field
 from typing import Callable
@@ -21,6 +26,14 @@ class Tool:
     def schema(self) -> dict:
         return {"type": "function",
                 "function": {"name": self.name, "description": self.description, "parameters": self.parameters}}
+
+
+@dataclass(frozen=True)
+class Action:
+    """Application d'une proposition validée par l'étudiant (bouton « Choisir » de la carte)."""
+    kind: str
+    apply: Callable[..., tuple]   # apply(user, action_id, choice) -> (message de confirmation, erreur)
+    cancelled: str = "D'accord, je ne change rien."   # message quand l'étudiant clique « Ne rien changer »
 
 
 def text_param(description: str) -> dict:
