@@ -149,8 +149,8 @@ class PagesTests(unittest.TestCase):
 
     def user(self, name, school):
         c = self.app.test_client()
-        c.post("/inscription", data={"email": f"{name}@test.fr", "username": name, "password": "motdepasse1",
-                                     "password2": "motdepasse1", "level": "master", "school": school})
+        c.post("/inscription", data={"email": f"{name}@test.fr", "username": name, "password": "Carnet-Revision-2026",
+                                     "password2": "Carnet-Revision-2026", "level": "master", "school": school})
         return c
 
     def reports(self):
@@ -194,7 +194,7 @@ class PagesTests(unittest.TestCase):
 
     def test_no_school_prompts_for_profile(self):
         c = self.app.test_client()
-        c.post("/inscription", data={"email": "x@test.fr", "username": "xo", "password": "motdepasse1", "password2": "motdepasse1",
+        c.post("/inscription", data={"email": "x@test.fr", "username": "xo", "password": "Carnet-Revision-2026", "password2": "Carnet-Revision-2026",
                                      "level": "autre", "school": "ab"})
         with self.app.app_context():
             get_db().execute("UPDATE users SET school = '' WHERE email = 'x@test.fr'")

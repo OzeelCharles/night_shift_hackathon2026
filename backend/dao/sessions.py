@@ -81,6 +81,12 @@ def delete_replannable(user_id, now_iso: str, subject_ids) -> None:
             f"AND subject_id IN ({placeholders(subject_ids)})", user_id, now_iso, *subject_ids)
 
 
+def get_owned(session_id, user_id, manual_only: bool = False):
+    """Séance de l'utilisateur (None si elle n'existe pas ou appartient à un autre)."""
+    return one("SELECT * FROM sessions WHERE id = ? AND user_id = ?" + (" AND manual = 1" if manual_only else ""),
+               session_id, user_id)
+
+
 def delete_manual(session_id, user_id) -> None:
     execute("DELETE FROM sessions WHERE id = ? AND user_id = ? AND manual = 1", session_id, user_id)
 

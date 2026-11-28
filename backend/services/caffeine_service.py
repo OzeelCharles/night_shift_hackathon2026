@@ -6,6 +6,7 @@ from backend.business.text import bounded_int, iso, parse_time, to_datetime
 from backend.dao import caffeine as dao
 from backend.dao import preferences as prefs_dao
 
+from .common import owned
 from .report import Report
 
 HISTORY_DAYS = 7
@@ -70,6 +71,7 @@ def add(user, form, now: datetime | None = None) -> Report:
 
 
 def remove(user_id, intake_id) -> Report:
+    owned(dao.get_owned(intake_id, user_id))  # 404 si la prise n'est pas à l'utilisateur
     dao.delete(intake_id, user_id)
     return Report().info("Prise supprimée.")
 

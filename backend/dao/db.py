@@ -220,4 +220,21 @@ def migrate(db: sqlite3.Connection):
         db.execute("UPDATE subjects SET exam_manual = exam_date, exam_source = 'manuel' "
                    "WHERE exam_source = '' AND exam_date IS NOT NULL")
         db.execute("PRAGMA user_version = 1")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 2:
+        # SEC-03 — migration 2, additive et réversible :
+        #  - users.session_version : compteur incrémenté au changement de mot de passe ou à la désactivation ;
+        #    une session dont la version diffère est refusée (annulation : ALTER TABLE users DROP COLUMN
+        #    session_version) ;
+        #  - auth_attempts : tentatives de connexion et d'inscription récentes, pour la limitation par compte et
+        #    par IP (données éphémères, clés hachées ; annulation : DROP TABLE auth_attempts).
+        add_columns(db, {"users": {"session_version": "INTEGER NOT NULL DEFAULT 0"}})
+        db.execute("CREATE TABLE IF NOT EXISTS auth_attempts (kind TEXT NOT NULL, key TEXT NOT NULL, at REAL NOT NULL)")
+        db.execute("CREATE INDEX IF NOT EXISTS idx_auth_attempts ON auth_attempts(kind, key, at)")
+        db.execute("PRAGMA user_version = 2")
+    if db.execute("PRAGMA user_version").fetchone()[0] < 3:
+        # SEC-08 — migration 3, additive et réversible (DROP TABLE llm_usage) : générations par l'IA
+        # comptées par utilisateur et par jour, pour le quota quotidien.
+        db.execute("CREATE TABLE IF NOT EXISTS llm_usage (user_id INTEGER NOT NULL REFERENCES users(id) "
+                   "ON DELETE CASCADE, day TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, day))")
+        db.execute("PRAGMA user_version = 3")
     db.commit()

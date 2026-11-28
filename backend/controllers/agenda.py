@@ -28,7 +28,7 @@ def import_ics():
     if not f or not f.filename.lower().endswith(".ics"):
         flash("Choisis un fichier .ics (export de Google Agenda, Outlook, ENT...).", "error")
         return _back()
-    flash_report(agenda_service.import_ics(g.user, f.read().decode("utf-8", errors="ignore"),
+    flash_report(agenda_service.import_ics(g.user, f.read(),
                                            sync_mode=bool(request.form.get("replace")),
                                            create_missing=bool(request.form.get("create_missing"))))
     return _back()
@@ -42,7 +42,8 @@ def import_photo():
         flash("Choisis une photo de ton emploi du temps (JPEG, PNG…).", "error")
         return _back()
     weeks = bounded_int(request.form.get("repeat_weeks"), 1, 1, 52)
-    flash_report(agenda_service.import_photo(g.user, f.read(), weeks, bool(request.form.get("create_missing"))))
+    flash_report(agenda_service.import_photo(g.user, f.read(agenda_service.PHOTO_READ_LIMIT), weeks,
+                                             bool(request.form.get("create_missing"))))
     return _back()
 
 

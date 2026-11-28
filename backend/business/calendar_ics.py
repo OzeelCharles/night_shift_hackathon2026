@@ -11,6 +11,10 @@ import re
 from datetime import date, datetime, timedelta, timezone
 
 DAYS = {"MO": 0, "TU": 1, "WE": 2, "TH": 3, "FR": 4, "SA": 5, "SU": 6}
+# Bornes (SEC-06) : un fichier piégé ne doit ni saturer la base ni occuper le serveur.
+MAX_BYTES = 2 * 1024 * 1024  # taille maximale d'un .ics importé
+MAX_EVENTS = 5000  # créneaux importés au plus (les suivants sont ignorés, avec un message)
+MAX_EXPAND_DAYS = 800  # pas de calcul au plus par règle de récurrence (la fenêtre utile fait moins d'un an)
 
 
 def _unfold(text: str) -> list[str]:
@@ -46,25 +50,53 @@ def _unescape(v: str) -> str:
     return v.replace("\\n", " ").replace("\\,", ",").replace("\\;", ";").replace("\\\\", "\\").strip()
 
 
-def _expand(start: datetime, rule: str, exdates: set[datetime], until_window: datetime) -> list[datetime]:
-    parts = dict(p.split("=", 1) for p in rule.split(";") if "=" in p)
-    freq = parts.get("FREQ")
-    if freq not in ("DAILY", "WEEKLY"):
+def _positive_int(value: str | None, default: int | None) -> int | None:
+    """Entier strictement positif, sinon ValueError (règle invalide)."""
+    if value is None:
+        return default
+    n = int(value)
+    if n < 1:
+        raise ValueError("entier positif attendu")
+    return n
+
+
+def _expand(start: datetime, rule: str, exdates: set[datetime], until_window: datetime,
+            from_window: datetime | None = None) -> list[datetime]:
+    """Occurrences d'une règle RRULE jusqu'à until_window. L'expansion saute directement à la période qui contient
+    from_window (pas de parcours jour par jour depuis un DTSTART très ancien) et reste bornée à MAX_EXPAND_DAYS
+    pas. Une règle invalide (INTERVAL=0, COUNT non numérique, UNTIL mal formé…) n'est pas dépliée."""
+    try:
+        parts = dict(p.split("=", 1) for p in rule.split(";") if "=" in p)
+        freq = parts.get("FREQ")
+        if freq not in ("DAILY", "WEEKLY"):
+            return [start]
+        interval = _positive_int(parts.get("INTERVAL"), 1)
+        count = _positive_int(parts.get("COUNT"), None)
+        until = None
+        if "UNTIL" in parts:
+            u = _parse_dt(parts["UNTIL"])
+            until = u if isinstance(u, datetime) else datetime.combine(u, datetime.max.time())
+    except (ValueError, OverflowError):
         return [start]
-    interval = int(parts.get("INTERVAL", 1))
-    count = int(parts["COUNT"]) if "COUNT" in parts else None
-    until = None
-    if "UNTIL" in parts:
-        u = _parse_dt(parts["UNTIL"])
-        until = u if isinstance(u, datetime) else datetime.combine(u, datetime.max.time())
-    byday = [DAYS[d[-2:]] for d in parts.get("BYDAY", "").split(",") if d[-2:] in DAYS]
+    byday = sorted({DAYS[d[-2:]] for d in parts.get("BYDAY", "").split(",") if d[-2:] in DAYS})
     if freq == "WEEKLY" and not byday:
         byday = [start.weekday()]
     out, n = [], 0
     cur = start
     week0 = start - timedelta(days=start.weekday())
     limit = until_window if until is None else min(until, until_window)
-    while cur <= limit and (count is None or n < count):
+    if from_window is not None and from_window > start:
+        # Saut direct : nombre de périodes entières (jour ou semaine × INTERVAL) avant la fenêtre utile
+        periods = (from_window - start).days // (interval if freq == "DAILY" else 7 * interval)
+        if periods > 0:
+            if freq == "DAILY":
+                n, cur = periods, start + timedelta(days=periods * interval)
+            else:
+                n = sum(1 for d in byday if d >= start.weekday()) + (periods - 1) * len(byday)
+                cur = week0 + timedelta(weeks=periods * interval)
+    steps = 0
+    while cur <= limit and (count is None or n < count) and steps < MAX_EXPAND_DAYS:
+        steps += 1
         ok = True
         if freq == "WEEKLY":
             weeks = ((cur - timedelta(days=cur.weekday())).date() - week0.date()).days // 7
@@ -92,7 +124,7 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180,
     cur: dict | None = None
     for line in _unfold(text):
         if line == "BEGIN:VEVENT":
-            cur = {"exdates": set()}
+            cur = {"exdates": set()} if len(raw) < MAX_EVENTS else None
             continue
         if line == "END:VEVENT":
             if cur is not None:
@@ -130,35 +162,47 @@ def parse_ics(text: str, window_start: datetime, window_days: int = 180,
     overridden = {(ev.get("uid"), ev["recurrence_id"]) for ev in raw
                   if ev.get("uid") and isinstance(ev.get("recurrence_id"), datetime)}
     for ev in raw:
-        start, end = ev.get("start"), ev.get("end")
-        if isinstance(start, date) and not isinstance(start, datetime) and keep_allday \
-                and keep_allday(ev.get("title", "")):
-            start = datetime.combine(start, datetime.min.time()).replace(hour=8)
-            end = start.replace(hour=18)
-        if start is None or not isinstance(start, datetime):
-            skipped += start is not None
-            continue
-        if not isinstance(end, datetime):
-            end = start + ev.get("duration", timedelta(hours=1))
-        length = end - start
-        uid = ev.get("uid", "")
-        # Clé stable de chaque occurrence, pour repérer un cours déplacé d'un import à l'autre :
-        # l'UID seul pour un événement simple ; UID + date d'origine pour une occurrence d'un cours
-        # récurrent (c'est ce que désigne RECURRENCE-ID quand une occurrence est modifiée).
-        if isinstance(ev.get("recurrence_id"), datetime):
-            occurrences = [(start, f"{uid}|{ev['recurrence_id'].isoformat(timespec='minutes')}")]
-        elif "rrule" in ev:
-            occurrences = [(s, f"{uid}|{s.isoformat(timespec='minutes')}")
-                           for s in _expand(start, ev["rrule"], ev["exdates"], window_end)
-                           if (uid, s) not in overridden]
-        else:
-            occurrences = [(start, uid)]
-        for s, key in occurrences:
-            if s + length >= window_start and s <= window_end:
-                events.append({"title": ev.get("title", "Occupé"), "start": s, "end": s + length,
-                               "key": key if uid else ""})
+        if len(events) >= 2 * MAX_EVENTS:  # assez de matière : le tri ci-dessous garde les MAX_EVENTS premiers
+            break
+        try:
+            skipped += _occurrences(ev, overridden, window_start, window_end, keep_allday, events)
+        except (ValueError, OverflowError):  # date hors limites (an 9999, an 1…) : événement ignoré
+            skipped += 1
     events.sort(key=lambda e: e["start"])
-    return events, skipped
+    return events[:MAX_EVENTS], skipped
+
+
+def _occurrences(ev: dict, overridden: set, window_start: datetime, window_end: datetime, keep_allday,
+                 events: list) -> int:
+    """Ajoute à `events` les occurrences de `ev` dans la fenêtre ; renvoie 1 si l'événement est ignoré."""
+    start, end = ev.get("start"), ev.get("end")
+    if isinstance(start, date) and not isinstance(start, datetime) and keep_allday \
+            and keep_allday(ev.get("title", "")):
+        start = datetime.combine(start, datetime.min.time()).replace(hour=8)
+        end = start.replace(hour=18)
+    if start is None or not isinstance(start, datetime):
+        return int(start is not None)
+    if not isinstance(end, datetime):
+        end = start + ev.get("duration", timedelta(hours=1))
+    length = end - start
+    uid = ev.get("uid", "")
+    # Clé stable de chaque occurrence, pour repérer un cours déplacé d'un import à l'autre :
+    # l'UID seul pour un événement simple ; UID + date d'origine pour une occurrence d'un cours
+    # récurrent (c'est ce que désigne RECURRENCE-ID quand une occurrence est modifiée).
+    if isinstance(ev.get("recurrence_id"), datetime):
+        occurrences = [(start, f"{uid}|{ev['recurrence_id'].isoformat(timespec='minutes')}")]
+    elif "rrule" in ev:
+        occurrences = [(s, f"{uid}|{s.isoformat(timespec='minutes')}")
+                       for s in _expand(start, ev["rrule"], ev["exdates"], window_end,
+                                        window_start - max(length, timedelta(0)) - timedelta(days=8))
+                       if (uid, s) not in overridden]
+    else:
+        occurrences = [(start, uid)]
+    for s, key in occurrences:
+        if s + length >= window_start and s <= window_end:
+            events.append({"title": ev.get("title", "Occupé"), "start": s, "end": s + length,
+                           "key": key if uid else ""})
+    return 0
 
 
 def _esc(v: str) -> str:

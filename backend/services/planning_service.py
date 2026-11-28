@@ -11,6 +11,7 @@ from backend.dao import sessions as sessions_dao
 from backend.dao import subjects as subjects_dao
 
 from . import preference_service
+from .common import owned
 from .report import Report
 
 
@@ -194,6 +195,7 @@ def week(user_id, ref: date) -> dict:
 
 
 def toggle(session_id, user_id) -> None:
+    owned(sessions_dao.get_owned(session_id, user_id))  # 404 si la séance n'est pas à l'utilisateur
     sessions_dao.toggle_done(session_id, user_id)
 
 

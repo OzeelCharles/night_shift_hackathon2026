@@ -17,7 +17,7 @@
       <legend class="visually-hidden">C'est…</legend>
       <div class="pills">
         {% for key, label in event_kinds.items() %}
-        <label><input type="radio" name="kind" value="{{ key }}" {% if loop.first %}checked{% endif %} onchange="this.form.dataset.kind=this.value"><span>{{ label }}</span></label>
+        <label><input type="radio" name="kind" value="{{ key }}" {% if loop.first %}checked{% endif %} data-sync-form="kind"><span>{{ label }}</span></label>
         {% endfor %}
       </div>
     </fieldset>
@@ -87,7 +87,7 @@
   <div class="page-head">
     <h2>Cours et occupations à venir ({{ events|length }})</h2>
     {% if events %}
-    <form method="post" action="{{ url_for('agenda.clear') }}" onsubmit="return confirm('Vider tout l\'agenda ?')">
+    <form method="post" action="{{ url_for('agenda.clear') }}" data-confirm="Vider tout l'agenda ?">
       {{ csrf_field() }}
       <button class="btn btn-danger">Tout vider</button>
     </form>
@@ -105,7 +105,7 @@
       <td>
         <form method="post" action="{{ url_for('agenda.link', event_id=e.id) }}" class="link-form">
           {{ csrf_field() }}
-          <select name="subject" onchange="this.form.requestSubmit()" aria-label="Matière rattachée à {{ e.title }}" class="hl-select {% if e.subject_id %}hl-{{ e.subject_id % 6 }}{% endif %}">
+          <select name="subject" data-autosubmit aria-label="Matière rattachée à {{ e.title }}" class="hl-select {% if e.subject_id %}hl-{{ e.subject_id % 6 }}{% endif %}">
             <option value="">Aucune (occupation)</option>
             {% for s in subjects %}<option value="{{ s.id }}" {% if s.id == e.subject_id %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
           </select>
@@ -120,7 +120,7 @@
   </table>
   {% else %}<p class="muted">Aucun créneau pour l'instant.</p>{% endif %}
 </section>
-<script>
+<script nonce="{{ csp_nonce() }}">
   document.querySelectorAll('form').forEach(f => {
     const k = f.querySelector('input[name=kind]:checked');
     if (k) f.dataset.kind = k.value;

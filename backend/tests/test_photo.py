@@ -40,8 +40,8 @@ class PhotoRoutesTests(unittest.TestCase):
             "UPLOAD_FOLDER": os.path.join(self.tmp.name, "up"),
         })
         self.client = self.app.test_client()
-        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "motdepasse1",
-                                               "password2": "motdepasse1", "level": "master", "school": "ENSAI"})
+        self.client.post("/inscription", data={"email": "e@test.fr", "username": "Léa", "password": "Carnet-Revision-2026",
+                                               "password2": "Carnet-Revision-2026", "level": "master", "school": "ENSAI"})
 
     def tearDown(self):
         self.tmp.cleanup()

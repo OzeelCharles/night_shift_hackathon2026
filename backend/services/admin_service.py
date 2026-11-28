@@ -3,6 +3,7 @@ from werkzeug.security import generate_password_hash
 
 from backend.business.accounts import LEVELS, validate_account
 from backend.dao import documents as documents_dao
+from backend.dao import banned_words, passwords
 from backend.dao import subjects as subjects_dao
 from backend.dao import users as dao
 
@@ -10,7 +11,11 @@ from . import auth_service, subject_service
 from .common import owned
 
 
+SEARCH_MAX = 100  # au-delà, SQLite refuse le motif LIKE (et une recherche utile n'est jamais si longue)
+
+
 def overview(search: str = "") -> dict:
+    search = (search or "")[:SEARCH_MAX].strip()
     return {"users": dao.list_with_counts(search), "stats": dao.global_stats(), "q": search}
 
 
@@ -20,7 +25,8 @@ def get_user(user_id):
 
 def create_user(form) -> list[str]:
     email, username = form.get("email", "").strip().lower(), form.get("username", "").strip()
-    errors = validate_account(email, username, form.get("password", ""))
+    errors = validate_account(email, username, form.get("password", ""), common=passwords.common(),
+                              banned=banned_words.terms())
     if not errors and dao.email_taken(email):
         errors.append("Cette adresse est déjà utilisée.")
     if not errors:
@@ -29,17 +35,21 @@ def create_user(form) -> list[str]:
     return errors
 
 
-def update_user(user_id, form) -> list[str]:
+def update_user(user_id, form, current_user_id=None) -> list[str]:
     u = get_user(user_id)
     email, username = form.get("email", "").strip().lower(), form.get("username", "").strip()
     password = form.get("password", "")
     role = "admin" if form.get("role") == "admin" else "user"
     active = 1 if form.get("is_active") else 0
-    errors = validate_account(email, username, password, require_password=False)
+    errors = validate_account(email, username, password, require_password=False, common=passwords.common(),
+                              banned=banned_words.terms())
     if dao.email_taken(email, except_id=user_id):
         errors.append("Cette adresse est déjà utilisée.")
     losing_admin = u["role"] == "admin" and u["is_active"] and (role != "admin" or not active)
-    if losing_admin and dao.active_admin_count() <= 1:
+    if losing_admin and u["id"] == current_user_id:
+        errors.append("Tu ne peux ni retirer tes propres droits d'administrateur, ni désactiver ton propre compte : "
+                      "demande-le à un autre administrateur.")
+    elif losing_admin and dao.active_admin_count() <= 1:
         errors.append("Impossible : il doit rester au moins un administrateur actif.")
     if errors:
         return errors
@@ -48,6 +58,8 @@ def update_user(user_id, form) -> list[str]:
                school=form.get("school", "").strip()[:120])
     if password:
         dao.update(user_id, password_hash=generate_password_hash(password))
+    if password or (u["is_active"] and not active):
+        dao.bump_session_version(user_id)  # SEC-03 : les sessions ouvertes (cookies volés compris) tombent
     return []
 
 

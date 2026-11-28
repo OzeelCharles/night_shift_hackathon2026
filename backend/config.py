@@ -1,6 +1,7 @@
 """Configuration par défaut. Toute clé peut être surchargée par `create_app(test_config)`."""
 import os
 import secrets
+from datetime import timedelta
 
 # Fonctionnalités chargées au démarrage, dans cet ordre (voir core/features.py).
 # Pour brancher une nouvelle fonctionnalité sans toucher au cœur : EXTRA_FEATURES.
@@ -33,7 +34,11 @@ def _secret_key(instance_path: str) -> str:
 
 
 def defaults(instance_path: str) -> dict:
+    production = os.environ.get("RIVEZLI_ENV", "").lower() == "production"
     return {
+        # Production (RIVEZLI_ENV=production) : HSTS et cookie de session réservé à HTTPS (SEC-09)
+        "PRODUCTION": production,
+        "SESSION_COOKIE_SECURE": production,
         "SECRET_KEY": _secret_key(instance_path),
         "DATABASE": os.path.join(instance_path, "revision.sqlite"),
         "UPLOAD_FOLDER": os.path.join(instance_path, "uploads"),
@@ -41,6 +46,16 @@ def defaults(instance_path: str) -> dict:
         "ENABLE_WEB": True,  # recherche de ressources sur internet
         "SESSION_COOKIE_HTTPONLY": True,
         "SESSION_COOKIE_SAMESITE": "Lax",
+        # SEC-03 : une session (cookie signé) n'est plus acceptée 7 jours après la connexion
+        "PERMANENT_SESSION_LIFETIME": timedelta(days=7),
+        # SEC-03 : limitation des tentatives (actives aussi en TESTING)
+        "LOGIN_MAX_FAILURES": 5,  # échecs par compte et par IP…
+        "LOGIN_WINDOW_SECONDS": 15 * 60,  # …sur 15 minutes
+        "LOGIN_FAILURE_MIN_SECONDS": 0.5,  # durée minimale d'un échec de connexion (temps de réponse égalisé)
+        "REGISTER_MAX_PER_IP": 5,  # inscriptions par IP…
+        "REGISTER_WINDOW_SECONDS": 60 * 60,  # …sur une heure
+        # SEC-08 : générations par l'IA par utilisateur et par jour (QCM, exercices, notebooks, lettres, photos)
+        "LLM_DAILY_QUOTA": 20,
         "FEATURES": list(FEATURES),
         "EXTRA_FEATURES": [m for m in os.environ.get("EXTRA_FEATURES", "").split(",") if m.strip()],
     }

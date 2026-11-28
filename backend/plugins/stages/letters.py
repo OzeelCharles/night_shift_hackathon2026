@@ -60,6 +60,7 @@ Registre : soutenu, à la première personne, phrases longues et bien liées («
 aspect », « Enfin »), aucune liste à puces, 400 à 480 mots pour le corps de la lettre."""
 
 LetterError = groq.GroqError
+MAX_LETTER_CHARS = 12_000  # même limite que l'édition d'une lettre
 
 
 def available() -> bool:
@@ -172,6 +173,8 @@ def write(profile: dict, user, target: dict, tone: str = "sobre", language: str 
     text = "\n".join(line.rstrip() for line in text.splitlines())  # espaces de fin (sauts de ligne Markdown)
     if len(text) < 200:
         raise LetterError("réponse de Groq trop courte")
+    if len(text) > MAX_LETTER_CHARS:  # SEC-08 : réponse hors consigne, rejetée (lettre type à la place)
+        raise LetterError("réponse de Groq anormalement longue")
     return text
 
 
