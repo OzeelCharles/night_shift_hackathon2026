@@ -146,6 +146,25 @@ class RulesTests(unittest.TestCase):
         self.assertEqual(rules.detect_sections("Formation de 20 personnes à l'outil interne de la société"), set(),
                          "une phrase qui commence par « Formation » n'est pas un titre")
 
+    def test_languages_as_a_sub_section(self):
+        """« Langues » rangée sous « Compétences », ou écrite autrement, est bien trouvée."""
+        base = without_line(CLEAN_CV, "LANGUES")
+        self.assertIn("rubrique_langues", self.codes(base, 1))
+        for variant in ("Langues – Anglais courant, espagnol intermédiaire, allemand scolaire et italien débutant",
+                        "• Langues : anglais, espagnol, allemand, italien et portugais pour les voyages",
+                        "Langues étrangères : anglais courant, espagnol intermédiaire, allemand et italien",
+                        "Langues parlées | Anglais, Espagnol",
+                        "Langues\tAnglais courant, espagnol intermédiaire, allemand scolaire, italien",
+                        "COMPÉTENCES LINGUISTIQUES",
+                        "Compétences et langues",
+                        "Anglais : C1 (TOEIC 945)"):
+            cv = base.replace("COMPÉTENCES\n", f"COMPÉTENCES\n{variant}\n")
+            self.assertNotIn("rubrique_langues", self.codes(cv, 1), variant)
+            self.assertNotIn("mise_en_page", self.codes(cv, 1), f"{variant} : pas de faux signal de colonnes")
+        self.assertIn("competences", rules.detect_sections("Compétences et langues"))
+        self.assertIn("langues", rules.detect_sections("Informatique : Python, SQL        Langues : anglais, espagnol"),
+                      "sous-rubrique placée dans une seconde colonne")
+
     def test_contacts(self):
         self.assertIn("email", self.codes(CLEAN_CV.replace("lea.martin@example.fr", "LinkedIn"), 1))
         self.assertIn("telephone", self.codes(CLEAN_CV.replace("06 12 34 56 78", ""), 1))

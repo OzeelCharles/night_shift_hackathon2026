@@ -21,6 +21,7 @@ from backend.business.extractor import STOPWORDS
 def normalize(text: str) -> str:
     """Minuscules, accents retirés (« Expériences » = « experiences »)."""
     text = str(text or "").replace("œ", "oe").replace("Œ", "OE").replace("æ", "ae").replace("Æ", "AE")
+    text = re.sub("[‐-―−]", "-", text)   # tirets typographiques (« Langues – anglais »)
     return unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
 
 
@@ -229,18 +230,29 @@ SECTIONS = {
     "langues": "Langues",
 }
 # (expression de début de ligne, rubrique) : la première qui correspond l'emporte
+# (« Compétences linguistiques » annonce les langues, d'où « langues » en premier)
 _HEADINGS = [
+    (r"langues?( etrangeres?| vivantes?| parlees?)?|languages?( skills)?|competences linguistiques|"
+     r"linguistiques?", "langues"),
     (r"parcours professionnel|experiences?( professionnelles?)?|emplois?|stages? et emplois|"
      r"work experience|professional experience|experience|employment|career", "experiences"),
     (r"formations?|education|etudes|diplomes?|cursus|scolarite|parcours( academique| scolaire)?|"
      r"academic background|qualifications", "formation"),
     (r"competences?|savoir[- ]faire|skills|hard skills|soft skills|outils|informatique|"
      r"connaissances|aptitudes|technical skills", "competences"),
-    (r"langues?|languages?|langues etrangeres", "langues"),
 ]
 _HEADING_RES = [(re.compile(rf"^[\W_]*({p})\b"), s) for p, s in _HEADINGS]
 _ANY_HEADING_RE = re.compile(r"\b(" + "|".join(p for p, _ in _HEADINGS) + r")\b")
 _SPLIT_RE = re.compile(r" {3,}|\t+")
+# Après un titre en début de ligne, ce qui suit est le contenu de la rubrique : « Langues : anglais (B2) »,
+# « Langues - anglais courant », « Langues | anglais », « Langues (anglais, espagnol) »
+_SEPARATORS = (":", "-", "|", "/", "(", "=", ">")
+# Une langue citée avec un niveau compte comme rubrique Langues, même rangée sous « Compétences »
+_LANG_RE = re.compile(r"\b(anglais|espagnol|allemand|italien|portugais|chinois|mandarin|arabe|japonais|russe|"
+                      r"neerlandais|coreen|turc|polonais|francais|english|spanish|german|italian|french|"
+                      r"chinese|arabic)\b")
+_LEVEL_RE = re.compile(r"\b([abc][12]|courant|bilingue|natif|native|maternelle|intermediaire|avance|notions|"
+                       r"scolaire|professionnel|fluent|toeic|toefl|ielts|cambridge|dele|goethe|dalf|delf|hsk)\b")
 
 
 def _heading_of(line: str) -> str | None:
@@ -252,15 +264,33 @@ def _heading_of(line: str) -> str | None:
         m = rx.match(norm)
         if m:
             rest = norm[m.end():].strip()
-            if (len(norm.split()) <= 5 and len(norm) <= 45) or rest.startswith(":"):
+            if (len(norm.split()) <= 5 and len(norm) <= 45) or rest.startswith(_SEPARATORS):
                 return section
             return None
     return None
 
 
+def _headings_in(line: str) -> set[str]:
+    """Toutes les rubriques annoncées par une ligne : titre seul, titre suivi de son contenu, titres
+    juxtaposés en colonnes (« FORMATION      LANGUES ») ou combinés (« Compétences et langues »)."""
+    found = {_heading_of(seg) for seg in _SPLIT_RE.split(line.strip()) if seg.strip()} - {None}
+    norm = normalize(line).strip()
+    leftover = re.sub(r"\b(et|and)\b|[\W_]+", "", _ANY_HEADING_RE.sub("", norm))
+    if found and len(norm.split()) <= 6 and not leftover:
+        found |= {_heading_of(m.group(0)) for m in _ANY_HEADING_RE.finditer(norm)} - {None}
+    return found
+
+
 def detect_sections(text: str) -> set[str]:
-    """Rubriques standard présentes (titres de ligne, synonymes français et anglais)."""
-    return {s for s in (_heading_of(line) for line in str(text or "").splitlines()) if s}
+    """Rubriques standard présentes (titres de ligne ou sous-rubriques, synonymes français et anglais)."""
+    found: set[str] = set()
+    for line in str(text or "").splitlines():
+        found |= _headings_in(line)
+        if "langues" not in found:
+            norm = normalize(line)
+            if _LANG_RE.search(norm) and _LEVEL_RE.search(norm):
+                found.add("langues")
+    return found
 
 
 def _is_mixed(line: str) -> bool:
@@ -268,7 +298,8 @@ def _is_mixed(line: str) -> bool:
     if len(segments) >= 2 and len({_heading_of(s) for s in segments} - {None}) >= 2:
         return True
     norm = normalize(line)
-    if len(norm.split()) > 6:
+    # « Compétences et langues » est un titre combiné, pas deux colonnes
+    if len(norm.split()) > 6 or re.search(r"\b(et|and)\b|[&/,+]", norm):
         return False
     found = {_heading_of(m.group(0)) for m in _ANY_HEADING_RE.finditer(norm)} - {None}
     leftover = re.sub(r"[\W_]+", "", _ANY_HEADING_RE.sub("", norm))
