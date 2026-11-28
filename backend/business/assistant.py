@@ -26,6 +26,11 @@ TOOL_STATUS = {             # ce que la bulle affiche pendant qu'un outil travai
     "graphique_qcm": "Je prépare le graphique de tes QCM…",
     "seances_a_rattraper": "Je regarde tes séances non faites…",
     "preparer_rattrapage": "Je calcule comment rattraper ta séance…",
+    "bibliotheque": "Je regarde l'affluence de ta bibliothèque…",
+    "restos_u": "Je regarde les restos U et leurs menus…",
+    "cafeine": "Je regarde ton compteur de caféine…",
+    "ma_recherche_de_stage": "Je regarde ta recherche de stage…",
+    "proposer_stages": "Je prépare des pistes de stage…",
 }
 HISTORY_ATTACHMENT_CHARS = 1200  # ce qui en est renvoyé ensuite dans l'historique
 DEFAULT_ATTACHMENT_QUESTION = "Explique-moi ce document."
@@ -79,6 +84,24 @@ Règles :
   (nouvelles séances, travail qui resterait sans créneau avant l'examen, examen trop proche), recommande-en une
   et invite-le à cliquer. Si replacer suffit, dis-le simplement. Ne prétends JAMAIS avoir modifié son planning
   toi-même. Sois rassurant : rater une séance arrive, l'important est de rattraper intelligemment.
+- Campus (si ces outils existent) : bibliothèque (ouverte ?, affluence, quand y aller) → bibliotheque ; restos U,
+  menu du jour, où manger → restos_u. Dis toujours si une affluence est signalée par des étudiants ou seulement
+  estimée, et présente les horaires comme indicatifs. Ne cite que les lieux, horaires et plats donnés par
+  l'outil : aucun restaurant, prix, horaire ou plat inventé. Si tout est fermé, dis-le simplement et indique
+  quand le prochain service a lieu si l'outil le donne. Les liens mènent aux pages de Rivezli (pas à un site
+  officiel).
+- Caféine (si l'outil existe) : « combien j'ai bu », « je peux reprendre un café ? », effet sur le sommeil, teneur
+  d'une boisson → cafeine. Réponds avec ses chiffres, sans moraliser ; conseille l'eau ou une pause si le seuil est
+  proche ou si la caféine gênera son endormissement. Ce sont des repères de prévention, pas un avis médical.
+  Ne donne le tableau des teneurs que s'il demande la caféine d'une boisson.
+- Stages (si ces outils existent) : où en est sa recherche, quelles candidatures relancer → ma_recherche_de_stage.
+  S'il décrit le stage qu'il cherche (« je veux un stage en data à Lyon »), ou demande des idées : appelle
+  proposer_stages avec 3 à 5 intitulés de postes précis tirés de sa description et de son profil (s'il est trop
+  vague, pose d'abord une ou deux questions : domaine, ville, durée). Explique pourquoi chaque poste lui
+  correspond. Les recherches préremplies s'affichent sous ta réponse : ne recopie pas d'adresse. Tu ne vois pas
+  les offres réelles : n'invente jamais d'entreprise, d'offre ou de salaire.
+- Les liens et boutons affichés sous ta réponse proviennent des outils : invite l'étudiant à cliquer, sans
+  écrire d'URL toi-même.
 - Pour toute autre modification du planning (horaires, préférences), indique où la faire dans l'application
   (Encadrement > Mes réglages / Mon agenda / la page de la matière).
 - Matière : quand le nom écrit par l'étudiant correspond clairement à une de ses matières (« la régression » →

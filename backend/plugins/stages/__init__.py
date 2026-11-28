@@ -11,6 +11,7 @@ Tout est dans ce dossier ; les tables (préfixe stg_) sont créées au démarrag
 from backend.core.features import Feature, NavItem
 
 from . import store
+from .assistant import ACTIONS, TOOLS
 from .views import bp
 
 feature = Feature(
@@ -21,4 +22,6 @@ feature = Feature(
                  hidden_if=("wants_internship", "non"))],
     schema=store.SCHEMA,
     migrations=store.MIGRATIONS,
+    tools=TOOLS,      # l'assistant suit la recherche et propose des postes d'après la description de l'étudiant
+    actions=ACTIONS,  # … qu'il ajoute à la liste seulement si l'étudiant clique « Choisir »
 )

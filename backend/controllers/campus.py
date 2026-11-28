@@ -4,6 +4,7 @@ from flask import Blueprint, g, jsonify, redirect, render_template, request, url
 from backend.core.features import Feature, NavItem
 from backend.core.security import login_required, safe_next
 from backend.services import campus_service as service
+from backend.services.campus_tools import CAMPUS_TOOLS
 
 from . import flash_report
 
@@ -58,4 +59,5 @@ feature = Feature("campus", blueprints=[bp], nav=[
     NavItem("campus.index", "Campus", order=4, section="site", opens="campus"),
     NavItem("campus.library", "Bibliothèque", order=10, section="campus"),
     NavItem("campus.restos", "Restos U", order=20, section="campus"),
-], panels={"agenda": ["campus/agenda_panel.html"]})  # les restos U du jour dans Encadrement › Mon agenda
+], panels={"agenda": ["campus/agenda_panel.html"]},  # les restos U du jour dans Encadrement › Mon agenda
+   tools=CAMPUS_TOOLS)  # l'assistant répond sur la BU et les restos U

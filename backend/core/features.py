@@ -9,7 +9,8 @@ ajouter les vôtres sans toucher au cœur). Une fonctionnalité peut fournir :
 - des panneaux insérés dans des pages du cœur, par emplacement (`panels`) : « subject » (bas de la page d'une
   matière), « agenda » (Mon agenda) ; les gabarits les incluent avec `panels.get("<emplacement>", [])` ;
 - des éléments affichés sur toutes les pages d'un utilisateur connecté (gabarits Jinja, ex. la bulle de l'assistant) ;
-- des outils que l'assistant peut appeler (voir core/tools.py) ;
+- des outils que l'assistant peut appeler, et l'application des propositions qu'ils font valider par un
+  bouton (`actions`) (voir core/tools.py) ;
 - ses tables (`schema`, créées au démarrage) et les colonnes ajoutées depuis (`migrations`) ;
 - des fonctions ou valeurs utilisables dans les gabarits (`template_globals`) ;
 - une fonction `setup(app)` pour toute autre initialisation.
@@ -21,7 +22,7 @@ from typing import Callable
 from flask import Blueprint, Flask
 
 from . import events
-from .tools import Tool
+from .tools import Action, Tool
 
 
 @dataclass(frozen=True)
@@ -48,6 +49,7 @@ class Feature:
     subject_panels: list[str] = field(default_factory=list)      # ancien nom de panels["subject"], encore accepté
     widgets: list[str] = field(default_factory=list)
     tools: list[Tool] = field(default_factory=list)
+    actions: list[Action] = field(default_factory=list)          # propositions de ses outils, validées par bouton
     schema: str = ""                                              # CREATE TABLE IF NOT EXISTS …
     migrations: dict[str, dict[str, str]] = field(default_factory=dict)   # {table: {colonne: déclaration}}
     template_globals: dict[str, object] = field(default_factory=dict)
@@ -79,6 +81,7 @@ def load_features(app: Flask, module_paths: list[str]) -> list[Feature]:
         panels.setdefault("subject", []).extend(f.subject_panels)
     nav = sorted((item for f in loaded for item in f.nav), key=lambda i: i.order)
     app.extensions["tools"] = {t.name: t for f in loaded for t in f.tools}
+    app.extensions["assistant_actions"] = {a.kind: a for f in loaded for a in f.actions}
     app.jinja_env.globals.update(nav_items=nav, panels=panels, subject_panels=panels["subject"] if panels else [],
                                  widgets=[w for f in loaded for w in f.widgets])
     return loaded

@@ -6,7 +6,8 @@ from flask import Blueprint, Response, g, jsonify, request, stream_with_context
 from backend.core import events
 from backend.core.features import Feature
 from backend.core.security import login_required
-from backend.services import assistant_service, rag_service
+from backend.core.tools import Action
+from backend.services import assistant_service, rag_service, reschedule_service
 from backend.services.assistant_tools import TOOLS
 
 bp = Blueprint("assistant", __name__, url_prefix="/assistant")
@@ -75,5 +76,7 @@ def setup(app) -> None:
 
 
 feature = Feature("assistant", blueprints=[bp], widgets=["assistant/bubble.html"], tools=TOOLS, setup=setup,
+                  actions=[Action(reschedule_service.KIND, reschedule_service.apply,
+                                  "D'accord, je ne change rien à ton planning.")],
                   subscriptions=[(events.USER_LOGGED_OUT, assistant_service.on_logout),  # historique éphémère
                                  (events.DOCUMENTS_ADDED, rag_service.index_async)])     # supports indexés (RAG)
