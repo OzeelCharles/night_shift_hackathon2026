@@ -142,7 +142,12 @@ lecture de la clé, connexion, quotas et erreurs au même endroit.
   avec ton et langue au choix ; sans clé, une lettre type remplie avec les mêmes informations. Les deux suivent la
   même trame (`TRAME` dans `letters.py`), tirée de vraies lettres de stage : accroche, intérêt pour l'entreprise,
   formation, projets, langues et personnalité, clôture. Seuls la structure et le registre en sont repris ; ce qui
-  manque est laissé [entre crochets]. Lettres modifiables, copiables et téléchargeables.
+  manque est laissé [entre crochets]. Lettres modifiables, copiables et téléchargeables ;
+- **vérificateur ATS de CV** (plugin `backend/plugins/verif_cv/`, onglet « Vérifier mon CV ») : le CV déposé (PDF, DOCX
+  ou ODT) est lu puis supprimé aussitôt, seul le texte est gardé. Rivezli signale ce qui gêne les logiciels de tri
+  (CV scanné, colonnes, tableaux, rubriques ou coordonnées introuvables, longueur), puis compare le CV aux offres
+  suivies : score sur 100, mots-clés trouvés et manquants, pastille sur chaque offre. Des reformulations sont
+  proposées par Groq, seulement sur clic.
 
 **Plug and play** : tout est dans `backend/plugins/revision/` (routes, logique, gabarits, style) avec ses propres
 tables (`rev_*`, créées au démarrage, supprimées en cascade avec la matière). Il est activé par une ligne de

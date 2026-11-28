@@ -31,7 +31,7 @@ SHOWCASE = [
     ("campus.index", "🏛️", "La BU et le resto U",
      "L'affluence de la bibliothèque de ton école et des restos U autour de toi, avec le menu du jour.", True),
     ("stages.index", "💼", "Ta recherche de stage",
-     "Des recherches prêtes à l'emploi sur les grands sites, le suivi des offres repérées et des lettres de motivation.", True),
+     "Des recherches prêtes à l'emploi, le suivi des offres, des lettres de motivation et un vérificateur de CV qui passe les filtres ATS.", True),
     ("caffeine.index", "☕", "Le compteur de caféine",
      "Café, boissons énergisantes : suis ta dose du jour et ce qu'il en reste au coucher, pour réviser sans te cramer.", True),
 ]

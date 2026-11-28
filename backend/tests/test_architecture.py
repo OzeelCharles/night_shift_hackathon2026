@@ -149,6 +149,7 @@ class HomeTests(_Base):
                       "Un atelier de révision", "Ton dossier scolaire", "Un assistant sur chaque page",
                       "La BU et le resto U", "Ta recherche de stage", "Le compteur de caféine"):
             self.assertIn(title, __import__("html").unescape(page))
+        self.assertIn("ATS", page, "la fiche Stages annonce le vérificateur de CV")
         self.assertIn('class="feature-body"', page)
         self.assertNotIn('<a class="feature-body"', page, "un visiteur ne voit pas des liens qui le renverraient à la connexion")
         after_features = page[page.index('id="cta-title"'):]

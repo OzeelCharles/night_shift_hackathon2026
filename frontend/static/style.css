@@ -2,7 +2,7 @@
    Fond crème rosé, feuilles blanches sans bordure, accent framboise pour les liens ; les surligneurs jaune, menthe
    et rose reprennent les couleurs du logo pour classer.
    Les formulaires sont des phrases à trous : une case remplie se surligne, comme une réponse dans un cahier.
-   Titres en Bricolage Grotesque, texte en Atkinson Hyperlegible (lisibilité).
+   Titres en Gabarito, texte en Atkinson Hyperlegible (lisibilité).
    Rayons hiérarchisés : feuille 28 px, tuile 20 px, champ 14 px, pastille ronde. Ombres réservées à ce qui flotte. */
 
 /* ================================================================ jetons */
@@ -49,7 +49,7 @@
 
   --hour: 52px;
   --font: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
-  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Gabarito", "Segoe UI", system-ui, sans-serif;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
